@@ -81,3 +81,46 @@ test("public API exposes live steering without changing transactional steer rout
   const main=readFileSync(new URL("../src/ballsy-main.ts",import.meta.url),"utf8");
   assert.match(main,/api\.steerLive\(player\.id, drive\)/);
 });
+
+const vehicle = () => ({ radius:.372, suspensionRestLength:.25, suspensionStiffness:30, suspensionCompression:4.4, suspensionRelaxation:2.3, maxSuspensionTravel:.3, maxSuspensionForce:9000, frictionSlip:1.2, engineForce:3000, brakeForce:2000, maxSteerDegrees:45, steerRateDegrees:600, maxSpeed:24,
+  wheels:[-1,1].flatMap(x=>[-1.25,1.425].map(z=>({entityId:`tire-${x+1}-${z<0?"f":"r"}`,connection:[x*.8,-.25,z],steer:z<0,driven:z>0,brake:z>0}))) });
+function vehicleScene() {
+  return {schema:"graphysx.agent-world/v2",id:"vehicle-test",label:"Vehicle test",environment:{physics:{gravity:[0,-9.81,0],ground:false}},entities:[
+    {id:"ground",type:"box",geometry:{width:500,height:.4,depth:500},transform:{position:[0,-.2,0]},physics:{mode:"static"}},
+    {id:"chassis",type:"box",geometry:{width:1.8,height:.7,depth:4.4},transform:{position:[0,1,0]},physics:{mode:"dynamic",mass:1500},steering:{vehicle:vehicle()}},
+    ...vehicle().wheels.map(w=>({id:w.entityId,type:"cylinder",geometry:{radius:.372,height:.345},transform:{position:w.connection}}))]};
+}
+test("vehicle controls, four wheel projections, export/reload and paused teleport use the canonical runtime", () => {
+  const runtime=new AgentWorldRuntime(vehicleScene());
+  try {
+    runtime.step(3);
+    assert.equal(runtime.steerLive("chassis",{thrust:1,turn:0,brake:0}).ok,true);
+    runtime.step(2);
+    const car=runtime.query({ids:["chassis"]})[0];
+    assert.ok(car.position[2]<-3); assert.equal(car.steering.vehicle.wheels.filter(w=>w.contact).length,4);
+    assert.equal(runtime.steerLive("chassis",{headingDegrees:90,thrust:0}).ok,false);
+    assert.equal(runtime.query({ids:["chassis"]})[0].steering.thrust,1,"Invalid heading never partially writes throttle");
+    assert.equal(runtime.steerLive("chassis",{thrust:0,turn:0,brake:1}).ok,true); runtime.step(1);
+    const document=runtime.exportDocument();
+    const authored=document.entities.find(e=>e.id==="chassis").steering;
+    assert.equal(authored.vehicle.wheels.length,4);
+    for(const key of ["thrust","turn","brake"]) assert.equal(Object.hasOwn(authored,key),false,"Never reload a held key");
+    const copy=new AgentWorldRuntime(document);
+    assert.equal(copy.query({ids:["chassis"]})[0].steering.brake,0); copy.dispose();
+    runtime.setPaused(true);
+    assert.equal(runtime.updateEntity("chassis",{transform:{position:[20,5,10],rotationDegrees:[0,90,0]}}).ok,true);
+    const pausedTime=runtime.getState().elapsedSeconds;
+    for(const wheel of runtime.query({ids:vehicle().wheels.map(w=>w.entityId)})) assert.ok(Math.hypot(wheel.position[0]-20,wheel.position[2]-10)<2,"Paused teleport projects wheels from the current chassis, not cached ray origins");
+    assert.equal(runtime.getState().elapsedSeconds,pausedTime,"Visual edit spends no simulation time");
+    assert.equal(runtime.updateEntity("chassis",{steering:{vehicle:null}}).ok,true);
+    assert.equal(runtime.query({ids:["chassis"]})[0].steering.vehicle,undefined);
+  } finally {runtime.dispose();}
+});
+
+test("vehicle wheel references cannot cross the host transient boundary", () => {
+  const runtime=new AgentWorldRuntime(scene()), config=vehicle();
+  config.wheels[0].entityId="live-agent:protected";
+  const before=state(runtime);
+  assert.equal(runtime.updateEntity("ball",{steering:{vehicle:config}}).ok,false);
+  assert.deepEqual(state(runtime),before); runtime.dispose();
+});

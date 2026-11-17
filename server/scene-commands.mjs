@@ -105,7 +105,7 @@ export const FIELDS = Object.freeze({
   surface: Object.freeze(["sketch", "resolution", "fps", "emissive", "tint"]),
   // thrust/turn are live inputs and are intentionally not document-authoring fields.
   steering: Object.freeze([
-    "headingDegrees", "force", "speedCap", "turnRateDegrees", "kickImpulse", "jumpImpulse", "arrowId", "arrowLift",
+    "headingDegrees", "force", "speedCap", "turnRateDegrees", "kickImpulse", "jumpImpulse", "arrowId", "arrowLift", "vehicle",
   ]),
   physics: Object.freeze([
     "mode", "mass", "material", "friction", "restitution", "linearVelocity", "angularVelocity", "collider",
@@ -669,6 +669,7 @@ function validateSteering(value, label) {
     if (value[key] !== undefined) requireFinite(value[key], `${label}.${key}`);
   }
   if (value.arrowId !== undefined) requireStableId(value.arrowId, `${label}.arrowId`);
+  if (value.vehicle !== undefined && value.vehicle !== null) validateVehicleDefinition(value.vehicle, `${label}.vehicle`);
 }
 
 function validatePhysics(value, label, entity) {
@@ -1275,3 +1276,4 @@ export function describeCommands(commands, outputs) {
   }
   return `applied ${commands.length} changes`;
 }
+import { validateVehicleDefinition } from "./vehicle-definition.mjs";

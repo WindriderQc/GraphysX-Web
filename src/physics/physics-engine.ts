@@ -149,11 +149,43 @@ export interface PhysicsCharacterMove {
 
 export type PhysicsStateHandle = PhysicsBodyHandle | PhysicsCharacterHandle | PhysicsJointHandle;
 
+/** Y-up chassis, forward -Z, wheel axles +X. Connections are chassis-local, in metres. */
+export interface PhysicsVehicleDefinition {
+  wheels: { entityId: string; connection: [number, number, number]; steer: boolean; driven: boolean; brake: boolean }[];
+  radius: number;
+  suspensionRestLength: number;
+  suspensionStiffness: number;
+  suspensionCompression: number;
+  suspensionRelaxation: number;
+  maxSuspensionTravel: number;
+  maxSuspensionForce: number;
+  frictionSlip: number;
+  engineForce: number;
+  brakeForce: number;
+  maxSteerDegrees: number;
+  steerRateDegrees: number;
+  maxSpeed: number;
+}
+
+export interface PhysicsVehicleInput { thrust: number; turn: number; brake: number }
+export interface PhysicsVehicleReadout {
+  speed: number;
+  steering: number;
+  wheels: { suspensionLength: number; rotation: number; contact: boolean }[];
+}
+export interface PhysicsVehicleState {
+  bodyId: number;
+  definition: PhysicsVehicleDefinition;
+  input: PhysicsVehicleInput;
+  readout: PhysicsVehicleReadout;
+}
+
 /** Complete solver state (contacts and warm-start caches included). Opaque to callers. */
 export interface PhysicsEngineState {
   format: string;
   bytes: Uint8Array;
   accumulator: number;
+  vehicles?: PhysicsVehicleState[];
 }
 
 /**
@@ -166,6 +198,9 @@ export interface PhysicsEngineState {
 export interface PhysicsEngine {
   createBody(definition: PhysicsBodyDefinition): PhysicsBodyHandle;
   removeBody(body: PhysicsBodyHandle): void;
+  configureVehicle(body: PhysicsBodyHandle, definition: PhysicsVehicleDefinition | null): void;
+  driveVehicle(body: PhysicsBodyHandle, input: PhysicsVehicleInput): void;
+  readVehicle(body: PhysicsBodyHandle): PhysicsVehicleReadout | null;
   createJoint(first: PhysicsBodyHandle, second: PhysicsBodyHandle, definition: PhysicsJointDefinition): PhysicsJointHandle;
   removeJoint(joint: PhysicsJointHandle): void;
 
