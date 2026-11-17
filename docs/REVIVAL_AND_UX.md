@@ -172,7 +172,7 @@ It is a current creation experience, separate from the source-fidelity work belo
 | CubX/CubZ actors and native MenuManager | CubZ's three full actors, source pivots and coupled eight-choice menu are reachable in Archives; the old study is in Lab. The 32 internal buttons/exit mesh and historical destinations remain absent. The distinct CubXActor family and native visual parity are not certified. |
 | `FlightXScene.cpp`, pipe1, Airplane | Controllable v2 inspection flight is now reachable. Native actor/material identity, historical timestep equivalence and source gate/lap layouts remain unproven. |
 | Maison, Kitchen, Unity Arena and Common Room | Complete recovered mesh geometry is reachable. Exact historical lighting/rendering and the absent external Kitchen photograph remain outside parity. |
-| `CarScene.cpp`, `Vehicule.cpp`, heightmaps and orphan car packs | Separate the authored Impreza world and source handling from model turntables and modern courses. Multiple completed historical cars are not established. |
+| `CarScene.cpp`, `Vehicule.cpp`, heightmaps and orphan car packs | Atmel and later RacinX are now distinct editable worlds with original TVM parts, source heightfields, 100 later rings and an explicitly adapted Rapier drive. See [IMPREZA_REVIVAL.md](IMPREZA_REVIVAL.md). Native tire/network/audio parity and bindings for orphan cars remain unproven. |
 | Serial/Arduino, TCP, NotesManager | Retain protocol/UI evidence. Simulated controls do not certify physical devices, networking or persistence. No hardware transport was opened in this pass. |
 | Native shaders, sky and animated menus | Keep source contracts and exact assets. Distinguish modern PBR/JPEG/curve adapters from source parity; avoid promoting every shader study to a game. |
 

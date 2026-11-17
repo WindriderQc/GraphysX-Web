@@ -2275,6 +2275,11 @@ export class AgentWorldRuntime {
   /** Cheap ephemeral selection read for host UI; does not build a whole scene state. */
   getSelectedIds(): string[] { return [...this.selectedIds]; }
 
+  /** Frame UI needs the clock, not a clone of every mesh/material/inline terrain sample. */
+  getClock(): { worldId: string; paused: boolean; elapsedSeconds: number; revision: number } {
+    return { worldId: this.definition.id, paused: this.paused, elapsedSeconds: this.elapsedSeconds, revision: this.revision };
+  }
+
   setPaused(paused: boolean): AgentWorldResult<boolean> {
     this.paused = paused;
     this.recordEvent(paused ? "time.paused" : "time.resumed", paused ? "Simulation paused" : "Simulation resumed");

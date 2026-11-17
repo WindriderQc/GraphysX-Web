@@ -1,10 +1,11 @@
 /** Shared document/runtime boundary. Controls are transient; wheel attachments are authored. */
 export function validateVehicleDefinition(value, label = "steering.vehicle") {
-  const keys = ["wheels", "radius", "suspensionRestLength", "suspensionStiffness", "suspensionCompression", "suspensionRelaxation", "maxSuspensionTravel", "maxSuspensionForce", "frictionSlip", "engineForce", "brakeForce", "maxSteerDegrees", "steerRateDegrees", "maxSpeed"];
+  const keys = ["wheels", "radius", "suspensionRestLength", "suspensionStiffness", "suspensionCompression", "suspensionRelaxation", "maxSuspensionTravel", "maxSuspensionForce", "frictionSlip", "engineForce", "brakeForce", "maxSteerDegrees", "steerRateDegrees", "maxSpeed", "steeringSpeedFactor"];
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} must be an object`);
   for (const key of Object.keys(value)) if (!keys.includes(key)) throw new Error(`Unsupported ${label}.${key}`);
   const limits = { radius: [.01, 10], suspensionRestLength: [.01, 10], suspensionStiffness: [.01, 1000], suspensionCompression: [0, 100], suspensionRelaxation: [0, 100], maxSuspensionTravel: [0, 10], maxSuspensionForce: [1, 1000000], frictionSlip: [.01, 100], engineForce: [0, 100000], brakeForce: [0, 100000], maxSteerDegrees: [0, 80], steerRateDegrees: [1, 3600], maxSpeed: [.1, 1000] };
   for (const [key, [min, max]] of Object.entries(limits)) if (!Number.isFinite(value[key]) || value[key] < min || value[key] > max) throw new Error(`${label}.${key} must be ${min}..${max}`);
+  if (value.steeringSpeedFactor !== undefined && (!Number.isFinite(value.steeringSpeedFactor) || value.steeringSpeedFactor < 0 || value.steeringSpeedFactor > 1)) throw new Error(`${label}.steeringSpeedFactor must be 0..1`);
   if (!Array.isArray(value.wheels) || value.wheels.length < 2 || value.wheels.length > 16) throw new Error(`${label}.wheels must contain 2..16 wheels`);
   const ids = new Set();
   for (const wheel of value.wheels) {

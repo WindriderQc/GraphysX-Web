@@ -77,3 +77,15 @@ test("host-owned kinematic suspension survives save/restore and resumes driving"
     assert.ok(transform().position.z < before.position.z - 3);
   } finally { engine.dispose(); }
 });
+
+test("optional steering aid retains the parked limit and reduces it at speed", () => {
+  const { engine, car, advance } = fixture();
+  try {
+    const config = carDefinition(); config.steeringSpeedFactor = .035; engine.configureVehicle(car, config);
+    engine.driveVehicle(car, { thrust: 0, turn: 1, brake: 0 }); advance(10);
+    assert.ok(Math.abs(engine.readVehicle(car).steering) > .78);
+    engine.driveVehicle(car, { thrust: 1, turn: 0, brake: 0 }); advance(180);
+    engine.driveVehicle(car, { thrust: 0, turn: 1, brake: 0 }); advance(10);
+    assert.ok(Math.abs(engine.readVehicle(car).steering) < .3);
+  } finally { engine.dispose(); }
+});

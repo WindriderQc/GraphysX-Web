@@ -109,9 +109,9 @@ test("vehicle controls, four wheel projections, export/reload and paused telepor
     assert.equal(copy.query({ids:["chassis"]})[0].steering.brake,0); copy.dispose();
     runtime.setPaused(true);
     assert.equal(runtime.updateEntity("chassis",{transform:{position:[20,5,10],rotationDegrees:[0,90,0]}}).ok,true);
-    const pausedTime=runtime.getState().elapsedSeconds;
+    const pausedTime=runtime.getClock().elapsedSeconds;
     for(const wheel of runtime.query({ids:vehicle().wheels.map(w=>w.entityId)})) assert.ok(Math.hypot(wheel.position[0]-20,wheel.position[2]-10)<2,"Paused teleport projects wheels from the current chassis, not cached ray origins");
-    assert.equal(runtime.getState().elapsedSeconds,pausedTime,"Visual edit spends no simulation time");
+    assert.equal(runtime.getClock().elapsedSeconds,pausedTime,"Visual edit spends no simulation time");
     assert.equal(runtime.updateEntity("chassis",{steering:{vehicle:null}}).ok,true);
     assert.equal(runtime.query({ids:["chassis"]})[0].steering.vehicle,undefined);
   } finally {runtime.dispose();}

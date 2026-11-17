@@ -165,6 +165,8 @@ export interface PhysicsVehicleDefinition {
   maxSteerDegrees: number;
   steerRateDegrees: number;
   maxSpeed: number;
+  /** Optional digital-control aid: divide the steering limit by 1 + factor * speed². */
+  steeringSpeedFactor?: number;
 }
 
 export interface PhysicsVehicleInput { thrust: number; turn: number; brake: number }

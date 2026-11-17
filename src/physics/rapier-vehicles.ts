@@ -59,7 +59,7 @@ export class RapierVehicleFleet {
     for (const [handle, { controller, definition: config, input, readout }] of this.vehicles) {
       const body = this.body(handle);
       if (!body.isDynamic()) continue;
-      const target = -input.turn * config.maxSteerDegrees * Math.PI / 180;
+      const target = -input.turn * config.maxSteerDegrees * Math.PI / 180 / (1 + (config.steeringSpeedFactor ?? 0) * readout.speed ** 2);
       const change = config.steerRateDegrees * Math.PI / 180 * dt;
       // The source menu releases the front steering immediately when the key is released.
       readout.steering = input.turn === 0 ? 0 : readout.steering + Math.max(-change, Math.min(change, target - readout.steering));

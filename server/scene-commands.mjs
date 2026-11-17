@@ -669,7 +669,10 @@ function validateSteering(value, label) {
     if (value[key] !== undefined) requireFinite(value[key], `${label}.${key}`);
   }
   if (value.arrowId !== undefined) requireStableId(value.arrowId, `${label}.arrowId`);
-  if (value.vehicle !== undefined && value.vehicle !== null) validateVehicleDefinition(value.vehicle, `${label}.vehicle`);
+  if (value.vehicle !== undefined && value.vehicle !== null) {
+    try { validateVehicleDefinition(value.vehicle, `${label}.vehicle`); }
+    catch (error) { reject(error.message); }
+  }
 }
 
 function validatePhysics(value, label, entity) {
