@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
-import { BoxGeometry, SphereGeometry, Group, Mesh, MeshStandardMaterial, MeshBasicMaterial, Vector3, Float32BufferAttribute, Box3 } from 'three';
+import { BoxGeometry, SphereGeometry, CylinderGeometry, TorusGeometry, Group, Mesh, MeshStandardMaterial, MeshBasicMaterial, Vector3, Float32BufferAttribute, Box3 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 
@@ -159,9 +159,9 @@ for(const side of [-1,1])box(rib,'Angled haunch',[2.1,.22,.26],[side*5.85,5.05,0
 box(rib,'Overhead spine',[10.5,.22,.26],[0,5.8,0],alloy);await glb('rib.glb',mergeByMaterial(rib));
 const trim=new Group();const luminous=new MeshBasicMaterial({color:'#67dce4'});luminous.name='Cyan luminous inlay';box(trim,'Inlay',[.035,.018,1.4],[0,0,0],luminous);await glb('inlay.glb',trim);
 const star=new Group();star.add(new Mesh(new SphereGeometry(.5,4,3),new MeshBasicMaterial({color:'#c3d9eb'})));await glb('star.glb',star);
-// Reuse the observatory's actual Earth imagery. Bake its fixed sun, clouds and
-// night lights into one compressed unlit map, keeping the mobile draw cost flat.
-const planetWidth=2048,planetHeight=1024,planetPixels=new Uint8Array(planetWidth*planetHeight*4);
+// Reuse the observatory's actual Earth imagery. Bake the fixed sun/night lights
+// into the surface, keeping the original cloud alpha in a separately moving shell.
+const planetWidth=2048,planetHeight=1024,planetPixels=new Uint8Array(planetWidth*planetHeight*4),cloudPixels=new Uint8Array(planetWidth*planetHeight*4);
 const earthInputs={day:'earth-day.jpg',night:'earth-night.jpg',clouds:'earth-clouds.png'};
 const earthSources={},earthPixels={};
 for(const [layer,name] of Object.entries(earthInputs)){
@@ -180,22 +180,45 @@ for(let row=0;row<planetHeight;row++)for(let col=0;col<planetWidth;col++){
   const sample=((planetHeight-1-row)*planetWidth+col)*4,index=(row*planetWidth+col)*4;
   const incidence=x*sun.x+y*sun.y+z*sun.z,daylight=.018+.982*Math.max(0,incidence)**.72;
   const t=Math.max(0,Math.min(1,(incidence+.12)/.32)),night=1-t*t*(3-2*t);
-  const cloud=earthPixels.clouds[sample+3]/255*.88;
   const facing=x*view.x+y*view.y+z*view.z;
   const limb=facing>0?(1-facing)**4*(.035+.13*Math.sqrt(Math.max(0,incidence))):0;
   for(let k=0;k<3;k++){
     const surface=linear[earthPixels.day[sample+k]]*daylight;
     const city=linear[earthPixels.night[sample+k]]*night*.9;
-    const litCloud=linear[earthPixels.clouds[sample+k]]*daylight;
-    const color=(surface+city)*(1-cloud)+litCloud*cloud+limb*limbColor[k];
+    const color=surface+city+limb*limbColor[k];
     planetPixels[index+k]=Math.max(0,Math.min(255,srgb(color)));
+    cloudPixels[index+k]=earthPixels.clouds[sample+k];
   }
   planetPixels[index+3]=255;
+  cloudPixels[index+3]=earthPixels.clouds[sample+3];
 }
 await ktx('planet.ktx2',planetPixels,planetWidth,planetHeight);
 const planet=new Group(),earthMaterial=new MeshBasicMaterial({color:'#ffffff'});earthMaterial.name='Observatory Earth';
 const earth=new Mesh(new SphereGeometry(1,96,64),earthMaterial);earth.name='EarthDayNightClouds';planet.add(earth);
 await glb('planet.glb',planet,'planet.ktx2');
+await ktx('clouds.ktx2',cloudPixels,planetWidth,planetHeight);
+const clouds=new Group(),cloudMaterial=new MeshStandardMaterial({color:'#dbeaff',roughness:1,metalness:0,transparent:true,opacity:.68,depthWrite:false});
+cloudMaterial.name='Moving Earth clouds';clouds.add(new Mesh(new SphereGeometry(1,64,48),cloudMaterial));
+await glb('clouds.glb',clouds,'clouds.ktx2');
+{
+const cell=new Group(),cellLight=new MeshBasicMaterial({color:'#71e9ec'});cellLight.name='Energy cell luminous glass';
+cell.add(new Mesh(new CylinderGeometry(.096,.096,.44,24),cellLight));
+for(const y of [-.25,.25]){
+  const cap=new Mesh(new CylinderGeometry(.14,.14,.055,24),alloy);cap.position.y=y;cell.add(cap);
+  const ring=new Mesh(new TorusGeometry(.125,.012,8,32),amber);ring.rotation.x=Math.PI/2;ring.position.y=y*.82;cell.add(ring);
+}
+for(let i=0;i<6;i++){
+  const angle=i*Math.PI/3;
+  box(cell,'Protective cell rib',[.026,.46,.026],[Math.cos(angle)*.12,0,Math.sin(angle)*.12],dark);
+}
+await glb('power-cell.glb',mergeByMaterial(cell));
+const door=new Group();box(door,'Armoured shutter',[6.5,5.8,.28],[0,0,0],graphite);
+for(let i=0;i<6;i++)box(door,'Raised shutter louvre',[6.2,.72,.12],[0,-2.3+i*.92,.18],i%2?alloy:dark);
+for(const x of [-3.12,3.12])box(door,'Amber shutter edge',[.055,5.6,.04],[x,0,.29],amber);
+box(door,'Identification plate',[1.4,.52,.1],[0,0,.3],alloy);
+for(let i=0;i<4;i++)box(door,'Warning chevron',[.07,.36,.035],[-.42+i*.28,0,.37],amber).rotation.z=-Math.PI/6;
+await glb('blast-door.glb',mergeByMaterial(door));
+}
 const panelSize=128,pixels=new Uint8Array(panelSize*panelSize*4);
 for(let y=0;y<panelSize;y++)for(let x=0;x<panelSize;x++){const edge=x%32<2||y%32<2;const mark=y>80&&y<86&&x>12&&x<110;const offset=(y*panelSize+x)*4;
   pixels.set(edge?[38,54,65,255]:mark?[232,176,86,255]:[175+(x%7),190+(y%5),188,255],offset);}
@@ -203,7 +226,7 @@ await ktx('panels.ktx2',pixels,panelSize,panelSize);
 const bounds=new Box3().setFromObject(source);const size=bounds.getSize(new Vector3()),centre=bounds.getCenter(new Vector3());
 const manifest={generator:'scripts/build-quest3-assets.mjs',encoder:'BinomialLLC/basis_universal v2_50',encoderHashes,
   bake:{method:'CPU direct lighting with AABB shadows and sampled ambient occlusion; no global illumination claim',resolution,triangles,lights},
-  planet:{method:'Existing orbital Earth imagery with baked fixed sun, cloud coverage, night lights and limb tint',width:planetWidth,height:planetHeight,sun:sun.toArray(),sources:earthSources},
+  planet:{method:'Existing orbital Earth surface and night lights with baked fixed sun/limb tint; separate transparent PBR cloud layer',width:planetWidth,height:planetHeight,sun:sun.toArray(),sources:earthSources},
   station:{...station,fitSize:Math.max(size.x,size.y,size.z),centre:centre.toArray()},provenance:'Original GraphysX station artwork; Earth reuses the existing sbqc/orbital imagery recorded in planet.sources'};
 await writeFile(path.join(out,'build.json'),JSON.stringify(manifest,null,2)+'\n');
 await writeFile(path.join(out,'LICENSE.txt'),'Station artwork created for GraphysX by scripts/build-quest3-assets.mjs. Copyright 2026 Yanik; ownership retained by the repository owner. Earth imagery reuses the existing GraphysX sbqc/orbital assets; original source paths and hashes are recorded in build.json. No new external artwork was downloaded.\n');

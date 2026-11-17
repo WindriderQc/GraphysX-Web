@@ -65,28 +65,63 @@ be authored sparingly for mobile XR.
 
 Earth reuses the existing orbital observatory's surface, cloud and night-light
 images from public/assets/sbqc/orbital. A local CPU composite bakes the fixed sun,
-cloud coverage and atmospheric limb tint into one 2048x1024 KTX2 map on the native
-GLB. Input paths, hashes and sun direction are recorded in build.json. Its lighting
-and clouds remain fixed; the planet keeps a single draw call.
+night lights and atmospheric limb tint into a 2048x1024 KTX2 surface. A separate
+transparent PBR cloud shell rotates above it at a different speed. Input paths,
+hashes and sun direction are recorded in build.json. The surface's illumination
+is baked; it is not a physically changing day/night terminator.
 
-Desktop supports orbit inspection and three arrival/reactor/observation views.
+The mini mission starts with an unpowered reactor and closed blast doors. Take
+the energy cell, carry it to the reactor socket, release it within 44 cm, then
+start the reactor. Its 4.8-second charge reveals moving gyroscopes and particles,
+raises the local light and changes the corridor strips from amber to cyan. The
+core breathes at 1.5 Hz, matching the original synthesized reactor pulse. Native
+keyframe tracks slide the blast doors open over 3.2 seconds. An explicit jump to
+the belvedere completes the mission.
+
+Desktop and touch have a contextual action button; E / Space / Enter perform the
+same action. Clicking the cell picks it up, clicking the socket inserts a held
+cell, and clicking the reactor switch starts it. F toggles fullscreen. Three
+view buttons provide short desktop glides and orbit inspection stays available.
 In VR, headset motion stays native and the player starts at meter scale on the deck.
-The in-world console provides reactor standby, an explicit jump to the observation
-deck and exit. There is no automatic camera flight. The system's own exit remains
-available. Touch Plus uses the pinned native controller models; the Quest 2-specific
+Use Touch Plus grip or hand pinch to take the cell, then the in-world RÉACTEUR
+button to jump while holding it. Release in the socket and point at the physical
+switch or ALLUMER. BELVÉDÈRE unlocks after the doors open. The in-world console
+also provides sound, replay and exit controls. VR travel is always an explicit
+jump; there is no automatic head flight. The system's own exit remains available.
+Touch Plus uses the pinned native controller models; the Quest 2-specific
 cosmetic grip avatar is not fitted to this different controller. Optical hand models
 continue to use actual WebXR joints.
 
-The desktop diagnostic is hidden by default. The in-world panel shows observed
-frame pacing. Scene saving uses the existing named browser-local library; it is
-not a cross-device or server save. UI profile changes apply to the next XR entry.
+Only the owning input can release a cell. Lost tracking, disconnect or session
+interruption returns it to the stand, including if the last pose was in the
+socket. Missed drops also return magnetically; this is not throwable physics.
+Mission checkpoints are ordinary tags on `nacre-mission`; authored transforms,
+materials, sounds and animations use the same World API as the editor. Tracked
+poses use the existing host seam and commit through the API on release or save.
+
+Three native positional sound entities play charge, reactor and door loops;
+pickup, latch and arrival are positional one-shots. WebAudio uses HRTF panners
+and the active desktop camera or tracked XR head as listener. Audio starts only
+after a browser gesture and can be muted. Hidden/blurred XR sessions stop the
+loops. Original mono PCM sounds are synthesized offline without a service or CDN;
+`audio/build.json` records generation, duration and levels. Physical Quest
+audibility, perceived direction and headset bass response still need listening.
+
+The desktop diagnostic is hidden by default. The in-world panel shows the next
+objective. On small screens, Options holds sound, save/resume, replay and
+diagnostics so the mission and complete Earth remain visible. Scene saving uses the existing named browser-local library; it is
+not a cross-device or server save. Reload preserves stable checkpoints. A saved
+held cell returns to the stand; interrupted charging returns to the docked state;
+interrupted door opening resumes fully open. Replay resets mission-owned fields
+while retaining unrelated station edits. UI profile changes apply to the next XR entry.
 
 ## Build and verification
 
 ```
 node scripts/build-quest3-assets.mjs
+node scripts/build-nacre-audio.mjs
 node scripts/vendor-xr-models.mjs
-node --test test/quest3-rendering.test.mjs test/vr-assets.test.mjs
+node --test test/quest3-rendering.test.mjs test/nacre-mission.test.mjs test/nacre-audio.test.mjs test/vr-assets.test.mjs
 npm run verify -- --wait --checks=quest3,vr-lab,model-recentre,roundtrip,scene-command-validation
 npm run verify -- --wait
 ```
@@ -101,7 +136,12 @@ all LOD assets and textures are covered by the production asset manifest.
 The `quest3` smoke tests the built WebGL app with real GLB decoding and KTX2
 transcoding, compressed lightmaps, instance counts, actual LOD selection,
 material override/undo, portable reload, local save, mobile layout and synthetic
-XR entry/profile/exit. It captures views under the machine-wide verify lock.
+XR entry/profile/exit. It also completes the desktop and synthetic tracked-grip
+missions, checks actual door/cloud/reactor transforms, decoded WebAudio panners,
+listener handoff, sound muting, save/replay, input ownership and cancellation at
+the socket. `render_game_to_text` and asynchronous `advanceTime(ms)` expose
+deterministic mission QA using the existing frame loop. The standard web-game
+client runs against these hooks. It captures views under the machine-wide verify lock.
 Evidence is under `output/verify/` or the explicitly selected smoke artifact folder.
 
 ## Physical acceptance remains required
