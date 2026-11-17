@@ -161,3 +161,11 @@ then completed two opening iterations against that static build without errors.
 Mid-rotation, half-open flower, fully open, compact and Studio captures were inspected.
 This qualifies the correction's affected paths; it is not a rerun of the old full gate
 or physical-device/native-engine pixel acceptance. Publication evidence follows in PR147.
+
+Final waiting-inclusive product revision `6e1fa7f` supersedes the earlier correction
+candidate: 1,317 Node passes / one conditional skip and all nine focused production
+controls pass again, including the full rigid waiting loop. Renderer endpoint/pivot/core
+bounds above still hold. The unchanged standard client completes two opening iterations
+on this exact static build with zero errors; latest capture and rigid-waiting capture
+were inspected. Final head adds provenance/qualification documentation only. Production
+identity and public mechanical/UI acceptance are recorded in PR147 after deployment.

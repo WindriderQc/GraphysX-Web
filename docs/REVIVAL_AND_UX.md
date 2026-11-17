@@ -138,8 +138,11 @@ when a document is reopened, rather than pretending to save a running animation 
 **CubZ coupled menu (Archives).** `?app=cubx` restores three complete TVA actors, each
 with 44 source meshes, their hierarchy, pivots and position/rotation/scale keys. All eight
 choices rotate/open/close/return on one authored v2 timeline; direct choice zero and the
-incorrect native reverse index are repaired. The waiting actor and exact visible-pose
-copy into Studio are reachable. The 32 internal button meshes, exit mesh and historical
+incorrect native reverse index are repaired. Passive TVA quaternion keys are converted
+against the independent bind matrices so cylinders stay attached and petals open outward.
+Waiting uses the recovered actor's geometry with a disclosed rigid rotation around the
+original central pivot; the separate-piece source clip stays preserved. Exact visible-pose
+copy into Studio is reachable. The 32 internal button meshes, exit mesh and historical
 destinations remain absent: the four actions and plates are disclosed replacements.
 Materials, camera and Web interpolation are adapters. Full provenance and validation:
 [CUBZ_MENU.md](CUBZ_MENU.md).
