@@ -65,9 +65,11 @@ try {
   assert.equal(await page.locator('[data-view="2"]').isDisabled(),true,'the belvedere requires reactor power');
   await page.click('.nacre-primary');await phase(page,'cell');await advance(page,0);
   await page.screenshot({path:path.join(out,'nacre-cell.png')});
-  await page.click('.nacre-primary');await phase(page,'carrying');
+  const cellScreen=await page.evaluate(()=>JSON.parse(window.render_game_to_text()).cell.screen);
+  await page.mouse.click(cellScreen.x,cellScreen.y);await phase(page,'carrying');
   await page.click('.nacre-primary');await advance(page,0);
-  await page.click('.nacre-primary');await phase(page,'docked');
+  const socketScreen=await page.evaluate(()=>JSON.parse(window.render_game_to_text()).socket.screen);
+  await page.mouse.click(socketScreen.x,socketScreen.y);await phase(page,'docked');
   assert.deepEqual(await page.evaluate(()=>window.__GRAPHYSX_QUEST3__.host.world.getEntityObject('nacre-cell').position.toArray()),[1,1.18,-8.15]);
   await page.click('.nacre-primary');await phase(page,'charging');await advance(page,2400);
   await page.waitForFunction(()=>window.__GRAPHYSX_QUEST3__.host.audio.playingCount>0);
@@ -217,7 +219,8 @@ try {
       const slot=vr.input.slots[0],target=host.scene.getObjectByName(name)||host.world.getEntityObject(name);
       if(!target)throw Error('Missing in-world target: '+name);
       host.scene.updateMatrixWorld(true);
-      slot.ray.position.set(0,1.4,-.1);
+      if(window.__GRAPHYSX_QUEST3__.holding)slot.ray.position.copy(slot.grip.position);
+      else slot.ray.position.set(0,1.4,-.1);
       const origin=slot.ray.getWorldPosition(slot.ray.position.clone()),direction=target.getWorldPosition(origin.clone()).sub(origin).normalize();
       slot.ray.quaternion.setFromUnitVectors(direction.clone().set(0,0,-1),direction);
       slot.ray.updateMatrixWorld(true);slot.ray.dispatchEvent({type:'selectstart'});slot.ray.dispatchEvent({type:'selectend'});
@@ -232,6 +235,13 @@ try {
   await phase(xr,'docked');await xr.evaluate(()=>window.__questSelect('nacre-control'));await phase(xr,'charging');
   await advance(xr,8200);await phase(xr,'ready');
   const xrAudio=await audioState(xr);assert.equal(xrAudio.listener,true);assert.equal(xrAudio.playing,1);
+  const hiddenAudio=await xr.evaluate(()=>{
+    window.__questSession.visibilityState='hidden';window.__questSession.dispatchEvent(new Event('visibilitychange'));
+    return {playing:window.__GRAPHYSX_QUEST3__.host.audio.playingCount,phase:window.__GRAPHYSX_QUEST3__.mission.phase};
+  });
+  assert.deepEqual(hiddenAudio,{playing:0,phase:'ready'},'hidden XR stops native audio immediately without requiring another rendered frame');
+  await xr.evaluate(()=>{window.__questSession.visibilityState='visible';window.__questSession.dispatchEvent(new Event('visibilitychange'));});
+  assert.equal((await audioState(xr)).playing,1);
   await xr.evaluate(()=>window.__questSelect('nacre-ui:BELVÉDÈRE'));await phase(xr,'complete');
   await xr.waitForFunction(()=>window.__GRAPHYSX_QUEST3__.host.world.getEntityObject('nacre-equipment').children[0].levels[1].object.visible);
   receipt.syntheticXrLod=true;
@@ -245,6 +255,7 @@ try {
   });
   assert.equal(await xr.evaluate(()=>window.__GRAPHYSX_QUEST3__.holding),true);
   await xr.evaluate(async()=>{
+    window.__questSelect('nacre-ui:RÉACTEUR');
     window.__questGrip(0,[1,1.18,-8.15]);await window.advanceTime(17);
     window.__questSession.visibilityState='hidden';window.__questSession.dispatchEvent(new Event('visibilitychange'));await window.advanceTime(17);
   });
@@ -252,11 +263,19 @@ try {
   assert.deepEqual(await xr.evaluate(()=>window.__GRAPHYSX_QUEST3__.host.world.getEntityObject('nacre-cell').position.toArray()),[.65,1.12,.15]);
   assert.equal((await audioState(xr)).playing,0);
   await xr.evaluate(()=>{window.__questSession.visibilityState='visible';window.__questSession.dispatchEvent(new Event('visibilitychange'));});
-  receipt.syntheticControllerMission={completed:true,ownership:true,cancelAtSocket:true,audio:xrAudio};
+  receipt.syntheticControllerMission={completed:true,ownership:true,cancelAtSocket:true,hiddenAudioImmediate:true,audio:xrAudio};
   await xr.evaluate(()=>window.__GRAPHYSX_QUEST3__.vr.session.exit());
   assert.equal((await audioState(xr)).listener,true);
   assert.deepEqual(await xr.evaluate(()=>window.__GRAPHYSX_QUEST3__.host.camera.position.toArray()),await xr.evaluate(()=>window.__questCamera));
   assert.equal(await xr.locator('.nacre-ui').getAttribute('data-immersive'),'false');
+  // Leaving XR at the reactor restores the original desktop camera. Its next
+  // contextual carry action must still approach the real socket before docking.
+  await xr.click('.nacre-primary');await phase(xr,'carrying');
+  await xr.click('.nacre-primary');await advance(xr,0);await phase(xr,'carrying');
+  await xr.click('.nacre-primary');await phase(xr,'docked');
+  await xr.click('.nacre-primary');await advance(xr,8200);await phase(xr,'ready');
+  await xr.click('.nacre-primary');await advance(xr,0);await phase(xr,'complete');
+  receipt.desktopAfterXr=true;
   receipt.syntheticXr=true;
   assert.deepEqual(errors,[]);
   writeFileSync(path.join(out,'quest3-receipt.json'),JSON.stringify(receipt,null,2));

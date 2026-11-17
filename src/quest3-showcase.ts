@@ -67,11 +67,16 @@ export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void
   let models=host.api.query({type:"model"});
   const announce=(text:string)=>{notice=text;noticeUntil=performance.now()+2500;};
   const under=(object:Object3D|undefined,id:string)=>{const target=host.world.getEntityObject(id);while(object){if(object===target)return true;object=object.parent??undefined;}return false;};
+  const pickTargets=()=>{
+    // Held cargo must not occlude its own controller ray or the socket click.
+    const ids=[NACRE.socket,"nacre-control"];if(mission.phase==="cell")ids.push(NACRE.cell);
+    return ids.map(id=>host.world.getEntityObject(id)).filter((o):o is Object3D=>!!o);
+  };
   const aim=(ray:Object3D)=>{
     if(!ray.visible)return undefined;
     raycaster.far=6;
     ray.updateWorldMatrix(true,false);ray.getWorldPosition(raycaster.ray.origin);direction.set(0,0,-1).transformDirection(ray.matrixWorld);raycaster.ray.direction.copy(direction);
-    return raycaster.intersectObjects([...buttons.map(b=>b.mesh),host.world.getEntityObject(NACRE.cell),host.world.getEntityObject(NACRE.socket),host.world.getEntityObject("nacre-control")].filter((o):o is Object3D=>!!o),true)[0];
+    return raycaster.intersectObjects([...buttons.map(b=>b.mesh),...pickTargets()],true)[0];
   };
   function buzz(source:XRInputSource,value=.25) {
     const actuator=source.gamepad?.hapticActuators?.[0] as {pulse?:(value:number,duration:number)=>Promise<boolean>}|undefined;
@@ -139,7 +144,7 @@ export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void
     if(!phase){host.api.create(createQuest3Scene());view(0);}
     else if(phase==="standby"){mission.begin();view(0);}
     else if(phase==="cell"){mission.take("desktop");moveHeld();}
-    else if(phase==="carrying"){if(viewIndex!==1)view(1);else{moveHeld();const cell=host.world.getEntityObject(NACRE.cell);if(cell&&cell.getWorldPosition(point).distanceTo(scratch.fromArray(NACRE.dock))<=NACRE.snapDistance)mission.release("desktop");else announce("Approchez la cellule du socle.");}}
+    else if(phase==="carrying"){moveHeld();const cell=host.world.getEntityObject(NACRE.cell);if(viewIndex===1&&!movingView&&cell&&cell.getWorldPosition(point).distanceTo(scratch.fromArray(NACRE.dock))<=NACRE.snapDistance)mission.release("desktop");else view(1);}
     else if(phase==="docked")mission.activate();
     else if(phase==="ready")view(2);
     else if(phase==="complete"){mission.reset();view(0);}
@@ -167,13 +172,13 @@ export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void
     const rect=host.renderer.domElement.getBoundingClientRect();
     ndc.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);
     raycaster.setFromCamera(ndc,host.camera);raycaster.far=8;
-    const hit=raycaster.intersectObjects([host.world.getEntityObject(NACRE.cell),host.world.getEntityObject(NACRE.socket),host.world.getEntityObject("nacre-control")].filter((o):o is Object3D=>!!o),true)[0];
+    const hit=raycaster.intersectObjects(pickTargets(),true)[0];
     if(under(hit?.object,NACRE.cell)&&mission.phase==="cell"){event.preventDefault();event.stopImmediatePropagation();mission.take("desktop");moveHeld();}
     else if(under(hit?.object,NACRE.socket)&&mission.holding){event.preventDefault();event.stopImmediatePropagation();mission.move("desktop",point.fromArray(NACRE.dock),rotation.identity());mission.release("desktop");}
     else if(under(hit?.object,"nacre-control")){event.preventDefault();event.stopImmediatePropagation();mission.activate();}
   };
   host.renderer.domElement.addEventListener("pointerdown",pointer,{capture:true});
-  const audible=()=>mission.setAudible(!document.hidden&&(!vr.session.session||vr.session.session.visibilityState==="visible"));
+  const audible=()=>{mission.setAudible(!document.hidden&&(!vr.session.session||vr.session.session.visibilityState==="visible"));host.audio.sync();};
   document.addEventListener("visibilitychange",audible);
   const sessionOff=vr.session.subscribe(({phase})=>{
     ui.dataset.immersive=String(phase==="active");quality.disabled=phase==="active"||phase==="starting";consoleGroup.visible=phase==="active";
@@ -236,7 +241,7 @@ export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void
     coordinates:"metres; +Y up; forward -Z",ready:visualReady,phase:mission.phase,progress:Number(mission.progress.toFixed(3)),objective:mission.phase?HELP[mission.phase]:"Exploration libre",
     holding:mission.holding,cancelled:lastCancelled,view:viewIndex,
     cell:{position:host.world.getEntityObject(NACRE.cell)?.getWorldPosition(new Vector3()).toArray(),screen:screen(NACRE.cell)},
-    socket:{position:NACRE.dock,screen:screen(NACRE.socket)},doors:["nacre-door-left","nacre-door-right"].map(id=>host.world.getEntityObject(id)?.position.toArray()),
+    socket:{position:NACRE.dock,screen:screen("nacre-socket-base")},doors:["nacre-door-left","nacre-door-right"].map(id=>host.world.getEntityObject(id)?.position.toArray()),
     audio:{muted:mission.muted,playing:host.audio.playingCount,tracked:host.audio.trackedCount},xr:vr.session.snapshot.phase,
   });
   const advanceTime=async(ms:number)=>{
