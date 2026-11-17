@@ -77,8 +77,16 @@ export function buildCubzMenu(data: CubzSource): AgentWorldDefinition {
     const actor = data.actors[id];
     entities.push({ id: cubzRigId(id), type: "group", label: `${id} · complete source TVA actor`, visible: id === "rotation",
       transform: { position: [1.9, 4.6, 2], scale: [0.04, 0.04, 0.04] }, tags: ["cubz-source-rig", "archive", "adapted-display-scale"] });
+    if (id === "screensaver") {
+      const centre = data.actors.rotation.nodes.find(node => node.name === "GlobalCube")!.worldMatrix.slice(12, 15) as Tuple3;
+      centre[2] *= -1;
+      entities.push({ id: "cubz-screensaver-pivot", type: "group", parentId: cubzRigId(id), label: "Rigid waiting rotation · adapted central pivot",
+        transform: { position: centre }, tags: ["cubz-rigid-pivot", "adapted-waiting-motion"] });
+      entities.push({ id: "cubz-screensaver-offset", type: "group", parentId: "cubz-screensaver-pivot", label: "Preserve the original source bind coordinates",
+        transform: { position: centre.map(value => -value) as Tuple3 } });
+    }
     for (const node of actor.nodes) entities.push({ id: nodeId(id, node.id), type: "group", label: `${node.name} · ${id}`,
-      parentId: node.parent < 0 ? cubzRigId(id) : nodeId(id, node.parent), transform: transform(node.localMatrix), tags: ["cubz-source-node", `source-node-${node.id}`] });
+      parentId: node.parent < 0 ? id === "screensaver" ? "cubz-screensaver-offset" : cubzRigId(id) : nodeId(id, node.parent), transform: transform(node.localMatrix), tags: ["cubz-source-node", `source-node-${node.id}`] });
     for (const mesh of actor.meshes) {
       const choice = boxOwner(actor, mesh.nodeId);
       entities.push({ id: `cubz-${id}-m${mesh.nodeId}`, type: "mesh", parentId: nodeId(id, mesh.nodeId), label: `${actor.nodes[mesh.nodeId].name} · source mesh`,
@@ -117,7 +125,11 @@ export function cubzSourceTrack(actor: CubzActor, track: SourceTrack, rangeId: n
     const frames = [...new Set([range.start, ...keys.filter(key => key[0] > range.start && key[0] < range.end).map(key => key[0]), range.end])];
     return frames.map(frame => {
       const values = sampleSource(keys, frame, quaternion);
-      if (quaternion) { values[0] *= -1; values[1] *= -1; }
+      // MANI stores passive rotations: every first key agrees with the independent
+      // MHI2 bind matrix only after conjugation. Convert to an active quaternion,
+      // then reflect Z like the geometry/matrices: S * R(q^-1) * S = (x,y,-z,w).
+      // Reflecting the stored quaternion directly flips cylinders and petal hinges.
+      if (quaternion) values[2] *= -1;
       else if (reflected) values[2] *= -1;
       return [offset + (reverse ? range.end - frame : frame - range.start) / range.fps, ...values];
     }).sort((a, b) => a[0] - b[0]);
@@ -130,7 +142,7 @@ export function cubzSourceTrack(actor: CubzActor, track: SourceTrack, rangeId: n
 
 export type CubzMenuState = { phase: "idle" | "rotating" | "opening" | "opened" | "closing" | "returning" | "screensaver" | "unavailable"; choice: number | null; progress: number };
 const ownsPlayback = (entity: AgentWorldEntityDefinition, behavior: { id?: string }): boolean =>
-  /^cubz-(?:(?:rotation|open|screensaver)-(?:n\d+|rig)|menu-[0-7])$/.test(entity.id ?? "") &&
+  /^cubz-(?:(?:rotation|open|screensaver)-(?:n\d+|rig)|screensaver-pivot|menu-[0-7])$/.test(entity.id ?? "") &&
   (behavior.id === "cubz-source" || behavior.id === "cubz-visibility" || /^cubz-program-(?:open|return|saver)-[0-7]$/.test(behavior.id ?? ""));
 export function cubzMenuState(document: AgentWorldDefinition | null, elapsed: number): CubzMenuState {
   const root = document?.entities.find(entity => entity.id === cubzRigId("rotation"));
@@ -153,7 +165,7 @@ export function cubzResetCommands(document: AgentWorldDefinition): AgentWorldCom
   for (const entity of document.entities) {
     const owned = entity.behaviors?.filter(behavior => ownsPlayback(entity, behavior)) ?? [];
     for (const behavior of owned) commands.push({ op: "detach-behavior", id: entity.id!, behaviorId: behavior.id! });
-    if (owned.length && entity.tags?.includes("cubz-source-node")) commands.push({ op: "update", id: entity.id!, patch: { transform: entity.transform } });
+    if (owned.length && entity.tags?.some(tag => tag === "cubz-source-node" || tag === "cubz-rigid-pivot")) commands.push({ op: "update", id: entity.id!, patch: { transform: entity.transform } });
   }
   for (const actor of CUBZ_ACTORS) commands.push({ op: "update", id: cubzRigId(actor), patch: { visible: actor === "rotation" } });
   for (let choice = 0; choice < 8; choice++) commands.push({ op: "update", id: buttonRoot(choice), patch: { visible: false } });
@@ -170,17 +182,22 @@ export function cubzSequenceCommands(data: CubzSource, document: AgentWorldDefin
     behavior: { id: program ? `cubz-program-${mode}-${choice}` : "cubz-visibility", type: "keyframes", startSeconds: now, durationSeconds: duration, loop: mode === "saver", visibility: keys } });
   if (mode === "saver") {
     visibility(cubzRigId("rotation"), [[0, false]], true); visibility(cubzRigId("open"), [[0, false]]); visibility(cubzRigId("screensaver"), [[0, true]]);
+    // The recorded saver translates individual parts and breaks the connections.
+    // Keep its complete bind geometry and raw clip, but honour the owner's rigid
+    // menu requirement with one explicitly adapted rotation around GlobalCube's pivot.
+    commands.push({ op: "attach-behavior", id: "cubz-screensaver-pivot", behavior: { id: "cubz-source", type: "keyframes", startSeconds: now, durationSeconds: duration, loop: true,
+      rotations: Array.from({ length: 5 }, (_, index) => [index * duration / 4, 0, Math.sin(index * Math.PI / 4), 0, Math.cos(index * Math.PI / 4)] as QuaternionKey) } });
+    return commands;
   } else {
     visibility(cubzRigId("rotation"), mode === "open" ? (rotationTime ? [[0, true], [rotationTime, false]] : [[0, false]]) : [[0, false], [openTime, true]], true);
     visibility(cubzRigId("open"), mode === "open" ? (rotationTime ? [[0, false], [rotationTime, true]] : [[0, true]]) : [[0, true], [openTime, false]]);
     visibility(cubzRigId("screensaver"), [[0, false]]);
     for (let i = 0; i < 8; i++) visibility(buttonRoot(i), mode === "open" && i === choice ? [[0, false], [duration, true]] : [[0, false]]);
   }
-  const actors: CubzActorId[] = mode === "saver" ? ["screensaver"] : rotationTime ? ["rotation", "open"] : ["open"];
+  const actors: CubzActorId[] = rotationTime ? ["rotation", "open"] : ["open"];
   for (const id of actors) for (const track of data.actors[id].tracks) {
-    const offset = mode === "saver" ? 0 : mode === "open" ? (id === "open" ? rotationTime : 0) : id === "rotation" ? openTime : 0;
+    const offset = mode === "open" ? (id === "open" ? rotationTime : 0) : id === "rotation" ? openTime : 0;
     const behavior = cubzSourceTrack(data.actors[id], track, id === "rotation" ? choice : 0, now, offset, mode === "return", duration);
-    if (mode === "saver") behavior.loop = true;
     commands.push({ op: "attach-behavior", id: nodeId(id, track.nodeId), behavior });
   }
   return commands;

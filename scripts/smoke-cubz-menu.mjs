@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, writeFile, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, readFile, writeFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { applySmokeTimeout, launchSmokeBrowser } from "./smoke-harness.mjs";
@@ -10,6 +10,31 @@ const artifacts = process.env.SMOKE_ARTIFACTS || path.resolve("output/playwright
 await mkdir(artifacts, { recursive: true });
 const browser = await launchSmokeBrowser();
 const receipts = [];
+const source = JSON.parse(await readFile(new URL("../public/assets/ports/archive-cubz-menu.json", import.meta.url), "utf8"));
+const mechanicalNodes = Object.fromEntries(["rotation", "open", "screensaver"].map(id => [id, source.actors[id].nodes.filter(node => /^Box0[1-8]$|^Cylindre\d+$/.test(node.name)).map(node => ({ id: node.id, cylinder: node.name.startsWith("Cylindre") }))]));
+const mechanicalPose = (page, actor) => page.evaluate(({ actor, nodes }) => {
+  const world = window.__GRAPHYSX_HOST__.world;
+  const points = nodes.flatMap(node => {
+    const object = world.getEntityObject(`cubz-${actor}-n${node.id}`);
+    return [0, node.cylinder ? 50 : 22.5].map(y => object.localToWorld(object.position.clone().set(0, y, 0)).toArray());
+  });
+  const pivotObject = actor === "rotation" ? world.getEntityObject("cubz-rotation-n1") : actor === "screensaver" ? world.getEntityObject("cubz-screensaver-pivot") : null;
+  const pivot = pivotObject?.getWorldPosition(pivotObject.position.clone()).toArray() ?? null;
+  return { points, pivot };
+}, { actor, nodes: mechanicalNodes[actor] });
+const distance = (a, b) => Math.hypot(...a.map((value, index) => value - b[index]));
+const mechanicalErrors = { maximumRigidDistanceError: 0, maximumCentralPivotError: 0, maximumOpeningFixedPointError: 0 };
+const assertRigid = (reference, current) => {
+  for (let i = 0; i < reference.points.length; i++) for (let j = 0; j < i; j++) mechanicalErrors.maximumRigidDistanceError = Math.max(mechanicalErrors.maximumRigidDistanceError,
+    Math.abs(distance(reference.points[i], reference.points[j]) - distance(current.points[i], current.points[j])));
+  mechanicalErrors.maximumCentralPivotError = Math.max(mechanicalErrors.maximumCentralPivotError, distance(reference.pivot, current.pivot));
+  assert.ok(mechanicalErrors.maximumRigidDistanceError < 1e-5, "real renderer keeps every cylinder endpoint attached to the rigid assembly");
+  assert.ok(mechanicalErrors.maximumCentralPivotError < 1e-5, "real renderer rotates around the fixed central pivot");
+};
+const assertOpeningFixed = (reference, current) => {
+  mechanicalErrors.maximumOpeningFixedPointError = Math.max(mechanicalErrors.maximumOpeningFixedPointError, ...reference.points.map((point, index) => distance(point, current.points[index])));
+  assert.ok(mechanicalErrors.maximumOpeningFixedPointError < 1e-5, "only petals move during opening; cylinders and block cores stay fixed");
+};
 const read = page => page.evaluate(() => JSON.parse(window.render_game_to_text()).application);
 const draw = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 const clickPaused = (page, selector) => page.locator(selector).evaluate(button => { button.click(); window.__GRAPHYSX__.pause(true); });
@@ -35,6 +60,7 @@ try {
   const page = applySmokeTimeout(await context.newPage()), errors = errorsFor(page);
   await page.goto(new URL("?intro=0", base).href, { waitUntil: "domcontentloaded" });
   await page.click(".gx-go-archive");
+  await page.locator('[data-scene-id="archive-cubz-menu"]').waitFor();
   assert.equal(await page.locator('[data-scene-id="archive-cubz-menu"]').isVisible(), true);
   assert.equal(await page.locator('[data-scene-id="archive-cubz-tracks"]').isVisible(), false, "old replacement-geometry study is outside Archives");
   await page.click('[data-collection="lab"]');
@@ -63,15 +89,24 @@ try {
   assert.ok(studioContrast >= 4.5, "hovered Studio action retains readable text contrast");
   await capture(page, "cubz-studio-hover"); await page.mouse.move(700, 80);
   await capture(page, "cubz-desktop-closed");
+  const rigidReference = await mechanicalPose(page, "rotation"), openingReference = await mechanicalPose(page, "open");
   for (let choice = 0; choice < 8; choice++) {
     await clickPaused(page, `[data-cubz-choice="${choice}"]`);
     const initial = await read(page), authored = await snapshot(page);
     assert.equal(initial.phase, choice === 0 ? "opening" : "rotating");
+    if (choice > 0) {
+      await advance(page, 14 / 30); assertRigid(rigidReference, await mechanicalPose(page, "rotation"));
+      if (choice === 1) await capture(page, "cubz-rigid-half-turn");
+      await advance(page, 14 / 30); assertRigid(rigidReference, await mechanicalPose(page, "rotation"));
+    }
+    await advance(page, 25 / 30); assertOpeningFixed(openingReference, await mechanicalPose(page, "open"));
+    if (choice === 0) await capture(page, "cubz-flower-half-open");
     await advance(page, 3);
     const opened = await read(page), openSnapshot = await snapshot(page);
     assert.equal(opened.phase, "opened"); assert.equal(opened.choice, choice);
     assert.equal(openSnapshot.meshes.length, 44); assert.ok(openSnapshot.meshes.every(id => id.startsWith("cubz-open-")));
     assert.equal(openSnapshot.revision, authored.revision, "simulation never rewrites authored source data");
+    assertOpeningFixed(openingReference, await mechanicalPose(page, "open"));
     if (choice === 7) await capture(page, "cubz-desktop-open");
     await clickPaused(page, "[data-cubz-close]");
     assert.equal((await read(page)).phase, "closing");
@@ -79,7 +114,7 @@ try {
     assert.equal((await read(page)).phase, "idle");
     assert.ok((await snapshot(page)).meshes.every(id => id.startsWith("cubz-rotation-")));
   }
-  console.log("PASS CubZ: all eight coupled source-actor cycles, direct first choice and same-range reverse.");
+  console.log("PASS CubZ: all eight cycles, rigid cylinder endpoints, fixed central pivot, fixed block cores during petal opening and same-range reverse.");
   await page.setViewportSize({ width: 1280, height: 720 });
   await clickPaused(page, '[data-cubz-choice="1"]');
   const pauseControl = await page.locator("[data-cubz-pause]").evaluate(button => {
@@ -141,8 +176,11 @@ try {
   assert.deepEqual((await snapshot(page)).selected, ["cubz-open-rig"], "one selected actor includes all 44 source meshes");
   await capture(page, "cubz-diagnostic");
   await page.click("[data-cubz-reset]");
+  const waitingReference = await mechanicalPose(page, "screensaver");
   await clickPaused(page, "[data-cubz-saver]");
+  for (const seconds of [3.25, 9, 13]) { await advance(page, seconds); assertRigid(waitingReference, await mechanicalPose(page, "screensaver")); }
   await advance(page, 12.5);
+  assertRigid(waitingReference, await mechanicalPose(page, "screensaver"));
   assert.equal((await read(page)).phase, "screensaver");
   assert.ok((await snapshot(page)).meshes.every(id => id.startsWith("cubz-screensaver-")));
   await capture(page, "cubz-source-screensaver");
@@ -211,7 +249,7 @@ try {
   await page.click("[data-cubz-studio]"); await page.waitForSelector(".gx-ed-toolbar");
   assert.deepEqual(await page.evaluate(() => window.__GRAPHYSX__.exportDocument()), foreign, "replacing the scene keeps its identity and authored fields when entering Studio");
   assert.deepEqual(errors, [], "desktop: no browser, shader, HTTP or transport errors");
-  receipts.push({ device: "desktop", choices: 8, studioMaxMatrixError: Math.max(...differences), studioHoverContrast: studioContrast, errors });
+  receipts.push({ device: "desktop", choices: 8, mechanics: mechanicalErrors, studioMaxMatrixError: Math.max(...differences), studioHoverContrast: studioContrast, errors });
   await context.close();
   console.log("PASS CubZ: canvas pick/drag, hidden actors, diagnostics, native waiting actor, keyboard, exact Studio pose, save/export/reload.");
 

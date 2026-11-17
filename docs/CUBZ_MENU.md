@@ -41,18 +41,27 @@ MAMD positions, normals, UVs and triangles are recovered, not replacement boxes.
 parents and local matrices retain the actual pivots. A read-only source audit verified
 `parentWorld × localMatrix` against every stored world matrix to within `7.63e-6` native
 units. Local geometry is not transformed twice. The Web boundary reflects Z once on
-vertices/normals and conjugates matrices; quaternion reflection is `[-x,-y,z,w]`.
+vertices/normals and conjugates matrices. MANI keys are **passive rotations**: conjugate
+them before reflecting Z, producing Web quaternions `[x,y,-z,w]`. Applying reflection
+directly to the stored key in the first release inverted cylinder and panel axes.
+Across all 136 first rotation keys, conjugation agrees with the independent MHI2 bind
+matrices within `1.4e-5` degrees; using the stored rotation directly differs by up to
+180 degrees. The pinned raw payload is unchanged.
 Triangle winding follows the exported normal orientation after reflection.
 
-All changing position, rotation and scale keys inside a chosen range survive. Only exactly
+All changing position, rotation and scale keys inside a chosen rotation/opening range survive. Only exactly
 constant channels compact; endpoints are sampled when clipping. Vectors interpolate
 linearly, normalized quaternions use slerp. The recovered engine was not run for a native
 pixel comparison, so continuous interpolation and historical appearance are not certified.
 
 The C++ supplies eight choices, seven selection ranges, the actor-swap sequence and four
 buttons per internal menu. Selection ranges are 28 frames at 30 fps; opening is 50 frames
-at 30 fps; the waiting actor is 750 frames at 30 fps. A Web loop of the waiting actor is
-an explicit presentation choice. The return reverses the **same selected range**: the
+at 30 fps; the recorded waiting actor is 750 frames at 30 fps. Its separate-piece motions
+disassemble the structure (up to 6.37 display units of endpoint-distance change after
+rotation-convention correction). The complete geometry, bind hierarchy and raw clip remain
+preserved. The menu instead uses a disclosed 25-second **rigid waiting rotation**, with
+two adapter groups around the original central pivot. This honours the owner's requirement
+that connectors stay with the cubes. No native mesh or pivot is edited. The return reverses the **same selected range**: the
 native `selected + 1` reverse bug could request nonexistent range 8. Direct choice zero
 also returns to usable idle controls. Source stop-frame thresholds are not simulated.
 
@@ -77,7 +86,9 @@ uninitialized eighth slot and cannot safely be merged into this choreography by 
 Each actor is ordinary v2 groups and inline meshes. Reusable `keyframes` behaviors carry
 positions, rotations, scales and discrete visibility; no second renderer or animation loop
 owns the scene. Visibility holds the latest key, including at its exact timestamp. Channels
-are bounded to 1024 keys so the waiting actor's 751 keys need no resampling. Browser and
+are bounded to 1024 keys, retaining capacity for the source's 751-key tracks. The rigid
+waiting adapter uses five quaternion keys on one common pivot; the inverse-offset group
+preserves every native node's original local matrix. Browser and
 storage validators share the same fields and limits. The public clock retains full
 simulation precision so a rounded timestamp cannot pause before a visibility boundary.
 
@@ -95,6 +106,19 @@ If another document replaces the rig, helpers disable and Studio opens that docu
 unchanged. Foreign entities are never normalized or baked by the pose helper.
 
 ## Validation
+
+The owner reported disconnected cylinders and inward petals after the first release.
+Earlier receipts covered the UI, persistence and source decoding; they did not prove
+mechanical coherence. `test/cubz-mechanics.test.mjs` now calibrates animation against
+independent bind matrices, checks all endpoint-pair distances and the central pivot at
+every integer frame of all seven rotations, and checks fixed cores/hinges and outward
+movement of all three opening petals. The first two tests reproduce the published bug.
+The browser smoke also measures actual renderer endpoints midway and at the end of
+each rotation, fixed cores during opening, and captures the half-open flower.
+
+The stored rotation ranges leave up to 3.60 native units (0.144 display units) of residue
+at the front slot before the source actor swap. This source-export limitation remains
+explicit; the tests do not pretend the original recordings end on exact cardinal poses.
 
 `test/cubz-source.test.mjs` exercises counted binary fixtures, corruption rejection, pinned
 payload counts and release-asset inclusion. The actual public API/Rapier contract in
@@ -124,3 +148,24 @@ pose's maximum world-matrix difference was `1.574e-7`; the settled Studio hover 
 was `11.91:1`. Two-finger input actually moved the shared camera without authoring a
 scene change. Optional store handoff used an isolated loopback fixture, with no homelab
 or production writes. Publication is tracked by PR146 and the main deployment workflow.
+
+Mechanical correction qualification, 2026-11-16: product revision `01d93fb` passed
+1,316 Node tests with one conditional skip, typecheck, lint, a fresh production build,
+physics probes and all three affected browser journeys (CubZ, revival, editor): nine
+controls in this focused gate. Actual renderer maximum endpoint-distance error was
+`2.215e-6` display units, central-pivot drift was zero, and fixed-core drift during
+opening was below `1.908e-6`. The partial-pose Studio copy differed by less than
+`1.717e-6` in world matrices. Desktop, 390px/320px touch and the isolated local-store
+handoff passed without browser/HTTP errors. The byte-identical standard game client
+then completed two opening iterations against that static build without errors.
+Mid-rotation, half-open flower, fully open, compact and Studio captures were inspected.
+This qualifies the correction's affected paths; it is not a rerun of the old full gate
+or physical-device/native-engine pixel acceptance. Publication evidence follows in PR147.
+
+Final waiting-inclusive product revision `6e1fa7f` supersedes the earlier correction
+candidate: 1,317 Node passes / one conditional skip and all nine focused production
+controls pass again, including the full rigid waiting loop. Renderer endpoint/pivot/core
+bounds above still hold. The unchanged standard client completes two opening iterations
+on this exact static build with zero errors; latest capture and rigid-waiting capture
+were inspected. Final head adds provenance/qualification documentation only. Production
+identity and public mechanical/UI acceptance are recorded in PR147 after deployment.
