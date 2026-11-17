@@ -21,7 +21,7 @@ const audioState=page=>page.evaluate(()=>{
     }))};
 });
 try {
-  const page=applySmokeTimeout(await browser.newPage({viewport:{width:1440,height:960}}));
+  const page=applySmokeTimeout(await browser.newPage({viewport:{width:1440,height:960},hasTouch:true}));
   page.on('pageerror',e=>errors.push(String(e)));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
   await page.goto(new URL('?app=quest3',base).href);
   await page.waitForFunction(()=>{
@@ -174,6 +174,16 @@ try {
   await page.setViewportSize({width:390,height:844});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   assert.ok(await page.locator('.nacre-enter').isVisible());await page.screenshot({path:path.join(out,'nacre-mobile.png')});
+  for(const expected of ['cell','carrying','carrying','docked','charging']){
+    await page.tap('.nacre-primary');await advance(page,0);await phase(page,expected);
+  }
+  await advance(page,8200);await phase(page,'ready');
+  await page.tap('.nacre-primary');await advance(page,0);await phase(page,'complete');
+  assert.equal(await page.locator('.nacre-steps li[data-done="true"]').count(),3);
+  await page.screenshot({path:path.join(out,'nacre-mobile-observation.png')});
+  await page.tap('.nacre-reset');await advance(page,0);await phase(page,'cell');
+  assert.deepEqual(await page.evaluate(()=>['nacre-door-left','nacre-door-right'].map(id=>window.__GRAPHYSX_QUEST3__.host.world.getEntityObject(id).position.x)),[-3.25,3.25]);
+  receipt.mobileMission=true;
   await page.close();
 
   const xr=applySmokeTimeout(await browser.newPage({viewport:{width:1280,height:800}}));
@@ -241,6 +251,7 @@ try {
   });
   assert.deepEqual(hiddenAudio,{playing:0,phase:'ready'},'hidden XR stops native audio immediately without requiring another rendered frame');
   await xr.evaluate(()=>{window.__questSession.visibilityState='visible';window.__questSession.dispatchEvent(new Event('visibilitychange'));});
+  await advance(xr,0);
   assert.equal((await audioState(xr)).playing,1);
   await xr.evaluate(()=>window.__questSelect('nacre-ui:BELVÉDÈRE'));await phase(xr,'complete');
   await xr.waitForFunction(()=>window.__GRAPHYSX_QUEST3__.host.world.getEntityObject('nacre-equipment').children[0].levels[1].object.visible);

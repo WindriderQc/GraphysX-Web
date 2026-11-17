@@ -9,7 +9,7 @@ import "./quest3-showcase.css";
 
 const VIEWS = [
   { label: "Cellule", position: [.9,1.65,1.6], target: [.6,1.25,-.7], floor: [0,0,1], yaw: 0 },
-  { label: "Réacteur", position: [1,1.65,-7.3], target: [.2,2.05,-10.7], floor: [1,0,-7.3], yaw: 0 },
+  { label: "Réacteur", position: [1,1.65,-5.8], target: [.2,2.05,-10.7], floor: [1,0,-7.3], yaw: 0 },
   { label: "Belvédère", position: [0,1.8,-22.5], target: [1,8,-58], floor: [0,.14,-22.5], yaw: 0 },
 ] as const;
 const HELP = {
@@ -135,7 +135,7 @@ export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void
       held.anchor.updateWorldMatrix(true,false);held.anchor.getWorldPosition(point);held.anchor.getWorldQuaternion(rotation);
       point.add(scratch.copy(held.offset).applyQuaternion(rotation));rotation.multiply(held.rotation);mission.move(held.key,point,rotation);
     }else if(mission.holding){
-      host.camera.updateWorldMatrix(true,false);host.camera.localToWorld(point.set(0,-.45,-.75));host.camera.getWorldQuaternion(rotation);mission.move("desktop",point,rotation);
+      host.camera.updateWorldMatrix(true,false);host.camera.localToWorld(point.set(-.2,-.22,-1.15));host.camera.getWorldQuaternion(rotation);mission.move("desktop",point,rotation);
     }
   }
   function primaryAction() {
@@ -144,7 +144,10 @@ export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void
     if(!phase){host.api.create(createQuest3Scene());view(0);}
     else if(phase==="standby"){mission.begin();view(0);}
     else if(phase==="cell"){mission.take("desktop");moveHeld();}
-    else if(phase==="carrying"){moveHeld();const cell=host.world.getEntityObject(NACRE.cell);if(viewIndex===1&&!movingView&&cell&&cell.getWorldPosition(point).distanceTo(scratch.fromArray(NACRE.dock))<=NACRE.snapDistance)mission.release("desktop");else view(1);}
+    else if(phase==="carrying"){
+      if(viewIndex!==1||movingView||host.camera.position.distanceTo(scratch.fromArray(VIEWS[1].position))>.05)view(1);
+      else{mission.move("desktop",point.fromArray(NACRE.dock),rotation.identity());mission.release("desktop");}
+    }
     else if(phase==="docked")mission.activate();
     else if(phase==="ready")view(2);
     else if(phase==="complete"){mission.reset();view(0);}
@@ -219,7 +222,7 @@ export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void
     objective.textContent=phase?HELP[phase]:"Votre station sauvegardée reste explorable.";
     headline.innerHTML=phase==="complete"?"Le signal<br>est revenu.":phase==="standby"?"Ramenez<br>la lumière.":"Rétablir<br>le signal.";
     primary.disabled=!visualReady||phase==="charging"||phase==="opening"||(phase==="carrying"&&viewIndex===1&&movingView);
-    primary.textContent=!visualReady?"Préparation…":phase==="standby"?"Commencer la mission":phase==="cell"?"Saisir la cellule":phase==="carrying"?(viewIndex===1?(movingView?"Approche du réacteur…":"Insérer la cellule"):"Aller au réacteur"):phase==="docked"?"Lancer le réacteur":phase==="charging"?"Recharge · "+Math.round(progress*100)+" %":phase==="opening"?"Ouverture · "+Math.round(progress*100)+" %":phase==="ready"?"Ouvrir le belvédère":phase==="complete"?"Rejouer la mission":"Nouvelle mission";
+    primary.textContent=!visualReady?"Préparation…":phase==="standby"?"Commencer la mission":phase==="cell"?"Saisir la cellule":phase==="carrying"?(viewIndex===1?(movingView?"Approche du réacteur…":"Insérer la cellule"):"Aller au réacteur"):phase==="docked"?"Lancer le réacteur":phase==="charging"?"Recharge · "+Math.round(progress*100)+" %":phase==="opening"?"Ouverture · "+Math.round(progress*100)+" %":phase==="ready"?"Rejoindre le belvédère":phase==="complete"?"Rejouer la mission":"Nouvelle mission";
     const index=phase?["standby","cell","carrying","docked","charging","opening","ready","complete"].indexOf(phase):0;
     ui.querySelectorAll<HTMLElement>(".nacre-steps li").forEach((li,i)=>li.dataset.done=String(index>=[3,5,7][i]));
     charge.hidden=phase!=="charging"&&phase!=="opening";charge.value=progress;
@@ -236,7 +239,11 @@ export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void
   });
 
   const debug=window as unknown as Record<string,unknown>,previousText=debug.render_game_to_text,previousTime=debug.advanceTime;
-  const screen=(id:string)=>{const o=host.world.getEntityObject(id);if(!o)return null;o.getWorldPosition(point);point.project(host.camera);return{x:Math.round((point.x+1)*root.clientWidth/2),y:Math.round((1-point.y)*root.clientHeight/2)};};
+  const screen=(id:string)=>{
+    const o=host.world.getEntityObject(id);if(!o)return null;o.getWorldPosition(point);point.project(host.camera);
+    const rect=host.renderer.domElement.getBoundingClientRect();
+    return{x:Math.round(rect.left+(point.x+1)*rect.width/2),y:Math.round(rect.top+(1-point.y)*rect.height/2)};
+  };
   const readText=()=>JSON.stringify({
     coordinates:"metres; +Y up; forward -Z",ready:visualReady,phase:mission.phase,progress:Number(mission.progress.toFixed(3)),objective:mission.phase?HELP[mission.phase]:"Exploration libre",
     holding:mission.holding,cancelled:lastCancelled,view:viewIndex,
@@ -260,7 +267,7 @@ export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void
     host.audio.sync();host.scene.updateMatrixWorld(true);
     host.requestRender();
   };
-  const diagnostics={host,vr,mission,view,profile,get visualReady(){return visualReady;},get holding(){return mission.holding;},get cancelled(){return lastCancelled;}};
+  const diagnostics={host,vr,mission,view,get profile(){return vrOptions.profile;},get visualReady(){return visualReady;},get holding(){return mission.holding;},get cancelled(){return lastCancelled;}};
   Object.assign(debug,{__GRAPHYSX__:host.api,__GRAPHYSX_QUEST3__:diagnostics,render_game_to_text:readText,advanceTime});
   const pageHide=()=>{void dispose();};window.addEventListener("pagehide",pageHide);
   async function dispose() {

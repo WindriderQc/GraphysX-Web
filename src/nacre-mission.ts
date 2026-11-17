@@ -47,7 +47,8 @@ export class NacreMission {
   get holding(): boolean { return this.phase === "carrying" && this.owner !== null; }
   get progress(): number {
     const phase = this.phase;
-    const duration = phase === "charging" ? NACRE.chargeSeconds : phase === "opening" ? NACRE.doorSeconds : 1;
+    if (phase !== "charging" && phase !== "opening") return online(phase) ? 1 : 0;
+    const duration = phase === "charging" ? NACRE.chargeSeconds : NACRE.doorSeconds;
     const start = Number(this.tags().find(tag => tag.startsWith("started:"))?.slice(8) ?? 0);
     return Number.isFinite(start) ? Math.max(0, Math.min(1, (this.world.getElapsedSeconds() - start) / duration)) : 0;
   }

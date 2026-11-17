@@ -76,7 +76,7 @@ test('NACRE charge, native door tracks, positional loops and completion follow t
   f.advance(2.4);assert.equal(m.phase,'opening');
   assert.equal(f.entities.get('nacre-door-left').behaviors[0].type,'keyframes');
   assert.equal(f.entities.get('nacre-door-sound').sound.autoplay,true);
-  f.advance(3.3);assert.equal(m.phase,'ready');
+  f.advance(3.3);assert.equal(m.phase,'ready');assert.equal(m.progress,1);
   assert.deepEqual(f.objects.get('nacre-door-left').position.toArray(),[-9.5,3,-21.5]);
   assert.equal(f.entities.get('nacre-door-sound').sound.autoplay,false);
   assert.equal(f.entities.get('nacre-reactor-sound').sound.autoplay,true);
