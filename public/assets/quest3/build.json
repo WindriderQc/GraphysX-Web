@@ -130,7 +130,7 @@
     ]
   },
   "planet": {
-    "method": "Existing orbital Earth imagery with baked fixed sun, cloud coverage, night lights and limb tint",
+    "method": "Existing orbital Earth surface and night lights with baked fixed sun/limb tint; separate transparent PBR cloud layer",
     "width": 2048,
     "height": 1024,
     "sun": [

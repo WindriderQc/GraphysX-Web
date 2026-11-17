@@ -5529,3 +5529,13 @@ Build séparé dans output/ballsy-slime/dist, lanceur Jouer-Ballsy-Slime.cmd sur
 
 - Final waiting-inclusive product6e1fa7f1b4d52eede9053fd362b349f359f0cfec passes1317Node/1conditional skip and all9fresh focused controls again (CubZ, revival, editor plus static/build/physics). Full waiting-loop renderer assertions pass with the same <=2.215e-6 endpoint,0pivot and <=1.908e-6 fixed-core errors. See output/cubz-pivot-final-verify.log/exitJSON and current output/verify/cubz-menu-receipt.json. Source CI44009410418 passes. The first01d93fb qualification is historical, not substituted for this final source.
 - Unchanged standard-client2iterations on the exact final static build pass without errors; inspected latest output/playwright/cubz-pivot-standard-rigid/shot-1.png plus rigid waiting, half/full flower and transfer captures. Receipt output/cubz-pivot-standard-rigid-receipt.json. Final documentation clarifies the rigid-waiting adapter while raw native files and payload remain unchanged. PR147 publication/public acceptance follows; Impreza remains the authorized next work.
+
+## 2026-11-17 — NACRE interactive power-cell mission (in progress)
+
+Original prompt: "Go pour la petite mission interactive dans NACRE : saisir une cellule d’énergie, réactiver le réacteur et ouvrir le belvédère, avec du son spatialisé! Quelques animation.... terre nuage, lumiere, reacteur wompwomp, etc..."
+
+- Isolated in codex/nacre-mission from main f894d63; other worktrees remain intact.
+- Mission checkpoints are ordinary entity tags. Geometry, material, audio and door changes use the World API; tracked poses use the existing host seam, with authored placement committed on release/save.
+- Reuse positional sound entities, pulse/spin/keyframes and the single frame loop. Add original local audio and separate moving clouds while retaining the existing Earth imagery.
+- Next: finish assets and input/UI wiring, then play the whole desktop/Touch Plus journey, cancellation, checkpoints and spatial audio under the machine-wide verification lock. Physical Quest acceptance remains separate.
+- Implemented the portable mission, contextual desktop/touch controls and tracked grip/pinch adapter. Added native sliding doors, separate moving clouds, staged reactor lights/gyroscopes/particles and original mono spatial audio. Seven mission/audio tests pass; typecheck and scoped lint pass. Browser QA is queued behind the pre-existing machine-wide full gate (PID 5668); no overlapping heavy render/build was started.

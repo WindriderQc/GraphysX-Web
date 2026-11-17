@@ -7,7 +7,19 @@ import { validateStoredSceneDefinition } from '../server/scene-commands.mjs';
 const base=process.env.SMOKE_BASE||'http://127.0.0.1:4188/';
 const out=process.env.SMOKE_ARTIFACTS||path.resolve('output/playwright/quest3');mkdirSync(out,{recursive:true});
 const browser=await launchSmokeBrowser(),errors=[];
-const receipt={scope:'Built WebGL rendering, real KTX2 transcoding and synthetic XR lifecycle. No physical Quest performance or stereo acceptance.'};
+const receipt={scope:'Built WebGL rendering, real KTX2/audio decoding, desktop mission and synthetic tracked-controller mission. No physical Quest performance, audibility or stereo acceptance.'};
+const phase=async(page,expected)=>page.waitForFunction(expected=>window.__GRAPHYSX_QUEST3__.mission.phase===expected,expected);
+const ready=async page=>page.waitForFunction(()=>window.__GRAPHYSX_QUEST3__?.visualReady);
+const advance=async(page,ms)=>page.evaluate(ms=>window.advanceTime(ms),ms);
+const audioState=page=>page.evaluate(()=>{
+  const {host,vr}=window.__GRAPHYSX_QUEST3__,audio=host.audio;
+  host.scene.updateMatrixWorld(true);
+  return {context:audio.listener.context.state,listener:audio.listener.parent===(vr.session.session?vr.camera:host.camera),
+    oneShots:audio.oneShotCount,playing:audio.playingCount,sources:[...audio.tracked].map(([id,{node}])=>({
+      id,playing:node.isPlaying,spatial:node.panner instanceof PannerNode,panning:node.panner?.panningModel,
+      position:node.getWorldPosition(node.position.clone()).toArray(),reference:node.panner?.refDistance,
+    }))};
+});
 try {
   const page=applySmokeTimeout(await browser.newPage({viewport:{width:1440,height:960}}));
   page.on('pageerror',e=>errors.push(String(e)));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
@@ -16,7 +28,7 @@ try {
     const app=window.__GRAPHYSX_QUEST3__;if(!app)return false;
     const models=app.host.api.state().entities.filter(e=>e.asset);
     if(models.some(e=>e.asset.status==='error'))throw Error(JSON.stringify(models.filter(e=>e.asset.status==='error')));
-    return models.length===6&&models.every(e=>e.asset.status==='ready');
+    return models.length===10&&models.every(e=>e.asset.status==='ready')&&app.visualReady;
   });
   await page.waitForFunction(()=>window.__GRAPHYSX_QUEST3__.host.diagnostics.snapshot().samples>3);
   const document=await page.evaluate(()=>window.__GRAPHYSX__.export());validateStoredSceneDefinition(document);
@@ -50,14 +62,51 @@ try {
   await page.evaluate(()=>{const {host}=window.__GRAPHYSX_QUEST3__;host.setRenderOnDemand(false);host.api.pause(false);});
   receipt.composerAndDemandDiagnostics=true;
   await page.screenshot({path:path.join(out,'nacre-arrival.png')});
-  await page.click('[data-view="1"]');await page.waitForTimeout(200);await page.screenshot({path:path.join(out,'nacre-reactor.png')});
-  await page.click('.nacre-power');
-  assert.equal(await page.evaluate(()=>window.__GRAPHYSX__.query({ids:['nacre-reactor-core']})[0].material.emissiveIntensity),.08);
-  await page.click('.nacre-power');await page.click('.nacre-save');
+  assert.equal(await page.locator('[data-view="2"]').isDisabled(),true,'the belvedere requires reactor power');
+  await page.click('.nacre-primary');await phase(page,'cell');await advance(page,0);
+  await page.screenshot({path:path.join(out,'nacre-cell.png')});
+  await page.click('.nacre-primary');await phase(page,'carrying');
+  await page.click('.nacre-primary');await advance(page,0);
+  await page.click('.nacre-primary');await phase(page,'docked');
+  assert.deepEqual(await page.evaluate(()=>window.__GRAPHYSX_QUEST3__.host.world.getEntityObject('nacre-cell').position.toArray()),[1,1.18,-8.15]);
+  await page.click('.nacre-primary');await phase(page,'charging');await advance(page,2400);
+  await page.waitForFunction(()=>window.__GRAPHYSX_QUEST3__.host.audio.playingCount>0);
+  await page.screenshot({path:path.join(out,'nacre-reactor.png')});
+  assert.ok(await page.evaluate(()=>window.__GRAPHYSX__.query({ids:['nacre-reactor-light']})[0].intensity)>2);
+  await advance(page,2500);await phase(page,'opening');await advance(page,1500);
+  const doorX=await page.evaluate(()=>window.__GRAPHYSX_QUEST3__.host.world.getEntityObject('nacre-door-left').position.x);
+  assert.ok(doorX< -3.25&&doorX> -9.5,'native keyframe tracks move the actual blast doors');
+  await page.screenshot({path:path.join(out,'nacre-opening.png')});
+  await advance(page,1900);await phase(page,'ready');
+  // Sample actual native transforms at non-symmetric phases, not behavior metadata.
+  const animation=await page.evaluate(async()=>{
+    const {host}=window.__GRAPHYSX_QUEST3__,read=()=>['nacre-planet','nacre-clouds','nacre-reactor-core','nacre-gyro-0'].map(id=>{
+      const o=host.world.getEntityObject(id);return {rotation:o.rotation.toArray().slice(0,3),scale:o.scale.toArray()};
+    }),samples=[read()];
+    for(let i=0;i<5;i++){await window.advanceTime(125);samples.push(read());}return samples;
+  });
+  const rotationDelta=i=>animation.at(-1)[i].rotation[1]-animation[0][i].rotation[1];
+  assert.ok(rotationDelta(0)>0&&rotationDelta(1)>rotationDelta(0)*3,'clouds drift independently above the rotating Earth');
+  assert.ok(Math.max(...animation.map(s=>s[2].scale[0]))-Math.min(...animation.map(s=>s[2].scale[0]))>.025,'the reactor visibly breathes');
+  assert.ok(Math.abs(rotationDelta(3))>.1,'the powered gyroscope moves');
+  const audio=await audioState(page);
+  assert.equal(audio.context,'running');assert.equal(audio.listener,true);assert.ok(audio.oneShots>=2);
+  assert.equal(audio.sources.length,3);assert.ok(audio.sources.every(s=>s.spatial&&s.panning==='HRTF'));
+  assert.deepEqual(audio.sources.find(s=>s.id==='nacre-reactor-sound').position,[0,2.4,-11]);
+  assert.equal(audio.sources.find(s=>s.id==='nacre-reactor-sound').playing,true);
+  await page.click('.nacre-audio');await advance(page,0);assert.equal((await audioState(page)).playing,0);
+  await page.click('.nacre-audio');await advance(page,0);assert.equal((await audioState(page)).playing,1);
+  await page.click('.nacre-primary');await advance(page,0);await phase(page,'complete');
+  await page.waitForFunction(()=>window.__GRAPHYSX_QUEST3__.host.audio.oneShotCount>=3);
+  await page.screenshot({path:path.join(out,'nacre-observation.png')});
+  await page.click('.nacre-save');
   assert.ok(await page.evaluate(()=>window.__GRAPHYSX__.state().savedWorlds.includes('NACRE · Ma station')));
-  await page.click('.nacre-power');await page.click('.nacre-load');
-  assert.equal(await page.locator('.nacre-power').getAttribute('aria-pressed'),'true','resuming the saved state restores the reactor controls');
-  await page.click('[data-view="2"]');await page.waitForTimeout(200);await page.screenshot({path:path.join(out,'nacre-observation.png')});
+  await page.click('.nacre-reset');await phase(page,'cell');await page.click('.nacre-load');await ready(page);await phase(page,'complete');
+  assert.deepEqual(await page.evaluate(()=>['nacre-door-left','nacre-door-right'].map(id=>window.__GRAPHYSX_QUEST3__.host.world.getEntityObject(id).position.x)),[-9.5,9.5]);
+  assert.equal(await page.evaluate(()=>window.__GRAPHYSX_QUEST3__.holding),false);
+  receipt.desktopMission={completed:true,doorMidpoint:doorX,animation,audio,saveCheckpoint:true};
+  // Restore the unchanged source document before the original all-fields round trip.
+  await page.evaluate(document=>window.__GRAPHYSX__.create(document),document);await ready(page);
   // Three's actual LOD evaluation, rather than a metadata-only assertion.
   await page.evaluate(()=>{const {host}=window.__GRAPHYSX_QUEST3__;host.camera.position.set(0,2,38);host.controls.target.set(0,1,-10);});
   await page.waitForFunction(()=>window.__GRAPHYSX_QUEST3__.host.world.getEntityObject('nacre-equipment').children[0].levels[1].object.visible);
@@ -139,7 +188,7 @@ try {
   await xr.waitForFunction(()=>{
     const models=window.__GRAPHYSX__.state().entities.filter(entity=>entity.asset);
     if(models.some(entity=>entity.asset.status==='error'))throw Error('XR fixture assets failed to load');
-    return models.length===6&&models.every(entity=>entity.asset.status==='ready');
+    return models.length===10&&models.every(entity=>entity.asset.status==='ready')&&window.__GRAPHYSX_QUEST3__.visualReady;
   });
   await xr.evaluate(()=>{
     const {host}=window.__GRAPHYSX_QUEST3__;window.__questCamera=host.camera.position.toArray();
@@ -149,16 +198,67 @@ try {
   await xr.waitForFunction(()=>window.__GRAPHYSX_QUEST3__.vr.session.snapshot.phase==='active');
   assert.equal(await xr.evaluate(()=>window.__questSession.frameRate),90);
   await xr.waitForFunction(()=>window.__GRAPHYSX__.observe().diagnostics.scope==='immersive-vr');
-  await xr.evaluate(()=>window.__GRAPHYSX_QUEST3__.view(1));
+  await phase(xr,'cell');await advance(xr,0);
+  // Feed real VrInputRig event handlers and grip-space transforms. No mission.take,
+  // mission.move, phase-tag edits or fake success API is used in this controller path.
+  await xr.evaluate(()=>{
+    const {host,vr}=window.__GRAPHYSX_QUEST3__;
+    vr.camera.position.y=1.6; // synthetic head; the physical runtime supplies this pose.
+    for(let i=0;i<2;i++){
+      const slot=vr.input.slots[i],source={handedness:i?'left':'right',targetRayMode:'tracked-pointer',profiles:['meta-quest-touch-plus'],
+        targetRaySpace:{},gripSpace:{},gamepad:{mapping:'xr-standard',buttons:Array.from({length:6},()=>({pressed:false,touched:false,value:0})),axes:[0,0,0,0],hapticActuators:[]}};
+      slot.ray.dispatchEvent({type:'connected',data:source});slot.ray.visible=slot.grip.visible=true;
+    }
+    window.__questGrip=(index,world)=>{
+      const slot=vr.input.slots[index];slot.grip.position.fromArray(world);vr.rig.worldToLocal(slot.grip.position);
+      slot.grip.quaternion.identity();vr.input.update(1/60);host.scene.updateMatrixWorld(true);
+    };
+    window.__questSelect=name=>{
+      const slot=vr.input.slots[0],target=host.scene.getObjectByName(name)||host.world.getEntityObject(name);
+      if(!target)throw Error('Missing in-world target: '+name);
+      host.scene.updateMatrixWorld(true);
+      slot.ray.position.set(0,1.4,-.1);
+      const origin=slot.ray.getWorldPosition(slot.ray.position.clone()),direction=target.getWorldPosition(origin.clone()).sub(origin).normalize();
+      slot.ray.quaternion.setFromUnitVectors(direction.clone().set(0,0,-1),direction);
+      slot.ray.updateMatrixWorld(true);slot.ray.dispatchEvent({type:'selectstart'});slot.ray.dispatchEvent({type:'selectend'});
+    };
+    window.__questGrip(0,[.65,1.12,.15]);vr.input.slots[0].ray.dispatchEvent({type:'squeezestart'});
+  });
+  await phase(xr,'carrying');
+  await xr.evaluate(()=>window.__questSelect('nacre-ui:RÉACTEUR'));
+  assert.equal(await xr.evaluate(()=>JSON.parse(window.render_game_to_text()).view),1);
   await xr.waitForFunction(()=>window.__GRAPHYSX_QUEST3__.host.world.getEntityObject('nacre-equipment').children[0].levels[0].object.visible);
-  await xr.evaluate(()=>window.__GRAPHYSX_QUEST3__.view(2));
+  await xr.evaluate(async()=>{window.__questGrip(0,[1,1.18,-8.15]);await window.advanceTime(17);window.__GRAPHYSX_QUEST3__.vr.input.slots[0].ray.dispatchEvent({type:'squeezeend'});});
+  await phase(xr,'docked');await xr.evaluate(()=>window.__questSelect('nacre-control'));await phase(xr,'charging');
+  await advance(xr,8200);await phase(xr,'ready');
+  const xrAudio=await audioState(xr);assert.equal(xrAudio.listener,true);assert.equal(xrAudio.playing,1);
+  await xr.evaluate(()=>window.__questSelect('nacre-ui:BELVÉDÈRE'));await phase(xr,'complete');
   await xr.waitForFunction(()=>window.__GRAPHYSX_QUEST3__.host.world.getEntityObject('nacre-equipment').children[0].levels[1].object.visible);
   receipt.syntheticXrLod=true;
+  // Replay, reject another controller stealing/releasing the cell, then cancel
+  // at the real socket when visibility is lost. Cancellation must never dock.
+  await xr.evaluate(()=>{window.__questSelect('nacre-ui:CELLULE');window.__questGrip(0,[.65,1.12,.15]);window.__GRAPHYSX_QUEST3__.vr.input.slots[0].ray.dispatchEvent({type:'squeezestart'});});
+  await phase(xr,'carrying');
+  await xr.evaluate(()=>{
+    const {vr}=window.__GRAPHYSX_QUEST3__;window.__questGrip(1,[.65,1.12,.15]);
+    vr.input.slots[1].ray.dispatchEvent({type:'squeezestart'});vr.input.slots[1].ray.dispatchEvent({type:'squeezeend'});
+  });
+  assert.equal(await xr.evaluate(()=>window.__GRAPHYSX_QUEST3__.holding),true);
+  await xr.evaluate(async()=>{
+    window.__questGrip(0,[1,1.18,-8.15]);await window.advanceTime(17);
+    window.__questSession.visibilityState='hidden';window.__questSession.dispatchEvent(new Event('visibilitychange'));await window.advanceTime(17);
+  });
+  await phase(xr,'cell');assert.equal(await xr.evaluate(()=>window.__GRAPHYSX_QUEST3__.cancelled),true);
+  assert.deepEqual(await xr.evaluate(()=>window.__GRAPHYSX_QUEST3__.host.world.getEntityObject('nacre-cell').position.toArray()),[.65,1.12,.15]);
+  assert.equal((await audioState(xr)).playing,0);
+  await xr.evaluate(()=>{window.__questSession.visibilityState='visible';window.__questSession.dispatchEvent(new Event('visibilitychange'));});
+  receipt.syntheticControllerMission={completed:true,ownership:true,cancelAtSocket:true,audio:xrAudio};
   await xr.evaluate(()=>window.__GRAPHYSX_QUEST3__.vr.session.exit());
+  assert.equal((await audioState(xr)).listener,true);
   assert.deepEqual(await xr.evaluate(()=>window.__GRAPHYSX_QUEST3__.host.camera.position.toArray()),await xr.evaluate(()=>window.__questCamera));
   assert.equal(await xr.locator('.nacre-ui').getAttribute('data-immersive'),'false');
   receipt.syntheticXr=true;
   assert.deepEqual(errors,[]);
   writeFileSync(path.join(out,'quest3-receipt.json'),JSON.stringify(receipt,null,2));
-  console.log('NACRE: native PBR/KTX2, baked UV1 lightmaps, real instance batches/LOD, API round-trip/material undo, save, mobile and synthetic XR passed.');
+  console.log('NACRE: desktop and tracked-controller missions, animated Earth/clouds/reactor/doors, native spatial audio, save/replay, PBR/KTX2, lightmaps, LOD, API round-trip and mobile passed.');
 } finally { await browser.close(); }

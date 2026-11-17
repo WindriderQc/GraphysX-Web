@@ -1,0 +1,66 @@
+{
+  "generator": "scripts/build-nacre-audio.mjs",
+  "provenance": "Original synthesized audio created for GraphysX; repository owner retains ownership",
+  "files": [
+    {
+      "name": "pickup.wav",
+      "seconds": 0.24,
+      "sampleRate": 22050,
+      "channels": 1,
+      "loop": false,
+      "peak": 0.78,
+      "rms": 0.2925256459075243,
+      "bytes": 10628
+    },
+    {
+      "name": "latch.wav",
+      "seconds": 0.42,
+      "sampleRate": 22050,
+      "channels": 1,
+      "loop": false,
+      "peak": 0.78,
+      "rms": 0.2301566398709326,
+      "bytes": 18566
+    },
+    {
+      "name": "success.wav",
+      "seconds": 1.2,
+      "sampleRate": 22050,
+      "channels": 1,
+      "loop": false,
+      "peak": 0.78,
+      "rms": 0.17753392387639402,
+      "bytes": 52964
+    },
+    {
+      "name": "charge-loop.wav",
+      "seconds": 2,
+      "sampleRate": 22050,
+      "channels": 1,
+      "loop": true,
+      "peak": 0.78,
+      "rms": 0.2215352253927795,
+      "bytes": 88244
+    },
+    {
+      "name": "reactor-loop.wav",
+      "seconds": 8,
+      "sampleRate": 22050,
+      "channels": 1,
+      "loop": true,
+      "peak": 0.78,
+      "rms": 0.2290389887166617,
+      "bytes": 352844
+    },
+    {
+      "name": "door-loop.wav",
+      "seconds": 1.6,
+      "sampleRate": 22050,
+      "channels": 1,
+      "loop": true,
+      "peak": 0.78,
+      "rms": 0.2960683530810541,
+      "bytes": 70604
+    }
+  ]
+}

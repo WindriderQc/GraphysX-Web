@@ -1,107 +1,273 @@
-import { CanvasTexture, Group, Mesh, MeshBasicMaterial, PlaneGeometry, Raycaster, SRGBColorSpace, Vector3 } from "three";
+import { CanvasTexture, Group, Mesh, MeshBasicMaterial, PlaneGeometry, Quaternion, Raycaster, SRGBColorSpace, Vector2, Vector3, type Object3D } from "three";
 import { PlatformHost } from "./platform-host";
 import { PlatformVr } from "./xr/platform-vr";
 import { QUEST_PROFILES, type QuestProfile } from "./xr/quest-profile";
 import { disposeVrObject, type VrInputAction } from "./xr/vr-input";
 import { createQuest3Scene } from "./quest3-scene";
+import { NACRE, NacreMission } from "./nacre-mission";
 import "./quest3-showcase.css";
 
 const VIEWS = [
-  { label: "Arrivée", position: [4.2,2.9,2.5], target: [0,2,-12], floor: [0,0,1], yaw: 0 },
-  { label: "Réacteur", position: [4.2,2.1,-5.5], target: [0,2.6,-11], floor: [3.5,0,-6], yaw: .5 },
-  { label: "Belvédère", position: [0,1.8,-19.5], target: [0,8,-58], floor: [0,.14,-21], yaw: 0 },
+  { label: "Cellule", position: [.9,1.65,1.6], target: [.6,1.25,-.7], floor: [0,0,1], yaw: 0 },
+  { label: "Réacteur", position: [1,1.65,-7.3], target: [.2,2.05,-10.7], floor: [1,0,-7.3], yaw: 0 },
+  { label: "Belvédère", position: [0,1.8,-22.5], target: [1,8,-58], floor: [0,.14,-22.5], yaw: 0 },
 ] as const;
+const HELP = {
+  standby: "Une cellule. Un réacteur. La Terre au bout du couloir.",
+  cell: "Saisissez la cellule sur son support.",
+  carrying: "Portez la cellule au socle du réacteur.",
+  docked: "Cellule verrouillée. Lancez le réacteur.",
+  charging: "Champ magnétique en formation…",
+  opening: "Réacteur stable. Ouverture du belvédère…",
+  ready: "Le belvédère est ouvert. Approchez.",
+  complete: "Signal rétabli. Bienvenue au belvédère.",
+};
 
 function panel(text: string, width: number, height: number) {
   const canvas=document.createElement("canvas");canvas.width=1024;canvas.height=Math.round(1024*height/width);
-  const ctx=canvas.getContext("2d")!;ctx.fillStyle="#07151e";ctx.fillRect(0,0,canvas.width,canvas.height);
-  ctx.fillStyle="#a4e5df";ctx.textAlign="center";ctx.textBaseline="middle";ctx.font=`500 ${Math.round(canvas.height*.35)}px sans-serif`;ctx.fillText(text,512,canvas.height/2,980);
   const texture=new CanvasTexture(canvas);texture.colorSpace=SRGBColorSpace;
-  return new Mesh(new PlaneGeometry(width,height),new MeshBasicMaterial({map:texture}));
+  const mesh=new Mesh(new PlaneGeometry(width,height),new MeshBasicMaterial({map:texture}));
+  drawPanel(mesh,text);return mesh;
 }
+function drawPanel(mesh: Mesh<PlaneGeometry,MeshBasicMaterial>, text: string) {
+  const canvas=mesh.material.map!.image as HTMLCanvasElement,ctx=canvas.getContext("2d")!;
+  ctx.fillStyle="#07151e";ctx.fillRect(0,0,canvas.width,canvas.height);ctx.fillStyle="#a4e5df";
+  ctx.textAlign="center";ctx.textBaseline="middle";ctx.font="500 "+Math.round(canvas.height*.3)+"px sans-serif";
+  const lines=text.split("\n");lines.forEach((line,i)=>ctx.fillText(line,512,canvas.height*(i+.5)/lines.length,980));mesh.material.map!.needsUpdate=true;
+}
+type Held = { source: XRInputSource; key: string; anchor: Object3D; offset: Vector3; rotation: Quaternion };
 
-export function mountQuest3Showcase(root: HTMLElement): { dispose(): Promise<void> } {
-  const host=new PlatformHost(root,{world:createQuest3Scene(),interactive:false,editorVisible:false,framing:{position:[...VIEWS[0].position],target:[...VIEWS[0].target]}});
+export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void>} {
+  const host=new PlatformHost(root,{world:createQuest3Scene(),interactive:false,editorVisible:false,
+    framing:{position:[4.2,2.9,2.5],target:[0,2,-12]}});
   host.renderer.shadowMap.enabled=false;
-  const profileValue=new URLSearchParams(location.search).get("quality");
-  const profile: QuestProfile=profileValue && Object.hasOwn(QUEST_PROFILES,profileValue) ? profileValue as QuestProfile : "balanced";
+  const mission=new NacreMission(host.world,host.api);
+  const value=new URLSearchParams(location.search).get("quality");
+  const profile: QuestProfile=value&&Object.hasOwn(QUEST_PROFILES,value)?value as QuestProfile:"balanced";
+  let disposed=false,viewIndex=0,held:Held|null=null,lastCancelled=false,visualReady=false,warming=false,loadVersion=0,renderFailure=false;
+  let readyOff:(()=>void)|null=null,sessionVisibilityOff:(()=>void)|null=null,lastSession:XRSession|null=null;
   const decor=new Group();host.scene.add(decor);
   const consoleGroup=new Group();consoleGroup.position.fromArray(VIEWS[0].floor);decor.add(consoleGroup);
-  const title=panel("N A C R E   /   ORBITAL OBSERVATORY",4.2,.28);title.position.set(0,4.9,-23.6);decor.add(title);
-  const worldButtons=[{label:"RÉACTEUR",run:()=>view(1)},{label:"BELVÉDÈRE",run:()=>view(2)},{label:"ÉNERGIE",run:()=>togglePower()},{label:"SORTIR VR",run:()=>{void vr.session.exit();}}].map((item,i)=>{
-    const mesh=panel(item.label,.42,.12);mesh.position.set(-.72+i*.48,1.16,-2.02);mesh.rotation.x=-.18;consoleGroup.add(mesh);return {...item,mesh};
-  });
-  const metric=panel("NACRE / PRÊT",1.8,.2);metric.position.set(0,1.65,-2.2);consoleGroup.add(metric);
-  const raycaster=new Raycaster();raycaster.far=6;const direction=new Vector3();
-  let power=true,disposed=false,elapsed=0;
-  function togglePower() {
-    power=!power;
-    host.api.transaction(Array.from({length:4},(_,i)=>({op:"update" as const,id:`nacre-reactor-ring-${i}`,patch:{material:{emissiveIntensity:power?1.3:.12}}})).concat([
-      {op:"update" as const,id:"nacre-reactor-core",patch:{material:{emissiveIntensity:power?1.8:.08}}},
-    ]));
-  }
-  const action=(event:VrInputAction)=>{
-    if(event.phase!=="start" || !event.ray.visible)return;
-    event.ray.updateWorldMatrix(true,false);event.ray.getWorldPosition(raycaster.ray.origin);
-    raycaster.ray.direction.copy(direction.set(0,0,-1).transformDirection(event.ray.matrixWorld));
-    const hit=raycaster.intersectObjects(worldButtons.map(button=>button.mesh))[0];worldButtons.find(button=>button.mesh===hit?.object)?.run();
+  const title=panel("N A C R E  /  RÉTABLIR LE SIGNAL",4.2,.28);title.position.set(0,4.9,-20.9);decor.add(title);
+  const metric=panel("PRÉPARATION DE LA STATION",2.1,.32);metric.position.set(0,1.75,-1.85);consoleGroup.add(metric);
+  const raycaster=new Raycaster();raycaster.far=6;
+  const point=new Vector3(),direction=new Vector3(),rotation=new Quaternion(),scratch=new Vector3(),ndc=new Vector2();
+  const ui=document.createElement("section");ui.className="nacre-ui";ui.lang="fr";
+  ui.innerHTML='<header class="nacre-top"><div class="nacre-brand"><span class="nacre-mark">N</span> GRAPHYSX <span>/</span> EXPÉDITION 001</div><a href="'+import.meta.env.BASE_URL+'">Retour aux mondes ↗</a></header>'
+    +'<div class="nacre-status"><div role="status" class="nacre-loading">Préparation de la station…</div><div class="nacre-stats" hidden></div><div class="nacre-tools"><button class="nacre-audio" aria-pressed="false">Son activé</button><button class="nacre-save">Sauvegarder</button><button class="nacre-load" disabled>Reprendre</button><button class="nacre-reset">Rejouer</button><button class="nacre-diagnostic" aria-expanded="false">Diagnostic</button></div></div>'
+    +'<div class="nacre-caption"><div class="nacre-rule"></div><span class="nacre-eyebrow">NACRE / RÉTABLIR LE SIGNAL</span><h1>Ramenez<br>la lumière.</h1><p class="nacre-objective">Une cellule. Un réacteur. La Terre au bout du couloir.</p><ol class="nacre-steps" aria-label="Progression"><li>Cellule</li><li>Réacteur</li><li>Belvédère</li></ol><progress class="nacre-charge" max="1" value="0" hidden></progress><button class="nacre-primary" disabled>Préparation…</button><p class="nacre-help">PC : E / Espace pour agir · clic sur la cellule ou le socle.<br>Quest : poignée pour saisir, gâchette pour les commandes.</p></div>'
+    +'<footer class="nacre-bottom"><nav class="nacre-nav" aria-label="Points d’observation">'+VIEWS.map((v,i)=>'<button data-view="'+i+'" aria-pressed="'+String(i===0)+'">'+String(i+1).padStart(2,"0")+" · "+v.label+"</button>").join("")+'</nav><div class="nacre-actions"><select aria-label="Qualité VR"><option value="balanced">VR · Équilibrée</option><option value="quality">VR · Qualité</option><option value="economy">VR · Économie</option></select><button class="nacre-enter" disabled>Vérification VR…</button></div></footer>';
+  root.append(ui);
+  const status=ui.querySelector<HTMLElement>("[role=status]")!,stats=ui.querySelector<HTMLElement>(".nacre-stats")!;
+  const primary=ui.querySelector<HTMLButtonElement>(".nacre-primary")!,enter=ui.querySelector<HTMLButtonElement>(".nacre-enter")!,quality=ui.querySelector<HTMLSelectElement>("select")!;
+  const objective=ui.querySelector<HTMLElement>(".nacre-objective")!,headline=ui.querySelector<HTMLElement>("h1")!,charge=ui.querySelector<HTMLProgressElement>("progress")!;
+  const soundButton=ui.querySelector<HTMLButtonElement>(".nacre-audio")!,resume=ui.querySelector<HTMLButtonElement>(".nacre-load")!;
+  const savedName="NACRE · Ma station";resume.disabled=!host.api.state()?.savedWorlds.includes(savedName);quality.value=profile;
+  let notice="",noticeUntil=0,drawnPanel="",uiClock=0,manualTime=false,manualRemainder=0,lastMissionNotice="",movingView=false,buttonLabel="";
+  let models=host.api.query({type:"model"});
+  const announce=(text:string)=>{notice=text;noticeUntil=performance.now()+2500;};
+  const under=(object:Object3D|undefined,id:string)=>{const target=host.world.getEntityObject(id);while(object){if(object===target)return true;object=object.parent??undefined;}return false;};
+  const aim=(ray:Object3D)=>{
+    if(!ray.visible)return undefined;
+    raycaster.far=6;
+    ray.updateWorldMatrix(true,false);ray.getWorldPosition(raycaster.ray.origin);direction.set(0,0,-1).transformDirection(ray.matrixWorld);raycaster.ray.direction.copy(direction);
+    return raycaster.intersectObjects([...buttons.map(b=>b.mesh),host.world.getEntityObject(NACRE.cell),host.world.getEntityObject(NACRE.socket),host.world.getEntityObject("nacre-control")].filter((o):o is Object3D=>!!o),true)[0];
   };
+  function buzz(source:XRInputSource,value=.25) {
+    const actuator=source.gamepad?.hapticActuators?.[0] as {pulse?:(value:number,duration:number)=>Promise<boolean>}|undefined;
+    void actuator?.pulse?.(value,35).catch(()=>false);
+  }
+  function action(event:VrInputAction) {
+    if(event.phase==="end") {
+      if(event.action==="grab"&&held?.source===event.source){lastCancelled=event.cancelled;mission.release(held.key,event.cancelled);held=null;}
+      return;
+    }
+    if(!visualReady)return;
+    const hit=aim(event.ray);
+    if(event.action==="grab"&&mission.phase==="cell"&&!held) {
+      event.anchor.updateWorldMatrix(true,false);event.anchor.getWorldPosition(point);
+      const cell=host.world.getEntityObject(NACRE.cell)!;cell.getWorldPosition(scratch);
+      const near=point.distanceTo(scratch)<.36;
+      if(near||under(hit?.object,NACRE.cell)) {
+        const key="xr:"+vr.input.slots.findIndex(slot=>slot.source===event.source);
+        if(mission.take(key)){
+          event.anchor.getWorldQuaternion(rotation);
+          const inverse=rotation.clone().invert();
+          held={source:event.source,key,anchor:event.anchor,offset:near?scratch.clone().sub(point).applyQuaternion(inverse):new Vector3(0,0,-.1),rotation:inverse.multiply(cell.getWorldQuaternion(new Quaternion()))};
+          lastCancelled=false;buzz(event.source);
+        }
+        return;
+      }
+    }
+    if(event.action!=="select"&&!event.source.hand)return;
+    const button=buttons.find(b=>b.mesh===hit?.object);
+    if(button){button.run();buzz(event.source);return;}
+    if(under(hit?.object,"nacre-control")){mission.activate();buzz(event.source);}
+  }
   const vrOptions={profile,onAction:action,position:[...VIEWS[0].floor] as [number,number,number]};
   const vr=new PlatformVr(host,vrOptions);
-  const previewFov=host.camera.fov;
-  const resizePreview=()=>{if(vr.session.session)return;host.camera.fov=root.clientWidth<650?75:previewFov;host.camera.updateProjectionMatrix();};
-  window.addEventListener("resize",resizePreview);resizePreview();
+  const buttons=[
+    {label:"CELLULE",run:()=>{if(mission.phase==="complete")mission.reset();view(0);}},{label:"RÉACTEUR",run:()=>view(1)},
+    {label:"ALLUMER",run:()=>mission.activate()},{label:"BELVÉDÈRE",run:()=>view(2)},
+    {label:"SON",run:()=>mission.toggleMute()},{label:"SORTIR VR",run:()=>{void vr.session.exit();}},
+  ].map((item,i)=>{const mesh=panel(item.label,.36,.12);mesh.name="nacre-ui:"+item.label;mesh.position.set(-1+i*.4,1.18,-1.72);mesh.rotation.x=-.18;consoleGroup.add(mesh);return {...item,mesh};});
+
   function view(index:number) {
-    const target=VIEWS[index]!;
-    if(vr.session.session){vr.floorPosition.fromArray(target.floor);vr.rig.position.copy(vr.floorPosition);if(vr.referenceSpace==="local")vr.rig.position.y+=1.6;vr.rig.rotation.y=target.yaw;consoleGroup.position.copy(vr.floorPosition);consoleGroup.rotation.y=target.yaw;}
-    else host.frameView([...target.position],[...target.target],0);
-    for(const [i,button] of [...ui.querySelectorAll<HTMLButtonElement>("[data-view]")].entries())button.setAttribute("aria-pressed",String(i===index));
+    if(index===2&&mission.phase&&!["ready","complete"].includes(mission.phase)){announce("Le belvédère attend l’énergie du réacteur.");return;}
+    const target=VIEWS[index];viewIndex=index;
+    if(vr.session.session){
+      vr.floorPosition.fromArray(target.floor);vr.rig.position.copy(vr.floorPosition);
+      if(vr.referenceSpace==="local")vr.rig.position.y+=1.6;
+      vr.rig.rotation.y=target.yaw;consoleGroup.position.copy(vr.floorPosition);consoleGroup.rotation.y=target.yaw;
+      movingView=false;
+    }else{movingView=true;host.frameView([...target.position],[...target.target],.3);}
+    ui.querySelectorAll<HTMLButtonElement>("[data-view]").forEach((button,i)=>button.setAttribute("aria-pressed",String(i===index)));
+    if(index===2){(vr.session.session?vr.camera:host.camera).getWorldPosition(point);mission.complete(point);}
   }
-  const ui=document.createElement("section");ui.className="nacre-ui";ui.lang="fr";
-  ui.innerHTML=`<header class="nacre-top"><div class="nacre-brand"><span class="nacre-mark">N</span> GRAPHYSX <span>/</span> EXPÉDITION 001</div><a href="${import.meta.env.BASE_URL}">Retour aux mondes ↗</a></header>
-    <div class="nacre-status"><div role="status" class="nacre-loading">Préparation de la station…</div><div class="nacre-stats" hidden></div><div class="nacre-tools"><button class="nacre-diagnostic" aria-expanded="false">Diagnostic</button><button class="nacre-power" aria-pressed="true">Réacteur actif</button><button class="nacre-save">Sauvegarder</button></div></div>
-    <div class="nacre-caption"><div class="nacre-rule"></div><span class="nacre-eyebrow">OBSERVATOIRE ORBITAL / SECTEUR 07</span><h1>Au-delà<br>du silence.</h1><p>Une station suspendue entre deux mondes.<br>Approchez le cœur. Regardez plus loin.</p></div>
-    <footer class="nacre-bottom"><nav class="nacre-nav" aria-label="Points d’observation">${VIEWS.map((v,i)=>`<button data-view="${i}" aria-pressed="${i===0}">${String(i+1).padStart(2,"0")} · ${v.label}</button>`).join("")}</nav><div class="nacre-actions"><select aria-label="Qualité VR"><option value="balanced">VR · Équilibrée</option><option value="quality">VR · Qualité</option><option value="economy">VR · Économie</option></select><button class="nacre-enter" disabled>Vérification VR…</button></div></footer>`;
-  root.append(ui);const status=ui.querySelector<HTMLElement>("[role=status]")!,stats=ui.querySelector<HTMLElement>(".nacre-stats")!,enter=ui.querySelector<HTMLButtonElement>(".nacre-enter")!,quality=ui.querySelector<HTMLSelectElement>("select")!;
-  quality.value=profile;
-  quality.addEventListener("change",()=>{if(!Object.hasOwn(QUEST_PROFILES,quality.value))return;vrOptions.profile=quality.value as QuestProfile;const next=new URL(location.href);next.searchParams.set("quality",quality.value);history.replaceState(null,"",next);});
-  ui.querySelectorAll<HTMLButtonElement>("[data-view]").forEach(button=>button.addEventListener("click",()=>view(Number(button.dataset.view))));
-  ui.querySelector(".nacre-diagnostic")!.addEventListener("click",event=>{stats.hidden=!stats.hidden;(event.currentTarget as HTMLElement).setAttribute("aria-expanded",String(!stats.hidden));});
-  ui.querySelector<HTMLButtonElement>(".nacre-power")!.addEventListener("click",event=>{togglePower();const button=event.currentTarget as HTMLButtonElement;button.textContent=power?"Réacteur actif":"Réacteur en veille";button.setAttribute("aria-pressed",String(power));});
-  const savedName="NACRE · Ma station";
-  let notice="",noticeUntil=0;
-  const announce=(message:string)=>{notice=message;noticeUntil=performance.now()+3000;status.textContent=message;};
-  const resume=document.createElement("button");resume.className="nacre-load";resume.textContent="Reprendre";resume.disabled=!host.api.state()?.savedWorlds.includes(savedName);ui.querySelector(".nacre-tools")!.append(resume);
-  resume.addEventListener("click",()=>{const result=host.api.load(savedName);announce(result.ok?"Votre station est reprise.":"La reprise n’a pas abouti.");});
-  ui.querySelector(".nacre-save")!.addEventListener("click",()=>{const result=host.api.save(savedName);resume.disabled=!result.ok;announce(result.ok?"Station sauvegardée dans ce navigateur.":"La sauvegarde n’a pas abouti.");});
-  enter.addEventListener("click",()=>{if(vr.session.session || vr.session.snapshot.phase==="starting")void vr.session.exit();else void vr.session.enter();});
-  const sessionOff=vr.session.subscribe(({phase})=>{
-    enter.disabled=["checking","unsupported","stopping","disposed"].includes(phase);
-    enter.textContent=phase==="starting"?"Annuler":vr.session.session?"Quitter la VR":"Entrer en VR";
-    ui.dataset.immersive=String(phase==="active");quality.disabled=phase==="active"||phase==="starting";
-    consoleGroup.visible=phase==="active";
-    if(phase==="ready")resizePreview();
-  });
-  const modelStates=()=> (host.api.state()?.entities ?? []).filter(entity=>entity.asset);
-  let assets=modelStates();
-  const assetOff=host.world.subscribeEvents(event=>{
-    if(["asset.ready","asset.error","world.loaded","entity.spawned","entity.removed"].includes(event.type))assets=modelStates();
-    if(event.type==="world.loaded" || event.type==="entity.updated"){
-      const core=host.api.query({ids:["nacre-reactor-core"]})[0];power=(core?.material.emissiveIntensity ?? 0)>.5;
-      const button=ui.querySelector<HTMLButtonElement>(".nacre-power")!;button.textContent=power?"Réacteur actif":"Réacteur en veille";button.setAttribute("aria-pressed",String(power));button.disabled=!core;
+  function moveHeld() {
+    if(held){
+      if(!vr.session.session||vr.session.snapshot.phase!=="active"||!held.anchor.visible){mission.release(held.key,true);held=null;lastCancelled=true;return;}
+      held.anchor.updateWorldMatrix(true,false);held.anchor.getWorldPosition(point);held.anchor.getWorldQuaternion(rotation);
+      point.add(scratch.copy(held.offset).applyQuaternion(rotation));rotation.multiply(held.rotation);mission.move(held.key,point,rotation);
+    }else if(mission.holding){
+      host.camera.updateWorldMatrix(true,false);host.camera.localToWorld(point.set(0,-.45,-.75));host.camera.getWorldQuaternion(rotation);mission.move("desktop",point,rotation);
     }
+  }
+  function primaryAction() {
+    if(!visualReady)return;
+    const phase=mission.phase;
+    if(!phase){host.api.create(createQuest3Scene());view(0);}
+    else if(phase==="standby"){mission.begin();view(0);}
+    else if(phase==="cell"){mission.take("desktop");moveHeld();}
+    else if(phase==="carrying"){if(viewIndex!==1)view(1);else{moveHeld();const cell=host.world.getEntityObject(NACRE.cell);if(cell&&cell.getWorldPosition(point).distanceTo(scratch.fromArray(NACRE.dock))<=NACRE.snapDistance)mission.release("desktop");else announce("Approchez la cellule du socle.");}}
+    else if(phase==="docked")mission.activate();
+    else if(phase==="ready")view(2);
+    else if(phase==="complete"){mission.reset();view(0);}
+  }
+  primary.addEventListener("click",primaryAction);
+  ui.querySelectorAll<HTMLButtonElement>("[data-view]").forEach(b=>b.addEventListener("click",()=>view(Number(b.dataset.view))));
+  soundButton.addEventListener("click",()=>mission.toggleMute());
+  ui.querySelector(".nacre-reset")!.addEventListener("click",()=>{held=null;if(mission.phase)mission.reset();else host.api.create(createQuest3Scene());view(0);});
+  ui.querySelector(".nacre-diagnostic")!.addEventListener("click",event=>{stats.hidden=!stats.hidden;(event.currentTarget as HTMLElement).setAttribute("aria-expanded",String(!stats.hidden));});
+  ui.querySelector(".nacre-save")!.addEventListener("click",()=>{mission.commitHeldPose();const result=host.api.save(savedName);resume.disabled=!result.ok;announce(result.ok?"Station sauvegardée dans ce navigateur.":"La sauvegarde n’a pas abouti.");});
+  resume.addEventListener("click",()=>{held=null;const result=host.api.load(savedName);announce(result.ok?"Votre station est reprise.":"La reprise n’a pas abouti.");});
+  quality.addEventListener("change",()=>{if(!Object.hasOwn(QUEST_PROFILES,quality.value))return;vrOptions.profile=quality.value as QuestProfile;const url=new URL(location.href);url.searchParams.set("quality",quality.value);history.replaceState(null,"",url);});
+  enter.addEventListener("click",()=>{if(vr.session.session||vr.session.snapshot.phase==="starting")void vr.session.exit();else{if(mission.phase==="standby")mission.begin();void vr.session.enter();}});
+  const keyboard=(event:KeyboardEvent)=>{
+    if(event.repeat||vr.session.session||event.ctrlKey||event.metaKey||event.altKey)return;
+    const target=event.target as HTMLElement|null;
+    if(target?.closest("input,select,textarea"))return;
+    if((event.code==="Space"||event.code==="Enter")&&target?.closest("button,a"))return;
+    if(event.code==="KeyE"||event.code==="Space"||event.code==="Enter"){event.preventDefault();primaryAction();}
+    if(event.code==="KeyF"){event.preventDefault();if(document.fullscreenElement)void document.exitFullscreen().catch(()=>undefined);else void root.requestFullscreen?.().catch(()=>undefined);}
+  };
+  window.addEventListener("keydown",keyboard);
+  const pointer=(event:PointerEvent)=>{
+    if(vr.session.session||!visualReady||event.button!==0)return;
+    const rect=host.renderer.domElement.getBoundingClientRect();
+    ndc.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);
+    raycaster.setFromCamera(ndc,host.camera);raycaster.far=8;
+    const hit=raycaster.intersectObjects([host.world.getEntityObject(NACRE.cell),host.world.getEntityObject(NACRE.socket),host.world.getEntityObject("nacre-control")].filter((o):o is Object3D=>!!o),true)[0];
+    if(under(hit?.object,NACRE.cell)&&mission.phase==="cell"){event.preventDefault();event.stopImmediatePropagation();mission.take("desktop");moveHeld();}
+    else if(under(hit?.object,NACRE.socket)&&mission.holding){event.preventDefault();event.stopImmediatePropagation();mission.move("desktop",point.fromArray(NACRE.dock),rotation.identity());mission.release("desktop");}
+    else if(under(hit?.object,"nacre-control")){event.preventDefault();event.stopImmediatePropagation();mission.activate();}
+  };
+  host.renderer.domElement.addEventListener("pointerdown",pointer,{capture:true});
+  const audible=()=>mission.setAudible(!document.hidden&&(!vr.session.session||vr.session.session.visibilityState==="visible"));
+  document.addEventListener("visibilitychange",audible);
+  const sessionOff=vr.session.subscribe(({phase})=>{
+    ui.dataset.immersive=String(phase==="active");quality.disabled=phase==="active"||phase==="starting";consoleGroup.visible=phase==="active";
+    if(vr.session.session!==lastSession){
+      sessionVisibilityOff?.();sessionVisibilityOff=null;lastSession=vr.session.session;
+      if(lastSession){const session=lastSession;session.addEventListener("visibilitychange",audible);sessionVisibilityOff=()=>session.removeEventListener("visibilitychange",audible);}
+    }
+    audible();if(phase==="ready")resizePreview();
+  });
+  const previewFov=host.camera.fov;
+  function resizePreview(){if(vr.session.session)return;host.camera.fov=root.clientWidth<650?75:previewFov;host.camera.updateProjectionMatrix();}
+  window.addEventListener("resize",resizePreview);resizePreview();
+  function prepareVisuals() {
+    if(warming||visualReady||disposed)return;
+    if(!models.length||models.some(e=>e.asset?.status!=="ready"))return;
+    warming=true;const version=loadVersion;
+    void host.renderer.compileAsync(host.scene,host.camera).then(()=>{
+      if(disposed||version!==loadVersion)return;
+      readyOff=host.subscribeAfterRender(()=>{readyOff?.();readyOff=null;visualReady=true;warming=false;});host.requestRender();
+    }).catch(()=>{if(disposed||version!==loadVersion)return;warming=false;renderFailure=true;announce("La préparation du rendu n’a pas abouti.");});
+  }
+  const assetOff=host.world.subscribeEvents(event=>{
+    if(event.type==="world.loaded"){held=null;visualReady=false;warming=false;renderFailure=false;loadVersion++;readyOff?.();readyOff=null;}
+    if(event.type.startsWith("asset.")||["world.loaded","entity.spawned","entity.removed"].includes(event.type)){models=host.api.query({type:"model"});prepareVisuals();}
   });
   const frameOff=host.subscribeFrame(delta=>{
-    elapsed+=delta;if(elapsed<.5)return;elapsed=0;
-    const diagnostic=host.diagnostics.snapshot();
-    const failed=assets.filter(entity=>entity.asset?.status==="error");const loading=assets.filter(entity=>entity.asset?.status==="loading");
-    status.dataset.error=String(failed.length>0);
-    const message=failed.length?`Chargement incomplet : ${failed[0]!.asset?.error}`:loading.length?`Préparation de la station · ${assets.length-loading.length}/${assets.length}`:performance.now()<noticeUntil?notice:vr.session.snapshot.phase==="error"?vr.session.snapshot.message:vr.session.snapshot.phase==="unsupported"?"Aperçu 3D · Ouvrez cette page dans le Quest pour la VR.":`Station prête · Profil ${quality.selectedOptions[0]!.textContent}`;
-    if(status.textContent!==message)status.textContent=message;
-    status.classList.toggle("nacre-loading",loading.length>0);
-    stats.textContent=`${diagnostic.scope} · ${diagnostic.observedHz??"—"} Hz observés\nTrame p95 ${diagnostic.intervalMs.p95??"—"} ms · CPU p95 ${diagnostic.cpuSubmissionMs.p95??"—"} ms\n${diagnostic.calls} appels · ${diagnostic.triangles.toLocaleString("fr-CA")} triangles\n${diagnostic.textures} textures · GPU non mesuré`;
-    const canvas=metric.material.map!.image as HTMLCanvasElement,ctx=canvas.getContext("2d")!;ctx.fillStyle="#07151e";ctx.fillRect(0,0,canvas.width,canvas.height);ctx.fillStyle="#a4e5df";ctx.fillText(`NACRE / ${diagnostic.observedHz??"—"} Hz · p95 ${diagnostic.intervalMs.p95??"—"} ms`,512,canvas.height/2,980);metric.material.map!.needsUpdate=true;
+    mission.tick();moveHeld();prepareVisuals();uiClock+=delta;
+    if(movingView&&host.camera.position.distanceTo(scratch.fromArray(VIEWS[viewIndex].position))<.005)movingView=false;
+    if(viewIndex===2&&mission.phase==="ready"){(vr.session.session?vr.camera:host.camera).getWorldPosition(point);mission.complete(point);}
+    if(uiClock<.12)return;uiClock=0;
+    const phase=mission.phase,progress=mission.progress,diagnostic=host.diagnostics.snapshot();
+    const failure=models.find(e=>e.asset?.status==="error");
+    if(mission.notice&&mission.notice!==lastMissionNotice){announce(mission.notice);lastMissionNotice=mission.notice;}
+    status.dataset.error=String(!!failure);
+    status.textContent=failure?"Chargement incomplet. Rechargez la station.":!visualReady?"Préparation de la station…":performance.now()<noticeUntil?notice:phase?HELP[phase]:"Exploration libre";
+    status.classList.toggle("nacre-loading",!visualReady);
+    ui.dataset.phase=phase??"explore";
+    objective.textContent=phase?HELP[phase]:"Votre station sauvegardée reste explorable.";
+    headline.innerHTML=phase==="complete"?"Le signal<br>est revenu.":phase==="standby"?"Ramenez<br>la lumière.":"Rétablir<br>le signal.";
+    primary.disabled=!visualReady||phase==="charging"||phase==="opening"||(phase==="carrying"&&viewIndex===1&&movingView);
+    primary.textContent=!visualReady?"Préparation…":phase==="standby"?"Commencer la mission":phase==="cell"?"Saisir la cellule":phase==="carrying"?(viewIndex===1?(movingView?"Approche du réacteur…":"Insérer la cellule"):"Aller au réacteur"):phase==="docked"?"Lancer le réacteur":phase==="charging"?"Recharge · "+Math.round(progress*100)+" %":phase==="opening"?"Ouverture · "+Math.round(progress*100)+" %":phase==="ready"?"Ouvrir le belvédère":phase==="complete"?"Rejouer la mission":"Nouvelle mission";
+    const index=phase?["standby","cell","carrying","docked","charging","opening","ready","complete"].indexOf(phase):0;
+    ui.querySelectorAll<HTMLElement>(".nacre-steps li").forEach((li,i)=>li.dataset.done=String(index>=[3,5,7][i]));
+    charge.hidden=phase!=="charging"&&phase!=="opening";charge.value=progress;
+    const viewButton=ui.querySelector<HTMLButtonElement>('[data-view="2"]')!;viewButton.disabled=!!phase&&!["ready","complete"].includes(phase);
+    soundButton.setAttribute("aria-pressed",String(mission.muted));soundButton.textContent=mission.muted?"Son coupé":"Son activé";
+    const nextLabel=(phase==="complete"?"REJOUER":"CELLULE")+":"+mission.muted;
+    if(nextLabel!==buttonLabel){drawPanel(buttons[0].mesh,phase==="complete"?"REJOUER":"CELLULE");drawPanel(buttons[4].mesh,mission.muted?"MUET":"SON");buttonLabel=nextLabel;}
+    const xrPhase=vr.session.snapshot.phase;
+    enter.disabled=!visualReady||["checking","unsupported","stopping","disposed"].includes(xrPhase);
+    enter.textContent=xrPhase==="starting"?"Annuler":vr.session.session?"Quitter la VR":"Entrer en VR";
+    stats.textContent=diagnostic.scope+" · "+(diagnostic.observedHz??"—")+" Hz observés\nTrame p95 "+(diagnostic.intervalMs.p95??"—")+" ms · CPU p95 "+(diagnostic.cpuSubmissionMs.p95??"—")+" ms\n"+diagnostic.calls+" appels · "+diagnostic.triangles.toLocaleString("fr-CA")+" triangles\nGPU non mesuré";
+    const text=(phase?HELP[phase]:"EXPLORATION LIBRE")+"\n"+(phase==="cell"?"POIGNÉE / PINCEMENT POUR SAISIR":phase==="carrying"?"RELÂCHEZ DANS LE SOCLE":phase==="docked"?"POINTEZ ALLUMER":phase==="charging"||phase==="opening"?Math.round(progress*100)+" %":"NACRE / ORBITAL OBSERVATORY");
+    if(text!==drawnPanel){drawPanel(metric,text);drawnPanel=text;}
   });
-  Object.assign(window,{__GRAPHYSX__:host.api,__GRAPHYSX_QUEST3__:{host,vr,view,togglePower,profile}});
-  return {async dispose(){if(disposed)return;await vr.dispose();if(vr.session.session)return;disposed=true;window.removeEventListener("resize",resizePreview);frameOff();sessionOff();assetOff();disposeVrObject(decor);decor.removeFromParent();ui.remove();host.dispose();}};
+
+  const debug=window as unknown as Record<string,unknown>,previousText=debug.render_game_to_text,previousTime=debug.advanceTime;
+  const screen=(id:string)=>{const o=host.world.getEntityObject(id);if(!o)return null;o.getWorldPosition(point);point.project(host.camera);return{x:Math.round((point.x+1)*root.clientWidth/2),y:Math.round((1-point.y)*root.clientHeight/2)};};
+  const readText=()=>JSON.stringify({
+    coordinates:"metres; +Y up; forward -Z",ready:visualReady,phase:mission.phase,progress:Number(mission.progress.toFixed(3)),objective:mission.phase?HELP[mission.phase]:"Exploration libre",
+    holding:mission.holding,cancelled:lastCancelled,view:viewIndex,
+    cell:{position:host.world.getEntityObject(NACRE.cell)?.getWorldPosition(new Vector3()).toArray(),screen:screen(NACRE.cell)},
+    socket:{position:NACRE.dock,screen:screen(NACRE.socket)},doors:["nacre-door-left","nacre-door-right"].map(id=>host.world.getEntityObject(id)?.position.toArray()),
+    audio:{muted:mission.muted,playing:host.audio.playingCount,tracked:host.audio.trackedCount},xr:vr.session.snapshot.phase,
+  });
+  const advanceTime=async(ms:number)=>{
+    if(!Number.isFinite(ms)||ms<0||ms>30000)throw Error("Advance time must be 0..30000 ms.");
+    if(!visualReady||movingView)await new Promise<void>((resolve,reject)=>{
+      const off=host.subscribeAfterRender(()=>{
+        if(disposed||renderFailure||models.some(e=>e.asset?.status==="error")){off();reject(Error("NACRE could not prepare its rendering."));}
+        else if(visualReady&&!movingView){off();resolve();}
+      });host.requestRender();
+    });
+    if(!manualTime){manualTime=true;host.api.pause(true);}
+    manualRemainder+=ms;const frameMs=1000/60,steps=Math.floor((manualRemainder+.000001)/frameMs);
+    manualRemainder-=steps*frameMs;
+    if(vr.session.session)vr.input.setActive(vr.session.snapshot.phase==="active"&&vr.session.session.visibilityState==="visible");
+    for(let i=0;i<steps;i++){host.api.step(1/60);if(vr.session.session)vr.input.update(1/60);mission.tick();moveHeld();}
+    host.audio.sync();host.scene.updateMatrixWorld(true);
+    host.requestRender();
+  };
+  const diagnostics={host,vr,mission,view,profile,get visualReady(){return visualReady;},get holding(){return mission.holding;},get cancelled(){return lastCancelled;}};
+  Object.assign(debug,{__GRAPHYSX__:host.api,__GRAPHYSX_QUEST3__:diagnostics,render_game_to_text:readText,advanceTime});
+  const pageHide=()=>{void dispose();};window.addEventListener("pagehide",pageHide);
+  async function dispose() {
+    if(disposed)return;await vr.dispose();if(vr.session.session)return;
+    disposed=true;loadVersion++;readyOff?.();sessionVisibilityOff?.();frameOff();assetOff();sessionOff();mission.dispose();
+    window.removeEventListener("resize",resizePreview);window.removeEventListener("keydown",keyboard);window.removeEventListener("pagehide",pageHide);
+    document.removeEventListener("visibilitychange",audible);host.renderer.domElement.removeEventListener("pointerdown",pointer,{capture:true});
+    if(debug.render_game_to_text===readText)debug.render_game_to_text=previousText;
+    if(debug.advanceTime===advanceTime)debug.advanceTime=previousTime;
+    if(debug.__GRAPHYSX_QUEST3__===diagnostics)delete debug.__GRAPHYSX_QUEST3__;
+    if(debug.__GRAPHYSX__===host.api)delete debug.__GRAPHYSX__;
+    disposeVrObject(decor);decor.removeFromParent();ui.remove();host.dispose();
+  }
+  return{dispose};
 }
