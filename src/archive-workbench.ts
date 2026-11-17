@@ -3,6 +3,7 @@ import type { PlatformHost } from "./platform-host";
 import { playCubzTrack } from "./archive-world-motion";
 import type { CubzRotationSelection } from "./cubz-tva-animation";
 import { Vector3 } from "three";
+import { applyFlightxPose, FLIGHTX_START } from "./flightx-revival";
 
 /** Views and source interactions use normal scene commands; the panel owns no world state. */
 export function mountArchiveWorkbench(container: HTMLElement, host: PlatformHost, id: ArchiveWorldId): () => void {
@@ -25,7 +26,7 @@ export function mountArchiveWorkbench(container: HTMLElement, host: PlatformHost
     if (id === "common-room") host.frameView([0, 11, 8], [0, 10, -8], 0);
     if (id === "notes") host.frameView([3, 2, 4], [0.9, -0.5, -0.6], 0);
     if (id === "cubz") host.frameView(host.camera.aspect < 0.8 ? [20, 18, 33] : [12, 10, 17], [0, 3.5, 0], 0);
-    if (id === "flightx") host.frameView([-16, 23, 15], [host.camera.aspect < 0.8 ? 0 : 7, 16, 0], 0);
+    if (id === "flightx") host.frameView([-16, 23, 15], [0, 16, host.camera.aspect < 0.8 ? 0 : -6], 0);
   };
   if (id === "maison") for (const choice of MAISON_VIEWS) button(choice === "house" ? "Maison" : choice === "kitchen" ? "Cuisine" : "Étude de volumes", () => {
     const result = host.api.transaction(MAISON_VIEWS.map((candidate) => ({ op: "update" as const, id: `maison-${candidate}`, patch: { visible: candidate === choice } })));
@@ -98,16 +99,33 @@ export function mountArchiveWorkbench(container: HTMLElement, host: PlatformHost
       control.addEventListener("blur", release);
     }
     button("R · redresser", () => host.api.pilotLive("flight-plane", { reset: true }), "reset-attitude");
-    button("Retour au départ", () => { clear(); host.api.update("flight-plane", { transform: { position: [0, 16, 0], rotationDegrees: [0, 0, 0] } }); }, "reset-flight");
+    button("Retour au départ", () => { clear(); host.api.update("flight-plane", { transform: { position: [...FLIGHTX_START], rotationDegrees: [0, 0, 0] } }); }, "reset-flight");
     let following = false;
     const follow = button("Suivre l’avion", () => { following = !following; follow.setAttribute("aria-pressed", String(following)); }, "follow");
+    button("Pose C++ · Atmel", () => {
+      clear(); following = false; follow.setAttribute("aria-pressed", "false"); host.api.pause(true);
+      const result = applyFlightxPose(host.api, true);
+      if (!result.ok) { note.textContent = result.error ?? "Impossible d’ouvrir la pose source."; return; }
+      host.frameView([12, 43, 68], [22, 23, 0], 0);
+    }, "native-pose");
+    button("Pose C++ · 2011", () => {
+      clear(); following = false; follow.setAttribute("aria-pressed", "false"); host.api.pause(true);
+      const result = applyFlightxPose(host.api, true, "ballz2011");
+      if (!result.ok) { note.textContent = result.error ?? "Impossible d’ouvrir la pose 2011."; return; }
+      host.frameView([-1.8, 16.9, 2.2], [0, 16, 0], 0);
+    }, "native-pose-2011");
+    button("Pose de vol · piloter", () => {
+      clear(); const result = applyFlightxPose(host.api, false);
+      if (!result.ok) { note.textContent = result.error ?? "Impossible d’ouvrir la pose de vol."; return; }
+      following = true; follow.setAttribute("aria-pressed", "true"); host.api.pause(false);
+    }, "flight-pose");
     const position = new Vector3(), behind = new Vector3(), ahead = new Vector3();
     cleanups.push(host.subscribeFrame(() => {
       if (!following) return;
       const plane = host.world.getEntityObject("flight-plane"); if (!plane) return;
       plane.getWorldPosition(position);
-      behind.set(-18, 7, 9).applyQuaternion(plane.quaternion).add(position);
-      ahead.set(host.camera.aspect < 0.8 ? 0 : 6, 0, 0).applyQuaternion(plane.quaternion).add(position);
+      behind.set(9, 7, 18).applyQuaternion(plane.quaternion).add(position);
+      ahead.set(0, 0, host.camera.aspect < 0.8 ? 0 : -6).applyQuaternion(plane.quaternion).add(position);
       host.frameView(behind.toArray(), ahead.toArray(), 0);
     }));
   }
@@ -123,7 +141,7 @@ export function mountArchiveWorkbench(container: HTMLElement, host: PlatformHost
     } else if (id === "arena") note.textContent = "Géométrie OBJ et atlas d’origine. Éclairage adapté ; aucun jeu n’est inventé pour cette scène sans scripts.";
     else if (id === "common-room") note.textContent = "Coque exacte de room.tvm et diffuse/normal DDS d’origine. Caméra et éclairage de visite adaptés : aucune composition de scène ne les impose.";
     else if (id === "cubz") note.textContent = "Clés et plages TVA d’origine à 30 images/s. À gauche : rotation de l’ensemble. À droite : étude d’ouverture. Géométrie et pivots adaptés ; menu acteur complet encore incomplet. Retour = même plage lue à l’envers.";
-    else if (id === "flightx") note.textContent = "W/S : déplacement local X ; flèches : rotations Z et X ; R : orientation initiale. Espace renforce la rotation basse, comme la source. Vitesse, décor, avion StockRoom et repères adaptés ; pas de simulation aérodynamique ni de course native prétendue.";
+    else if (id === "flightx") note.textContent = "Retrouvé : Airplane.tvm (11 168 triangles, 48 groupes), six BMP et pipe1.tvm à son placement C++. Poses C++ : repères masqués ; l’avion 2011 est dix fois plus petit. W/S avance et recule dans l’axe natif de l’avion, sans réorientation ajoutée. Flèches : rotations ; R : redresser ; Retour au départ : replacer ; Espace renforce la rotation basse. Échelle 1/100, remontée +16, vitesse, éclairage et repères adaptés. Aucune course ni collision native certifiée.";
     else {
       const total = host.api.query({ tag: "note-plate" }).filter((entity) => entity.visible).length;
       note.textContent = `${total} / 50 plaques · composition spatiale retrouvée. Aucun éditeur de texte ni sauvegarde native n’est prétendu restauré.`;
@@ -131,7 +149,7 @@ export function mountArchiveWorkbench(container: HTMLElement, host: PlatformHost
     }
   };
   const style = document.createElement("style");
-  style.textContent = `.gx-archive-workbench{position:fixed;z-index:35;top:78px;left:260px;width:min(620px,calc(100vw - 590px));box-sizing:border-box;padding:9px 12px;border:1px solid #9dc6cf66;border-radius:12px;background:#0b1e2ded;color:#e0ebef;font:12px/1.45 var(--gx-font)}.gx-archive-workbench summary{cursor:pointer;min-height:28px;font-weight:700}.gx-archive-controls{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}.gx-archive-controls button{min-height:38px;border:1px solid #8ebbbf66;border-radius:7px;padding:6px 10px;background:#183746;color:#e0f5f1;font:inherit;cursor:pointer}.gx-archive-controls button[aria-pressed=true]{background:#b0e9d7;color:#143233}.gx-archive-controls button:disabled{opacity:.4}.gx-archive-controls button:focus-visible{outline:2px solid white}.gx-archive-evidence{margin:8px 0 0;color:#b8cbd0}@media(max-width:900px){.gx-archive-workbench{left:12px;right:12px;top:76px;width:auto;max-height:32dvh;overflow:auto}}`;
+  style.textContent = `.gx-archive-workbench{position:fixed;z-index:35;top:78px;left:260px;width:min(620px,calc(100vw - 590px));box-sizing:border-box;padding:9px 12px;border:1px solid #9dc6cf66;border-radius:12px;background:#0b1e2ded;color:#e0ebef;font:12px/1.45 var(--gx-font)}.gx-archive-workbench summary{cursor:pointer;min-height:28px;font-weight:700}.gx-archive-controls{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}.gx-archive-controls button{min-height:38px;border:1px solid #8ebbbf66;border-radius:7px;padding:6px 10px;background:#183746;color:#e0f5f1;font:inherit;cursor:pointer}.gx-archive-controls button[aria-pressed=true]{background:#b0e9d7;color:#143233}.gx-archive-controls button:disabled{opacity:.4}.gx-archive-controls button:focus-visible{outline:2px solid white}.gx-archive-evidence{margin:8px 0 0;color:#b8cbd0}@media(max-width:900px){.gx-archive-controls button{min-height:44px;min-width:44px}.gx-archive-workbench{left:12px;right:12px;top:76px;width:auto;max-height:32dvh;overflow:auto}}`;
   const dispose = (): void => { if (disposed) return; disposed = true; unsubscribe(); cleanups.forEach(cleanup => cleanup()); panel.remove(); style.remove(); };
   const unsubscribe = host.world.subscribeEvents(refresh);
   panel.append(summary, controls, note); container.append(style, panel); refresh(); sourceCamera();

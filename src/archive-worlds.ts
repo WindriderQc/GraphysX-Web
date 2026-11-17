@@ -13,7 +13,7 @@ const environment = { background: "#b8c3c4", ground,
   lighting: { source: "studio" as const, intensity: 0.6, yawDegrees: 0, backgroundIntensity: 1, backgroundBlur: 0 } };
 export const ARCHIVE_WORLD_LABELS: Record<ArchiveWorldId, string> = {
   maison: "Maison & Cuisine", arena: "Unity Arena", "common-room": "Common Room", notes: "Notes 3D · CubX",
-  cubz: "CubZ · pistes TVA en 3D", flightx: "FlightX · vol cinématique",
+  cubz: "CubZ · pistes TVA en 3D", flightx: "FlightX · l’avion retrouvé",
 };
 export const MAISON_VIEWS = ["house", "kitchen", "massing"] as const;
 export type MaisonView = typeof MAISON_VIEWS[number];

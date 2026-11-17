@@ -8,7 +8,7 @@ import { after, before, test } from "node:test";
 import { build } from "vite";
 import { applyCommands, validateStoredSceneDefinition } from "../server/scene-commands.mjs";
 
-let temporary, AgentWorldRuntime, createAgentWorldApi, createBridge, invoke, requestSchema, archiveWorlds, motionWorlds, dnaCreation, cubz, motion;
+let temporary, AgentWorldRuntime, createAgentWorldApi, createBridge, invoke, requestSchema, archiveWorlds, motionWorlds, dnaCreation, cubz, motion, flightx;
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
 
 before(async () => {
@@ -31,6 +31,7 @@ before(async () => {
           dnaCreation: join(root, "src/dna-creation-scene.ts"),
           cubz: join(root, "src/cubz-menu-scene.ts"),
           motionSampler: join(root, "src/agent-world-motion.ts"),
+          flightx: join(root, "src/flightx-revival.ts"),
         },
         output: { format: "es", entryFileNames: "[name].mjs", chunkFileNames: "chunks/[name]-[hash].mjs" },
       },
@@ -45,6 +46,7 @@ before(async () => {
   archiveWorlds = await load("archive"); motionWorlds = await load("motion");
   dnaCreation = await load("dnaCreation");
   cubz = await load("cubz"); motion = await load("motionSampler");
+  flightx = await load("flightx");
   // Only the window transport is substituted. The scene, validators, API factory,
   // tool manifest, dispatch and simulation are the production implementations.
   const window = Object.assign(new EventTarget(), {
@@ -551,6 +553,81 @@ test("FlightX bridge input moves real scene objects without document revisions o
   accepted(w.api.update("plane", { transform: { position: [25, 30, 0] } }));
   accepted(w.api.step(.1));
   assert.deepEqual(w.api.query({ ids: ["plane"] })[0].position, [25, 30, 0], "authored repositioning resets live pose and controls");
+});
+
+test("native forward flight uses reflected -Z, respects orientation and round-trips while existing +X documents retain their motion", t => {
+  const w = world(t);
+  accepted(w.api.spawn({ id: "native-plane", type: "group", transform: { position: [2, 5, 7] }, behaviors: [{ id: "native-pilot", type: "flight", speed: 10, forwardAxis: "-z" }] }));
+  accepted(w.api.pause(true)); const authored = w.api.exportDocument();
+  accepted(w.api.pilotLive("native-plane", { thrust: 1 })); accepted(w.api.step(1));
+  assert.deepEqual(w.api.query({ ids: ["native-plane"] })[0].position, [2, 5, -3]);
+  assert.deepEqual(w.api.exportDocument(), authored);
+  accepted(w.api.update("native-plane", { transform: { position: [2, 5, 7], rotationDegrees: [0, 90, 0] } }));
+  accepted(w.api.pilotLive("native-plane", { thrust: 1 })); accepted(w.api.step(1));
+  assert.ok(w.api.query({ ids: ["native-plane"] })[0].position.every((n, i) => Math.abs(n - [-8, 5, 7][i]) < 1e-8));
+  const exported = w.api.exportDocument(); validateStoredSceneDefinition(exported);
+  const reloaded = new AgentWorldRuntime(exported); t.after(() => reloaded.dispose()); reloaded.step(1);
+  assert.deepEqual(reloaded.query({ ids: ["native-plane"] })[0].position, [2, 5, 7], "Held native throttle is not serialized");
+  for (const axis of [null, "z", "-x", 0, Infinity]) {
+    const authoring = () => structuredClone({ document: w.api.exportDocument(), revision: w.api.state().revision,
+      history: w.runtime.history, redo: w.runtime.redoHistory, position: w.api.query({ ids: ["native-plane"] })[0].position });
+    const checkpoint = authoring();
+    assert.equal(w.api.attachBehavior("native-plane", { id: "invalid-axis", type: "flight", forwardAxis: axis }).ok, false);
+    assert.deepEqual(authoring(), checkpoint);
+    assert.equal(w.api.state().recentEvents.at(-1).type, "transaction.rejected");
+    const invalid = structuredClone(exported);
+    invalid.entities.find(e => e.id === "native-plane").behaviors[0].forwardAxis = axis;
+    assert.throws(() => validateStoredSceneDefinition(invalid), /forwardAxis/);
+  }
+});
+
+test("FlightX native pose is undoable and preserves authored edits while stopping transient flight at the source start", t => {
+  const w = world(t), definition = flightx.buildRecoveredFlightX();
+  validateStoredSceneDefinition(definition); accepted(w.api.create(definition)); accepted(w.api.pause(true));
+  accepted(w.api.update("flight-plane-model", { label: "My restored airplane" }));
+  accepted(w.api.spawn({ id: "my-flight-marker", type: "box", material: { color: "#f5f4f0" }, transform: { position: [3, 8, 2] } }));
+  const authored = w.api.exportDocument();
+  accepted(w.api.pilotLive("flight-plane", { thrust: 1 })); accepted(w.api.step(.5));
+  assert.ok(w.api.query({ ids: ["flight-plane"] })[0].position[2] < -8.99);
+  accepted(flightx.applyFlightxPose(w.api, true));
+  assert.deepEqual(w.api.query({ ids: ["flight-plane"] })[0].position, [0, 16, 0]);
+  const native = w.api.exportDocument(), model = native.entities.find(e => e.id === "flight-plane-model");
+  assert.deepEqual(model.transform.rotationDegrees, [0, 0, 0]);
+  assert.equal(model.label, "My restored airplane");
+  assert.equal(native.entities.find(e => e.id === "my-flight-marker").material.color, "#f5f4f0");
+  assert.equal(native.entities.filter(e => e.id.startsWith("flight-guide-")).every(e => e.visible === false), true);
+  accepted(w.api.step(.5));
+  assert.deepEqual(w.api.query({ ids: ["flight-plane"] })[0].position, [0, 16, 0], "Pose change cannot retain held throttle");
+  const canonical = document => ({ ...document, entities: [...document.entities].sort((a, b) => a.id.localeCompare(b.id)) });
+  accepted(w.api.undo()); assert.deepEqual(canonical(w.api.exportDocument()), canonical(authored));
+  accepted(w.api.redo()); assert.deepEqual(canonical(w.api.exportDocument()), canonical(native));
+  accepted(flightx.applyFlightxPose(w.api, false));
+  assert.deepEqual(w.api.exportDocument().entities.find(e => e.id === "flight-plane-model").transform.rotationDegrees, [0, 0, 0]);
+  assert.equal(w.api.query({ tag: "adapted-inspection-marker" }).every(e => e.visible), true);
+  assert.equal(w.api.query({ ids: ["my-flight-marker"] }).length, 1);
+  accepted(flightx.applyFlightxPose(w.api, true, "ballz2011"));
+  assert.deepEqual(w.api.exportDocument().entities.find(e => e.id === "flight-plane-model").transform.scale, [.001, .001, .001]);
+  assert.deepEqual(w.api.exportDocument().entities.find(e => e.id === "flight-source-pipe").transform.scale, [.05, .05, .05]);
+});
+
+test("FlightX source pipe composition retains its exported offset, source scale ratio and non-racing status", () => {
+  const definition = flightx.buildRecoveredFlightX();
+  const plane = definition.entities.find(e => e.id === "flight-plane-model"), pipe = definition.entities.find(e => e.id === "flight-source-pipe");
+  assert.deepEqual(plane.transform.scale, [.01, .01, .01]); assert.deepEqual(pipe.transform.scale, [.05, .05, .05]);
+  assert.deepEqual(pipe.transform.position, [0, 11, 0]); assert.equal(plane.asset.fitSize, undefined); assert.equal(pipe.asset.fitSize, undefined);
+  assert.equal(plane.asset.id, "archive-flightx-airplane"); assert.equal(pipe.asset.id, "archive-flightx-pipe");
+  assert.equal(definition.entities.find(e => e.id === "flight-plane").behaviors[0].forwardAxis, "-z");
+  assert.equal(definition.rules, undefined);
+  assert.equal(definition.entities.filter(e => e.tags?.includes("no-source-race-layout")).length, 8);
+});
+
+test("FlightX native assets advertised by the palette spawn through the real API by curated ID alone", t => {
+  const w = world(t);
+  for (const [index, id] of ["archive-flightx-airplane", "archive-flightx-pipe"].entries()) {
+    accepted(w.api.spawn({ id: "original-" + index, type: "model", asset: { id } }));
+    assert.equal(w.api.query({ ids: ["original-" + index] })[0].asset.id, id);
+  }
+  validateStoredSceneDefinition(w.api.exportDocument());
 });
 
 test("all recovered worlds and TVA ranges cross the actual storage validator; malformed motion is atomic", t => {

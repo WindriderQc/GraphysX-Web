@@ -69,6 +69,10 @@ async function capture(id, shelf, selector) {
     await page.waitForFunction(() => JSON.parse(window.render_game_to_text?.() || "{}").application?.ready, null, { timeout: 120000 });
     await page.evaluate(() => { window.__GRAPHYSX__.pause(true); window.__GRAPHYSX__.step(2); window.__GRAPHYSX_HOST__.frameView([4, 2.7, 5], [0, .6, 0], 0); });
   }
+  if (id === "archive-flightx") {
+    await page.waitForFunction(() => window.__GRAPHYSX__?.query({ ids: ["flight-plane-model"] })[0]?.materialSlots?.length === 48, null, { timeout: 60000 });
+    await page.evaluate(() => { window.__GRAPHYSX__.pause(true); window.__GRAPHYSX__.select([]); window.__GRAPHYSX_HOST__.frameView([7, 20, -8], [.2, 15.7, .65], 0); });
+  }
   // Show reproducible interaction states, rather than an empty notepad or closed hinges.
   if (id === "archive-notes" || id === "archive-cubz-tracks") await page.click(".gx-archive-workbench summary");
   if (id === "archive-notes") {

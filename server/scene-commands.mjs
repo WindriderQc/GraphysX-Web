@@ -227,6 +227,7 @@ const MODEL_ASSET_IDS = new Set([
   "archive-slide-large", "archive-suzanne-door-gate", "archive-suzanne-finish-line", "archive-suzanne-level",
   "archive-suzanne-piston-stand", "archive-suzanne-piston-trigger", "archive-suzanne-piston",
   "archive-suzanne-rotator-cube", "archive-suzanne-rotator", "archive-suzanne2-airplane", "archive-suzanne2-boned-gate",
+  "archive-flightx-airplane", "archive-flightx-pipe",
   "archive-suzanne2-super-cage", "archive-tvm-90right", "archive-tvm-ballz-track1", "archive-tvm-corridor",
   "archive-tvm-cubx-btn1", "archive-tvm-cubx-btn2", "archive-tvm-cubx", "archive-tvm-finish-tvm", "archive-tvm-fleche",
   "archive-tvm-half-empty-ball", "archive-tvm-invert-sphere", "archive-tvm-pipe1", "archive-tvm-prisme",

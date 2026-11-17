@@ -12,6 +12,8 @@ export type KeyframeTrackBehavior = {
 };
 export type FlightBehavior = {
   id?: string; type: "flight"; speed?: number; rollRateDegrees?: number; pitchUpDegrees?: number; pitchDownDegrees?: number;
+  /** Existing documents retain +X; native TV3D forward is reflected to -Z. */
+  forwardAxis?: "x" | "-z";
 };
 export type FlightInput = { roll?: number; pitch?: number; thrust?: number; airbrake?: boolean; reset?: boolean };
 export type FlightPose = { position: Vector3; rotation: Quaternion; input: Required<Omit<FlightInput, "reset">> };
@@ -58,13 +60,13 @@ export function validatedFlightInput(input: FlightInput): FlightInput {
 
 const axisX = new Vector3(1, 0, 0), axisZ = new Vector3(0, 0, 1);
 const scratchRotation = new Quaternion(), forward = new Vector3();
-/** Source FlightX is kinematic: W/S move along the plane's local X, with no invented lift. */
+/** Kinematic flight with explicit model forward; old +X documents keep their existing motion. */
 export function stepFlight(pose: FlightPose, behavior: FlightBehavior, seconds: number): void {
   const degrees = Math.PI / 180;
   const { roll, pitch, thrust, airbrake } = pose.input;
   if (roll) pose.rotation.multiply(scratchRotation.setFromAxisAngle(axisZ, roll * (behavior.rollRateDegrees ?? (0.9 / degrees)) * degrees * seconds)).normalize();
   // Reflect the native left-handed local-X pitch into the shared right-handed world.
   if (pitch) pose.rotation.multiply(scratchRotation.setFromAxisAngle(axisX, -pitch * (pitch > 0 ? behavior.pitchUpDegrees ?? (0.4 / degrees) : (behavior.pitchDownDegrees ?? (0.5 / degrees)) + (airbrake ? 0.1 / degrees : 0)) * degrees * seconds)).normalize();
-  forward.copy(axisX).applyQuaternion(pose.rotation);
+  forward.set(behavior.forwardAxis === "-z" ? 0 : 1, 0, behavior.forwardAxis === "-z" ? -1 : 0).applyQuaternion(pose.rotation);
   pose.position.addScaledVector(forward, thrust * (behavior.speed ?? 18) * seconds);
 }
