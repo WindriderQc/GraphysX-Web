@@ -539,7 +539,10 @@ if (appParam === "quest3") {
           host.applyEnvironment(); enterBrowsedEditor();
           mountArchiveWorkbench(root, host, "flightx");
           void host.editorReady().then(editor => {
-            if (host.mode === "editor" && host.api.query({ ids: ["flight-plane-model"] }).length) editor?.selectEntity("flight-plane-model");
+            if (host.mode === "editor" && host.api.query({ ids: ["flight-plane-model"] }).length) {
+              if (matchMedia("(max-width: 700px)").matches) editor?.showViewport();
+              else editor?.selectEntity("flight-plane-model");
+            }
           });
         }).catch((error: unknown) => showStartupError(root, error));
         return true;

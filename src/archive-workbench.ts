@@ -100,24 +100,28 @@ export function mountArchiveWorkbench(container: HTMLElement, host: PlatformHost
     }
     button("R · redresser", () => host.api.pilotLive("flight-plane", { reset: true }), "reset-attitude");
     button("Retour au départ", () => { clear(); host.api.update("flight-plane", { transform: { position: [...FLIGHTX_START], rotationDegrees: [0, 0, 0] } }); }, "reset-flight");
+    const revealViewport = (): void => { void host.editorReady().then(editor => {
+      if (host.mode === "editor" && host.world.getClock().worldId === worldId) editor?.showViewport();
+    }); };
     let following = false;
-    const follow = button("Suivre l’avion", () => { following = !following; follow.setAttribute("aria-pressed", String(following)); }, "follow");
+    const follow = button("Suivre l’avion", () => { following = !following; follow.setAttribute("aria-pressed", String(following)); if (following) revealViewport(); }, "follow");
     button("Pose C++ · Atmel", () => {
       clear(); following = false; follow.setAttribute("aria-pressed", "false"); host.api.pause(true);
       const result = applyFlightxPose(host.api, true);
       if (!result.ok) { note.textContent = result.error ?? "Impossible d’ouvrir la pose source."; return; }
-      host.frameView([12, 43, 68], [22, 23, 0], 0);
+      revealViewport();
+      host.frameView(host.camera.aspect < .8 ? [25, 70, 180] : [12, 43, 68], host.camera.aspect < .8 ? [26, 20, 0] : [22, 23, 0], 0);
     }, "native-pose");
     button("Pose C++ · 2011", () => {
       clear(); following = false; follow.setAttribute("aria-pressed", "false"); host.api.pause(true);
       const result = applyFlightxPose(host.api, true, "ballz2011");
       if (!result.ok) { note.textContent = result.error ?? "Impossible d’ouvrir la pose 2011."; return; }
-      host.frameView([-1.8, 16.9, 2.2], [0, 16, 0], 0);
+      revealViewport(); host.frameView([-1.8, 16.9, 2.2], [0, 16, 0], 0);
     }, "native-pose-2011");
     button("Pose de vol · piloter", () => {
       clear(); const result = applyFlightxPose(host.api, false);
       if (!result.ok) { note.textContent = result.error ?? "Impossible d’ouvrir la pose de vol."; return; }
-      following = true; follow.setAttribute("aria-pressed", "true"); host.api.pause(false);
+      following = true; follow.setAttribute("aria-pressed", "true"); revealViewport(); host.api.pause(false);
     }, "flight-pose");
     const position = new Vector3(), behind = new Vector3(), ahead = new Vector3();
     cleanups.push(host.subscribeFrame(() => {

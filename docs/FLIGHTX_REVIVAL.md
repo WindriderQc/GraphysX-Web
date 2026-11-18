@@ -44,6 +44,12 @@ plane, shows modern visit markers, unpauses and follows the aircraft.
 These undoable API transactions change named transforms/visibility while retaining labels,
 material edits and extra objects. Save/Export retain authored starts, without held inputs.
 
+On compact layouts, pose and flight controls reveal the 3D view even if Inspect was open.
+The Atmel overview frames both native objects; the 2011 view inspects the smaller plane.
+The ordinary scene envelope extends the camera/fog distances for that composition.
+The shelf uses a versioned native-model preview URL so returning browsers do not retain
+the previous substitute airplane under an immutable asset URL.
+
 ## Forward motion and compatibility
 
 The SDK declares `MoveRelative(float fForward, float fUp, float fRight)`. The first Web

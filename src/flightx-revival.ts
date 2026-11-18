@@ -10,6 +10,7 @@ export function buildRecoveredFlightX(): AgentWorldDefinition {
   return {
     schema: "graphysx.agent-world/v2", id: "archive-flightx", label: "FlightX · original TVM airplane and native pipe composition",
     environment: { background: "#7eabc6", ground: { visible: true, size: 2000, color: "#4a655d", grid: true, gridColor: "#739588" },
+      envelope: { cameraFar: 600, fogNear: 300, fogFar: 550 },
       lighting: { source: "studio", intensity: .8, yawDegrees: 0, backgroundIntensity: 1, backgroundBlur: 0 } },
     entities: [
       { id: "flight-fill", type: "ambient-light", intensity: 1 },

@@ -32,6 +32,16 @@ const showControls = async page => {
   const panel = page.locator(".gx-archive-workbench");
   if (!await panel.evaluate(element => element.open)) await panel.locator("summary").click();
 };
+const projectedModel = (page, id) => page.evaluate(id => {
+  const host = window.__GRAPHYSX_HOST__, model = host.world.getEntityObject(id);
+  let mesh; model.traverse(child => { if (child.isMesh && child.geometry?.attributes.position) mesh = child; });
+  mesh.updateWorldMatrix(true, false); mesh.geometry.computeBoundingBox();
+  const worldPoint = mesh.geometry.boundingBox.getCenter(model.position.clone()).applyMatrix4(mesh.matrixWorld), distance = worldPoint.distanceTo(host.camera.position);
+  const point = worldPoint.project(host.camera), rect = host.renderer.domElement.getBoundingClientRect();
+  const x = rect.left + (point.x + 1) * rect.width / 2, y = rect.top + (1 - point.y) * rect.height / 2;
+  return { x, y, ndc: point.toArray(), distance, fogNear: host.scene.fog.near,
+    hit: document.elementFromPoint(x, y)?.tagName, panel: document.querySelector(".gx-ed-mobile-nav").dataset.panel };
+}, id);
 try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 960 }, reducedMotion: "reduce" });
   const page = applySmokeTimeout(await context.newPage()), errors = errorsFor(page);
@@ -121,8 +131,13 @@ try {
   for (const [width, height] of [[390, 844], [320, 740]]) {
     const context = await browser.newContext({ viewport: { width, height }, hasTouch: true, isMobile: true, reducedMotion: "reduce" });
     const page = applySmokeTimeout(await context.newPage()), errors = errorsFor(page);
-    await page.goto(new URL("?app=flightx&intro=0", base).href); await ready(page); await showControls(page);
+    await page.goto(new URL("?app=flightx&intro=0", base).href); await ready(page);
+    await page.locator('.gx-ed-mobile-nav[data-panel="viewport"]').waitFor();
+    await page.locator(".gx-ed-mobile-nav").getByRole("button", { name: "Inspect", exact: true }).tap();
+    await page.locator('.gx-ed-mobile-nav[data-panel="inspector"]').waitFor();
+    await showControls(page);
     await page.locator('[data-archive-action="flight-pose"]').scrollIntoViewIfNeeded(); await page.locator('[data-archive-action="flight-pose"]').tap();
+    await page.locator('.gx-ed-mobile-nav[data-panel="viewport"]').waitFor();
     await page.evaluate(() => window.__GRAPHYSX__.pause(true));
     const forward = page.locator('[data-archive-action="KeyW"]'), turn = page.locator('[data-archive-action="ArrowLeft"]');
     await forward.scrollIntoViewIfNeeded(); const a = await forward.boundingBox(), b = await turn.boundingBox();
@@ -133,10 +148,26 @@ try {
     await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     const moved = await position(page); assert.ok(moved[2] < -4.5);
     await page.evaluate(() => window.__GRAPHYSX__.step(.5)); assert.deepEqual(await position(page), moved, "Both touch controls release without stuck flight");
-  await page.locator('[data-archive-action="native-pose"]').scrollIntoViewIfNeeded(); await page.locator('[data-archive-action="native-pose"]').tap(); await ready(page);
-    await page.locator(".gx-archive-workbench summary").tap(); await draw(page); await capture(page, "flightx-native-mobile-" + width);
+    await page.locator('[data-archive-action="native-pose"]').scrollIntoViewIfNeeded(); await page.locator('[data-archive-action="native-pose"]').tap(); await ready(page);
+    await page.locator(".gx-archive-workbench summary").tap(); await draw(page);
+    const overview = [];
+    for (const id of ["flight-plane-model", "flight-source-pipe"]) {
+      const projected = await projectedModel(page, id); overview.push({ id, ...projected });
+      assert.ok(projected.ndc.every(n => n >= -1 && n <= 1), "Both native objects must be inside the actual camera frustum");
+      assert.ok(projected.distance < projected.fogNear, "Source overview cannot disappear into the showroom distance fog");
+      assert.equal(projected.hit, "CANVAS");
+    }
+    await capture(page, "flightx-native-mobile-" + width);
+    await showControls(page);
+    await page.locator('[data-archive-action="native-pose-2011"]').scrollIntoViewIfNeeded(); await page.locator('[data-archive-action="native-pose-2011"]').tap(); await ready(page);
+    await page.locator(".gx-archive-workbench summary").tap(); await draw(page);
+    const visible = await projectedModel(page, "flight-plane-model");
+    assert.equal(visible.panel, "viewport"); assert.equal(visible.hit, "CANVAS", "The actual airplane must be visible through unobstructed 3D canvas, not covered by the inspector");
+    assert.ok(visible.x > 8 && visible.x < width - 8 && visible.y > 130 && visible.y < height - 72);
+    assert.ok(visible.ndc[2] > -1 && visible.ndc[2] < 1 && visible.distance < visible.fogNear);
+    await capture(page, "flightx-2011-mobile-" + width);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-    assert.deepEqual(errors, []); receipts.push({ device: "touch", width, simultaneousTouch: true, sourcePose: true, errors }); await context.close();
+    assert.deepEqual(errors, []); receipts.push({ device: "touch", width, simultaneousTouch: true, sourcePose: true, unobstructedPlane: visible, overview, errors }); await context.close();
     console.log("PASS FlightX " + width + "px: native model, simultaneous touch, release and source composition.");
   }
   await writeFile(path.join(artifacts, "flightx-receipt.json"), JSON.stringify(receipts, null, 2));

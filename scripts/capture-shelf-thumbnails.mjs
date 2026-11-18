@@ -49,16 +49,19 @@ const browser = await chromium.launch({ headless: true, args: ["--use-angle=swif
 
 async function capture(id, shelf, selector) {
   const page = await browser.newPage({ viewport: { width: 640, height: 360 }, deviceScaleFactor: 1 });
-  await page.goto(BASE, { waitUntil: "domcontentloaded", timeout: 60_000 });
+  const directFlight = id === "archive-flightx";
+  await page.goto(directFlight ? new URL("?app=flightx&intro=0", BASE).href : BASE, { waitUntil: "domcontentloaded", timeout: 60_000 });
   await page.waitForFunction(() => Boolean(window.__GRAPHYSX_HOST__), null, { timeout: 60_000 });
-  await page.click(`.gx-welcome .gx-go-${shelf}`);
-  await page.click('[data-collection="all"]');
-  await page.waitForSelector(selector, { timeout: 60_000 });
+  if (!directFlight) {
+    await page.click(`.gx-welcome .gx-go-${shelf}`);
+    await page.click('[data-collection="all"]');
+    await page.waitForSelector(selector, { timeout: 60_000 });
   // Dispatch the click on the element rather than through pointer hit-testing: the shelves
   // have grown past the 360-pixel capture viewport, and a row inside the shelf's own scroll
   // container can be unreachable by Playwright's viewport check while being perfectly real.
   // Genuine clickability is the games/browse smokes' assertion, not this snapshot harness's.
-  await page.$eval(selector, (element) => element.click());
+    await page.$eval(selector, (element) => element.click());
+  }
   await page.waitForFunction(() => (window.__GRAPHYSX__?.query({}).length ?? 0) > 0, null, { timeout: 60_000 });
   if (id === "archive-cubz-menu") {
     await page.waitForSelector('[data-cubz-choice="7"]');
@@ -71,7 +74,7 @@ async function capture(id, shelf, selector) {
   }
   if (id === "archive-flightx") {
     await page.waitForFunction(() => window.__GRAPHYSX__?.query({ ids: ["flight-plane-model"] })[0]?.materialSlots?.length === 48, null, { timeout: 60000 });
-    await page.evaluate(() => { window.__GRAPHYSX__.pause(true); window.__GRAPHYSX__.select([]); window.__GRAPHYSX_HOST__.frameView([7, 20, -8], [.2, 15.7, .65], 0); });
+    await page.evaluate(() => { window.__GRAPHYSX__.pause(true); window.__GRAPHYSX__.select([]); window.__GRAPHYSX_HOST__.frameView([3.3, 17.5, -3.7], [.2, 15.7, .65], 0); });
   }
   // Show reproducible interaction states, rather than an empty notepad or closed hinges.
   if (id === "archive-notes" || id === "archive-cubz-tracks") await page.click(".gx-archive-workbench summary");
@@ -92,7 +95,7 @@ async function capture(id, shelf, selector) {
   // child we keep. This also strips the play HUD and win panel for course previews.
   await page.addStyleTag({ content: "#app > :not(canvas),.gx-display-settings{display:none!important}" });
   await page.locator("#app canvas").first().screenshot({
-    path: path.join(OUTPUT, `${id}.jpg`),
+    path: path.join(OUTPUT, id === "archive-flightx" ? "archive-flightx-native-tvm.jpg" : `${id}.jpg`),
     type: "jpeg",
     quality: 84,
   });

@@ -617,6 +617,7 @@ test("FlightX source pipe composition retains its exported offset, source scale 
   assert.deepEqual(pipe.transform.position, [0, 11, 0]); assert.equal(plane.asset.fitSize, undefined); assert.equal(pipe.asset.fitSize, undefined);
   assert.equal(plane.asset.id, "archive-flightx-airplane"); assert.equal(pipe.asset.id, "archive-flightx-pipe");
   assert.equal(definition.entities.find(e => e.id === "flight-plane").behaviors[0].forwardAxis, "-z");
+  assert.deepEqual(definition.environment.envelope, { cameraFar: 600, fogNear: 300, fogFar: 550 });
   assert.equal(definition.rules, undefined);
   assert.equal(definition.entities.filter(e => e.tags?.includes("no-source-race-layout")).length, 8);
 });
