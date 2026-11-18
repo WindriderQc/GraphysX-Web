@@ -463,6 +463,9 @@ export class PlatformEditor {
     this.ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
     this.raycaster.setFromCamera(this.ndc, camera);
     for (const hit of this.raycaster.intersectObject(world.group, true)) {
+      let visible = true;
+      for (let object: Object3D | null = hit.object; object; object = object.parent) if (!object.visible) { visible = false; break; }
+      if (!visible) continue;
       const entityId = world.findEntityId(hit.object);
       if (entityId) {
         // Runtime projections share the scene graph for rendering, but are not authorable.
@@ -485,6 +488,9 @@ export class PlatformEditor {
       this.setMobilePanel("inspector");
     }
   }
+
+  /** An application handing a document to Studio can reveal its subject in the inspector. */
+  selectEntity(id: string | null): void { this.select(id); }
 
   private syncGizmo(): void {
     const accepted = this.deps.api.state()?.selectedIds ?? [];

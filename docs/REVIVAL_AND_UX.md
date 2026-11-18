@@ -126,14 +126,26 @@ button form a normal editable world. Adding one plate is a v2 visibility interac
 including undo/redo. Sequential buttons are a modern adapter; the native text editor,
 disk persistence and device integration are not claimed restored.
 
-**CubZ animation study.** Seven `GlobalCube` rotation ranges and the three `CubeOpen`
+**CubZ animation study (Laboratoire).** Seven `GlobalCube` rotation ranges and the three `CubeOpen`
 quaternion tracks now animate actual 3D hierarchy through a reusable `keyframes` behavior.
 Source key times/values and 30 fps ranges are retained; interpolation is normalized slerp,
 Z reflection is explicit and return playback reverses the same range. Geometry, inspection
 scale and hinge pivots are disclosed adapters. Assembly rotation and opening are separate
-studies: a complete actor-based selectable menu remains incomplete. Playback restarts the
+studies, retained separately from the complete source-actor menu below. Playback restarts the
 selected range; keyframes use the authored world's timeline and restart with that timeline
 when a document is reopened, rather than pretending to save a running animation cursor.
+
+**CubZ coupled menu (Archives).** `?app=cubx` restores three complete TVA actors, each
+with 44 source meshes, their hierarchy, pivots and position/rotation/scale keys. All eight
+choices rotate/open/close/return on one authored v2 timeline; direct choice zero and the
+incorrect native reverse index are repaired. Passive TVA quaternion keys are converted
+against the independent bind matrices so cylinders stay attached and petals open outward.
+Waiting uses the recovered actor's geometry with a disclosed rigid rotation around the
+original central pivot; the separate-piece source clip stays preserved. Exact visible-pose
+copy into Studio is reachable. The 32 internal button meshes, exit mesh and historical
+destinations remain absent: the four actions and plates are disclosed replacements.
+Materials, camera and Web interpolation are adapters. Full provenance and validation:
+[CUBZ_MENU.md](CUBZ_MENU.md).
 
 **FlightX inspection flight.** An ordinary `flight` behavior and transient `pilotLive`
 API connect native W/S local-X movement, Z roll, reflected X pitch and orientation reset.
@@ -157,10 +169,10 @@ It is a current creation experience, separate from the source-fidelity work belo
 
 | Historical evidence | Current limitation / next recovery |
 | --- | --- |
-| CubX/CubZ actors and native MenuManager | TVA studies are now reachable in Archives. Full actor/button geometry, coupled selection/opening choreography and exact historical pivots still need proof. |
+| CubX/CubZ actors and native MenuManager | CubZ's three full actors, source pivots and coupled eight-choice menu are reachable in Archives; the old study is in Lab. The 32 internal buttons/exit mesh and historical destinations remain absent. The distinct CubXActor family and native visual parity are not certified. |
 | `FlightXScene.cpp`, pipe1, Airplane | Controllable v2 inspection flight is now reachable. Native actor/material identity, historical timestep equivalence and source gate/lap layouts remain unproven. |
 | Maison, Kitchen, Unity Arena and Common Room | Complete recovered mesh geometry is reachable. Exact historical lighting/rendering and the absent external Kitchen photograph remain outside parity. |
-| `CarScene.cpp`, `Vehicule.cpp`, heightmaps and orphan car packs | Separate the authored Impreza world and source handling from model turntables and modern courses. Multiple completed historical cars are not established. |
+| `CarScene.cpp`, `Vehicule.cpp`, heightmaps and orphan car packs | Atmel and later RacinX are now distinct editable worlds with original TVM parts, source heightfields, 100 later rings and an explicitly adapted Rapier drive. See [IMPREZA_REVIVAL.md](IMPREZA_REVIVAL.md). Native tire/network/audio parity and bindings for orphan cars remain unproven. |
 | Serial/Arduino, TCP, NotesManager | Retain protocol/UI evidence. Simulated controls do not certify physical devices, networking or persistence. No hardware transport was opened in this pass. |
 | Native shaders, sky and animated menus | Keep source contracts and exact assets. Distinguish modern PBR/JPEG/curve adapters from source parity; avoid promoting every shader study to a game. |
 

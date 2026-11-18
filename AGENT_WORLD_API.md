@@ -162,6 +162,20 @@ Unknown IDs are rejected before the document changes.
 
 ## Media library: import your own textures, models, and sounds
 
+Native glTF 2.0/GLB is also available directly through model assets with
+`format: "gltf"` and a stable `url`. It preserves PBR maps and supports bundled
+KTX2/Basis and meshopt decoding. Optional `lightmap: {url, intensity?}` uses
+`TEXCOORD_1`; `instances` contains up to 2,048 local position/rotationDegrees/scale
+transforms; `lods: [{url, distance}]` provides up to three lower-detail models with
+increasing distances and hysteresis. The batch is one selectable entity. Native
+visual models use separate primitive physics proxies. The existing media-import
+conversion path remains available. See [NACRE / Quest 3](docs/QUEST3_SHOWCASE.md)
+for the complete contract, reproducible asset preparation and limits.
+
+On a browser host, `observe().diagnostics` / `state().diagnostics` expose observed
+frame intervals, CPU submission time and rendering resource counts. Headless hosts
+report `null`; GPU time, memory bytes and compositor drops are not measured.
+
 `media` is the runtime import path. It is backed by the same store server that holds shared
 scenes (`npm run serve:scenes`, port 8788), which also fronts a configurable **datalake** —
 a local media folder configured with `GRAPHYSX_DATALAKE_DIR` (disabled when unset), browsable and

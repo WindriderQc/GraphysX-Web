@@ -7,6 +7,8 @@ const OUTPUT = path.resolve("public/assets/shelf-thumbnails");
 const PORT = Number(process.env.SHELF_THUMBNAIL_PORT || 4197);
 const BASE = `http://127.0.0.1:${PORT}/?intro=0`;
 const BROWSE_IDS = [
+  "archive-cubz-menu",
+  "archive-impreza-worlds",
   "archive-cubz-tracks",
   "archive-flightx",
   "archive-unity-arena",
@@ -57,7 +59,16 @@ async function capture(id, shelf, selector) {
   // container can be unreachable by Playwright's viewport check while being perfectly real.
   // Genuine clickability is the games/browse smokes' assertion, not this snapshot harness's.
   await page.$eval(selector, (element) => element.click());
-  await page.waitForFunction(() => window.__GRAPHYSX__.query({}).length > 0, null, { timeout: 60_000 });
+  await page.waitForFunction(() => (window.__GRAPHYSX__?.query({}).length ?? 0) > 0, null, { timeout: 60_000 });
+  if (id === "archive-cubz-menu") {
+    await page.waitForSelector('[data-cubz-choice="7"]');
+    await page.$eval('[data-cubz-choice="7"]', element => { element.click(); window.__GRAPHYSX__.pause(true); window.__GRAPHYSX__.step(3); });
+    await page.evaluate(() => window.__GRAPHYSX_HOST__.frameView([12, 9, 16], [0, 3.4, 0], 0));
+  }
+  if (id === "archive-impreza-worlds") {
+    await page.waitForFunction(() => JSON.parse(window.render_game_to_text?.() || "{}").application?.ready, null, { timeout: 120000 });
+    await page.evaluate(() => { window.__GRAPHYSX__.pause(true); window.__GRAPHYSX__.step(2); window.__GRAPHYSX_HOST__.frameView([4, 2.7, 5], [0, .6, 0], 0); });
+  }
   // Show reproducible interaction states, rather than an empty notepad or closed hinges.
   if (id === "archive-notes" || id === "archive-cubz-tracks") await page.click(".gx-archive-workbench summary");
   if (id === "archive-notes") {

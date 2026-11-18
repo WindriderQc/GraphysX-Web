@@ -4,10 +4,12 @@ export type ContentCollection = "creations" | "archive" | "lab";
 const SCENE_CREATIONS = new Set([
   "glow-garden", "signal-outpost", "signal-trail", "living-systems",
   "math-lab", "surfaces-showcase", "family-iss-live",
+  "nacre-quest3",
 ]);
 const GAME_CREATIONS = new Set(["ballz", "ballsy-slime", "cyber-race-1992"]);
 
 export function sceneCollection(id: string): ContentCollection {
+  if (id === "archive-cubz-tracks") return "lab";
   if (SCENE_CREATIONS.has(id)) return "creations";
   if (/^archive-|^maison|^milky-way|^nature-/.test(id)) return "archive";
   return "lab";

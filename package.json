@@ -17,6 +17,8 @@
     "smoke:revival": "node scripts/smoke-revival.mjs",
     "smoke:dna-creation": "node scripts/smoke-dna-creation.mjs",
     "smoke:archive-worlds": "node scripts/smoke-archive-worlds.mjs",
+    "smoke:cubz-menu": "node scripts/smoke-cubz-menu.mjs",
+    "smoke:impreza": "node scripts/smoke-impreza.mjs",
     "audit:legacy": "node scripts/audit-legacy-revival.mjs",
     "assets:cuisine": "node scripts/vendor-archive-cuisine.mjs && node scripts/build-asset-catalog.mjs",
     "assets:maison": "node scripts/vendor-archive-cuisine.mjs ../GraphysX maison && node scripts/build-asset-catalog.mjs",
@@ -128,6 +130,7 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
+    "@napi-rs/canvas": "1.0.9",
     "@types/three": "^0.179.0",
     "eslint": "^9.39.5",
     "iwer": "2.8.0",

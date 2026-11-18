@@ -86,6 +86,9 @@ export async function productAssetManifest() {
   const wanted = new Set();
   // The XR adapter uses same-origin generic input profiles, never a required model CDN.
   for (const url of await xrAssetManifest()) wanted.add(url);
+  for (const source of ["src/quest3-scene.ts", "src/agent-world-gltf.ts"]) {
+    for (const url of await anyAssetLiterals(source)) wanted.add(url);
+  }
 
   // Skies: every set in the vocabulary, all six cube faces. Whole directory rather than
   // guessing face names off `extension`, so a set with an odd file still ships complete.
@@ -135,6 +138,12 @@ export async function productAssetManifest() {
   // than the asset catalog (they are a world, not palette vocabulary), so the release
   // manifest scrapes that module the same way it scrapes the level styles.
   for (const url of await anyAssetLiterals("src/archive-world1-manifest.ts")) wanted.add(url);
+  // Complete TVA rigs load only on the CubZ route; their source data is not JS boot code.
+  for (const url of await anyAssetLiterals("src/cubz-menu-scene.ts")) wanted.add(url);
+  // Native Impreza model payloads, their original textures and both source heightfields.
+  for (const url of await anyAssetLiterals("src/impreza-source.ts")) {
+    for (const asset of await modelManifestAssets(PUBLIC, url)) wanted.add(asset);
+  }
 
   // The front-door galleries are generated release assets rather than runtime vocabulary.
   // Claim the whole generated directory so `npm run assets:shelf-thumbnails` can add or
