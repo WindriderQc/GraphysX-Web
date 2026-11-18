@@ -160,6 +160,11 @@ type RecoveredPbrProfile = {
  * group, and geometry byte. Unlisted assets retain their exact legacy Phong path.
  */
 function recoveredPbrProfile(assetId: string | null, materialName: string): RecoveredPbrProfile | null {
+  if (assetId === "archive-flightx-airplane" || assetId === "archive-flightx-pipe") {
+    // MGR4 surface 9 retains the original 0.25 canopy alpha; use the existing glass path.
+    if (materialName.includes("canopy")) return { shading: "physical", roughness: .2, metalness: 0, opacity: .25 };
+    return { shading: "standard", roughness: .5, metalness: .08 };
+  }
   if ((assetId?.startsWith("ev3-driving-") || assetId?.startsWith("kidx-track3r-") || assetId?.startsWith("kidx-spike3r-"))
       && /trans_clear/i.test(materialName)) {
     return { shading: "standard", roughness: .35, metalness: 0, opacity: .18 };
