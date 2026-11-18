@@ -188,6 +188,8 @@ import {
   applyArchivePplShader,
   type ArchivePplSettings,
 } from "./archive-ppl-material";
+import { applyEnergyShader, updateEnergyShader, type EnergyShaderSettings } from "./energy-material";
+import { validateEnergyShader, validateModulateBehavior } from "../server/visual-effects.mjs";
 import {
   allAgentWorldSkies,
   resolveAgentWorldSky,
@@ -346,8 +348,8 @@ export type AgentWorldMaterial = {
   normalTexture: AgentWorldTexture | null;
   /** Strength applied uniformly to the normal map's X/Y channels. */
   normalScale: number;
-  /** Optional recovered shader translation; null keeps the platform PBR material. */
-  shader: ArchiveMeshlightSettings | ArchivePplSettings | null;
+  /** Optional shader extension; null keeps the platform PBR material. */
+  shader: ArchiveMeshlightSettings | ArchivePplSettings | EnergyShaderSettings | null;
 };
 
 export type AgentWorldSplinePath = {
@@ -457,6 +459,18 @@ export type AgentWorldLookAtBehavior = {
   targetId: string;
 };
 
+/** Multiply authored brightness without editing the document or accumulating frame drift. */
+export type AgentWorldModulateBehavior = {
+  id?: string;
+  type: "modulate";
+  property: "intensity" | "emissiveIntensity";
+  minimumFactor?: number;
+  maximumFactor?: number;
+  frequencyHz?: number;
+  phaseDegrees?: number;
+  startSeconds?: number;
+};
+
 export type AgentWorldFollowSplineBehavior = {
   id?: string;
   type: "follow-spline";
@@ -476,6 +490,7 @@ export type AgentWorldBehavior =
   | AgentWorldBobBehavior
   | AgentWorldOrbitBehavior
   | AgentWorldPulseBehavior
+  | AgentWorldModulateBehavior
   | AgentWorldLookAtBehavior
   | AgentWorldFollowSplineBehavior;
 
@@ -1336,6 +1351,10 @@ type ResolvedEntity = {
 const VALIDATED_BODY = Object.freeze({}) as PhysicsBodyHandle;
 
 type RuntimeEntity = {
+  visualMaterials: Array<{ material: MeshStandardMaterial; emissiveIntensity: number }>;
+  visualLights: Array<{ light: AmbientLight | DirectionalLight | PointLight; intensity: number }>;
+  emissionModulated: boolean;
+  lightModulated: boolean;
   flightPose?: FlightPose;
   /** Game effect, deliberately absent from authored/exported definitions. */
   slowdownFactor: number;
@@ -2733,6 +2752,10 @@ export class AgentWorldRuntime {
       object.userData.graphysxEntityId = definition.id;
     }
     const runtime: RuntimeEntity = {
+      visualMaterials: [],
+      visualLights: [],
+      emissionModulated: false,
+      lightModulated: false,
       slowdownFactor: 1,
       definition,
       object,
@@ -2973,6 +2996,7 @@ export class AgentWorldRuntime {
     const behaviorId = behavior.id?.trim() || `behavior-${String(++this.behaviorSequence).padStart(3, "0")}`;
     if (runtime.definition.behaviors.some((candidate) => candidate.id === behaviorId)) throw new Error(`Behavior id already exists on ${id}: ${behaviorId}`);
     runtime.definition.behaviors.push({ ...deepClone(behavior), id: behaviorId });
+    if (!this.validatingCommands) this.updateVisualEffects(runtime);
     return behaviorId;
   }
 
@@ -2981,6 +3005,7 @@ export class AgentWorldRuntime {
     const index = runtime.definition.behaviors.findIndex((behavior) => behavior.id === behaviorId);
     if (index < 0) throw new Error(`Unknown behavior on ${id}: ${behaviorId}`);
     const [removed] = runtime.definition.behaviors.splice(index, 1);
+    if (!this.validatingCommands) this.updateVisualEffects(runtime);
     if (removed.type === "keyframes" && removed.visibility && !runtime.definition.behaviors.some(behavior => behavior.type === "keyframes" && behavior.visibility)) runtime.object.visible = runtime.definition.visible;
     if (!runtime.definition.behaviors.some((behavior) => behavior.type === "flight")) runtime.flightPose = undefined;
   }
@@ -3525,6 +3550,7 @@ export class AgentWorldRuntime {
     // deterministic slice, exactly as it does a rigid body.
     for (const runtime of this.entities.values()) {
       const particles = findParticleSystem(runtime.object);
+      this.updateVisualEffects(runtime);
       findVoxelFace(runtime.object)?.update(deltaSeconds);
       findAgentRobot(runtime.object)?.update(deltaSeconds);
       if (particles) particles.update(deltaSeconds);
@@ -4137,6 +4163,12 @@ export class AgentWorldRuntime {
 
   private applyResolvedEntity(runtime: RuntimeEntity): void {
     if (this.validatingCommands) return;
+    // Restore bases before reconfiguring/caching. A native source slot may keep its material
+    // identity across patches; caching its last animated value would compound modulation.
+    if (runtime.emissionModulated) for (const entry of runtime.visualMaterials) entry.material.emissiveIntensity = entry.emissiveIntensity;
+    if (runtime.lightModulated) for (const entry of runtime.visualLights) entry.light.intensity = entry.intensity;
+    runtime.visualMaterials.length = 0;
+    runtime.visualLights.length = 0;
     const { definition, object } = runtime;
     if (definition.type === "agent") applyAgentAppearance(object, definition);
     object.visible = definition.visible;
@@ -4163,6 +4195,7 @@ export class AgentWorldRuntime {
     if (runtime.flightPose) {
       object.position.copy(runtime.flightPose.position); object.quaternion.copy(runtime.flightPose.rotation);
     }
+    const seenMaterials = new Set<MeshStandardMaterial>();
     object.traverse((child) => {
       // A scene entity can parent other scene entities. `traverse` still walks through those
       // roots, but their meshes belong to their own definitions and must keep their own look.
@@ -4201,15 +4234,46 @@ export class AgentWorldRuntime {
             ? { ...definition.material, color: "#ffffff", emissive: definition.material.color, emissiveIntensity: 1.15, texture: null }
             : definition.material);
         }
+        // Cache once on configuration/late asset readiness. Never traverse the world or
+        // allocate material lists every frame, and never include separately authored children.
+        for (const material of Array.isArray(child.material) ? child.material : [child.material]) {
+          if (!(material instanceof MeshStandardMaterial) || seenMaterials.has(material)) continue;
+          seenMaterials.add(material);
+          runtime.visualMaterials.push({ material, emissiveIntensity: material.emissiveIntensity });
+        }
       }
       if (definition.type !== "model" && (child instanceof AmbientLight || child instanceof DirectionalLight || child instanceof PointLight)) {
         child.color.set(definition.material.color);
         child.intensity = definition.intensity;
         if (child instanceof PointLight) child.distance = definition.distance;
         if (child instanceof DirectionalLight) child.castShadow = definition.castShadow;
+        runtime.visualLights.push({ light: child, intensity: definition.intensity });
       }
       if (child.userData.agentLightMarker === true) child.visible = definition.marker;
     });
+    this.updateVisualEffects(runtime);
+  }
+
+  private updateVisualEffects(runtime: RuntimeEntity): void {
+    let emissionFactor = 1, lightFactor = 1;
+    let emissionActive = false, lightActive = false;
+    for (const behavior of runtime.definition.behaviors) {
+      if (behavior.type !== "modulate") continue;
+      const elapsed = Math.max(0, this.elapsedSeconds - (behavior.startSeconds ?? 0));
+      const phase = (behavior.phaseDegrees ?? 0) * Math.PI / 180;
+      const mix = (Math.sin(elapsed * Math.PI * 2 * (behavior.frequencyHz ?? 0.5) + phase) + 1) * 0.5;
+      const minimum = behavior.minimumFactor ?? 0.75;
+      const factor = minimum + ((behavior.maximumFactor ?? 1.25) - minimum) * mix;
+      if (behavior.property === "intensity") { lightFactor *= factor; lightActive = true; }
+      else { emissionFactor *= factor; emissionActive = true; }
+    }
+    for (const entry of runtime.visualMaterials) {
+      if (emissionActive || runtime.emissionModulated) entry.material.emissiveIntensity = clamp(entry.emissiveIntensity * emissionFactor, 0, 100);
+      updateEnergyShader(entry.material, this.elapsedSeconds);
+    }
+    if (lightActive || runtime.lightModulated) for (const entry of runtime.visualLights) entry.light.intensity = clamp(entry.intensity * lightFactor, 0, 100);
+    runtime.emissionModulated = emissionActive;
+    runtime.lightModulated = lightActive;
   }
 
   private resolveEntity(source: AgentWorldEntityDefinition, allowUnresolvedLookAt = false): ResolvedEntity {
@@ -4991,7 +5055,7 @@ function applyAgentNormalTexture(material: MeshStandardMaterial, settings: Agent
   });
 }
 
-function applyAgentArchiveShader(material: MeshStandardMaterial, settings: ArchiveMeshlightSettings | ArchivePplSettings | null): void {
+function applyAgentArchiveShader(material: MeshStandardMaterial, settings: AgentWorldMaterial["shader"]): void {
   const previous = material.userData.graphysxAgentSpecularTexture instanceof Texture
     ? material.userData.graphysxAgentSpecularTexture as Texture
     : null;
@@ -4999,13 +5063,15 @@ function applyAgentArchiveShader(material: MeshStandardMaterial, settings: Archi
   // selecting the document's discriminated shader id.
   applyArchiveMeshlightShader(material, null, archiveMeshlightEmptySpecular);
   applyArchivePplShader(material, null);
+  if (settings?.id !== "energy") applyEnergyShader(material, null);
 
-  if (!settings || settings.id === "archive-ppl") {
+  if (!settings || settings.id === "archive-ppl" || settings.id === "energy") {
     material.userData.graphysxSpecularTextureToken = Symbol("no-agent-specular-texture");
     previous?.dispose();
     delete material.userData.graphysxAgentSpecularTexture;
     delete material.userData.graphysxSpecularTextureKey;
     if (settings?.id === "archive-ppl") applyArchivePplShader(material, settings);
+    if (settings?.id === "energy") applyEnergyShader(material, settings);
     return;
   }
 
@@ -5111,8 +5177,9 @@ function resolveMaterial(source?: Partial<AgentWorldMaterial>, base: AgentWorldM
   };
 }
 
-function resolveArchiveShader(source: AgentWorldMaterial["shader"] | undefined): ArchiveMeshlightSettings | ArchivePplSettings | null {
+function resolveArchiveShader(source: AgentWorldMaterial["shader"] | undefined): AgentWorldMaterial["shader"] {
   if (source === null || source === undefined) return null;
+  if (source.id === "energy") { validateEnergyShader(source); return deepClone(source); }
   if (source.id === "archive-ppl") {
     return {
       id: "archive-ppl",
@@ -5664,7 +5731,8 @@ function validateStableId(id: string, label: string): void {
 }
 
 function validateBehavior(behavior: AgentWorldBehavior, entities: Map<string, RuntimeEntity>, allowUnresolvedLookAt = false): void {
-  if (!behavior || !["spin", "bob", "orbit", "pulse", "look-at", "follow-spline", "keyframes", "flight"].includes(behavior.type)) throw new Error(`Unsupported behavior: ${String(behavior?.type)}`);
+  if (!behavior || !["spin", "bob", "orbit", "pulse", "modulate", "look-at", "follow-spline", "keyframes", "flight"].includes(behavior.type)) throw new Error(`Unsupported behavior: ${String(behavior?.type)}`);
+  if (behavior.type === "modulate") validateModulateBehavior(behavior);
   if (behavior.type === "flight" || behavior.type === "keyframes") validateMotionBehavior(behavior);
   if (behavior.type === "look-at" && !allowUnresolvedLookAt && !entities.has(behavior.targetId)) throw new Error(`Unknown look-at target: ${behavior.targetId}`);
   if (behavior.type === "follow-spline") {
