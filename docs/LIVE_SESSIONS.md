@@ -248,17 +248,18 @@ Refusals, each with a `code`:
 |---|---|---|
 | Not your operation | `undo-not-yours` | 403 |
 | Already undone | `undo-already-done` | 409 |
-| **A later operation touched the same entities** | `undo-unsafe` | 409 |
+| A later operation overlaps, the inverse would affect other objects, or the scene changed outside the session | `undo-unsafe` | 409 |
 | Cannot be inverted exactly | `undo-not-invertible` | 422 |
 | Older than the retained log | `undo-expired` | 410 |
 
-`undo-unsafe` is the case the design exists for. It carries `blockedBy` naming the actor,
-revision and operation in the way, so the UI can say *who* rather than "something went wrong".
+An overlap with a later session operation carries `blockedBy` with its actor, revision and
+operation id. An external write establishes a new revision boundary for undo. A cascade into
+an object added later is also refused.
 
-`undo-not-invertible` is a real answer, not a failure to try: an `update` that introduces a
-field absent before it cannot be reversed through the merge semantics `applyCommands` uses —
-no command removes a key — and approximating would leave the document subtly different while
-reporting success.
+An inverse qualifies only if applying it restores the original document. A removal restores
+its original entities and their affected joints when their order can be reproduced. A patch
+that adds a material or environment key may require a key removal that the merge commands
+cannot express. Those operations return `undo-not-invertible` when the actor asks to undo.
 
 Outside a live session, `LiveSessionClient.undo()` is the runtime's ordinary local undo,
 untouched.

@@ -10,6 +10,7 @@
 // forward.
 
 import { mkdtemp, rm } from "node:fs/promises";
+import assert from "node:assert/strict";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { startSceneStore } from "../server/scene-store.mjs";
@@ -176,6 +177,114 @@ try {
   const unknown = await undo(owner, "op-never-existed");
   check(results, "undoing an unknown operation is a clean refusal",
     unknown.status === 410 && unknown.body.code === "undo-expired", `status ${unknown.status}`);
+
+  // These fixtures isolate revisions and exercise the durable scene through HTTP.
+  const fixture = async (name, entities, environment = {}) => {
+    const route = `/scenes/${name}`;
+    const seeded = await founder.call("PUT", route, {
+      definition: { ...seedDefinition(name), entities, environment },
+    });
+    assert.equal(seeded.status, 201, seeded.body.error);
+    const opened = await founder.call("POST", "/sessions", { sceneName: name, owner: { id: "ada", label: "Ada" } });
+    assert.equal(opened.status, 201, opened.body.error);
+    const session = `/sessions/${opened.body.session.sessionId}`;
+    const ada = createActor(base, { credential: opened.body.credential });
+    const invitation = await ada.call("POST", `${session}/invites`, { role: "editor", ttlSeconds: 600 });
+    const joined = await createActor(base).call("POST", `${session}/join`, {
+      code: invitation.body.code, actor: { id: "bob", label: "Bob" },
+    });
+    assert.equal(joined.status, 201, joined.body.error);
+    const editor = createActor(base, { credential: joined.body.credential });
+    return {
+      submit: (opId, commands, actor = ada) => actor.call("POST", `${session}/ops`, { opId, commands }),
+      undo: id => ada.call("POST", `${session}/ops/${id}/undo`, {}),
+      read: async () => (await founder.call("GET", route)).body,
+      external: commands => founder.call("POST", `${route}/changes`, { commands, actor: "outside" }),
+      editor,
+    };
+  };
+  const box = (id, values = {}) => ({ id, type: "box", label: id, ...values });
+  const update = (id, patch) => ({ op: "update", id, patch });
+  const remove = id => ({ op: "remove", id });
+  async function expectUnchangedAfterRefusal(world, id, status, code) {
+    const before = await world.read();
+    const refusal = await world.undo(id);
+    assert.equal(refusal.status, status, JSON.stringify(refusal.body));
+    assert.equal(refusal.body.code, code);
+    assert.deepEqual(await world.read(), before, "an undo refusal must preserve both revision and document");
+  }
+
+  const externalWorld = await fixture("undo-external-cut", [box("crate")]);
+  assert.equal((await externalWorld.submit("rename", [update("crate", { label: "Ada" })])).status, 201);
+  assert.equal((await externalWorld.external([update("crate", { label: "Outside" })])).status, 200);
+  await expectUnchangedAfterRefusal(externalWorld, "rename", 409, "undo-unsafe");
+  assert.equal((await externalWorld.submit("after-cut", [update("crate", { label: "Ada again" })])).status, 201);
+  assert.equal((await externalWorld.undo("after-cut")).status, 201);
+  assert.equal((await externalWorld.read()).definition.entities[0].label, "Outside");
+  check(results, "an external revision bars older undo and preserves the new baseline", true);
+
+  const childWorld = await fixture("undo-later-descendants", []);
+  assert.equal((await childWorld.submit("parent", [spawnCommand("parent")])).status, 201);
+  assert.equal((await childWorld.submit("bob-child", [
+    { op: "spawn", entity: box("middle", { parentId: "parent" }) },
+    { op: "spawn", entity: box("child", { parentId: "middle" }) },
+  ], childWorld.editor)).status, 201);
+  await expectUnchangedAfterRefusal(childWorld, "parent", 409, "undo-unsafe");
+  assert.equal((await childWorld.submit("independent", [spawnCommand("separate")])).status, 201);
+  assert.equal((await childWorld.submit("bob-independent", [spawnCommand("other")], childWorld.editor)).status, 201);
+  assert.equal((await childWorld.undo("independent")).status, 201);
+  assert.ok((await childWorld.read()).definition.entities.some(entity => entity.id === "other"));
+  check(results, "undo refuses to cascade into later descendants and allows independent work", true);
+
+  const nestedWorld = await fixture("undo-new-nested-field", [box("crate", { material: { color: "#123456" } })]);
+  assert.equal((await nestedWorld.submit("paint", [update("crate", { material: { roughness: 0.25 } })])).status, 201);
+  await expectUnchangedAfterRefusal(nestedWorld, "paint", 422, "undo-not-invertible");
+  check(results, "an undo that cannot remove a nested material key is refused atomically", true);
+
+  const environmentWorld = await fixture("undo-new-environment-field", []);
+  assert.equal((await environmentWorld.submit("light", [
+    { op: "set-environment", environment: { background: "#123456" } },
+  ])).status, 201);
+  await expectUnchangedAfterRefusal(environmentWorld, "light", 422, "undo-not-invertible");
+  check(results, "an undo that cannot remove the new environment key is refused atomically", true);
+
+  const mesh = { positions: Array(4096 * 3).fill(0), indices: [0, 1, 2] };
+  mesh.positions[3] = 1;
+  mesh.positions[7] = 1;
+  const meshes = Array.from({ length: 8 }, (_, i) => ({ id: `mesh-${i}`, type: "mesh", mesh }));
+  meshes[7].parentId = "parent";
+  const meshWorld = await fixture("commit-cascade-mesh", [...meshes.slice(0, 7), box("parent"), meshes[7]]);
+  const meshBefore = await meshWorld.read();
+  const batch = [
+    remove("parent"),
+    { op: "spawn", entity: { id: "new-mesh", type: "mesh" }, meshBuild: { kind: "extrude", profile: [[0, 0], [1, 0], [0, 1]], depth: 1 } },
+  ];
+  const committed = await meshWorld.submit("mesh-replacement", batch);
+  assert.equal(committed.status, 201, JSON.stringify(committed.body));
+  const meshAfter = await meshWorld.read();
+  assert.equal(meshAfter.revision, meshBefore.revision + 1);
+  assert.deepEqual(meshAfter.definition.entities.map(entity => entity.id), [...meshes.slice(0, 7).map(entity => entity.id), "new-mesh"]);
+  const replayed = await meshWorld.submit("mesh-replacement", batch);
+  assert.equal(replayed.status, 200, JSON.stringify(replayed.body));
+  assert.deepEqual(replayed.body, { ...committed.body, duplicate: true });
+  assert.deepEqual(await meshWorld.read(), meshAfter);
+  assert.equal((await meshWorld.undo("mesh-replacement")).status, 201);
+  assert.deepEqual((await meshWorld.read()).definition, meshBefore.definition);
+  check(results, "mesh replacement at capacity commits once, replays its receipt and undoes exactly", true);
+
+  const jointWorld = await fixture("undo-cascaded-joint", [
+    box("base", { physics: { mode: "static" } }),
+    box("body", { physics: { mode: "dynamic", mass: 1 } }),
+  ]);
+  assert.equal((await jointWorld.submit("add-joint", [
+    { op: "add-joint", joint: { id: "hinge", type: "fixed", bodyA: "body", bodyB: "base" } },
+  ])).status, 201);
+  const jointBefore = await jointWorld.read();
+  assert.equal((await jointWorld.submit("remove-body", [remove("body")])).status, 201);
+  assert.deepEqual((await jointWorld.read()).definition.joints, []);
+  assert.equal((await jointWorld.undo("remove-body")).status, 201);
+  assert.deepEqual((await jointWorld.read()).definition, jointBefore.definition);
+  check(results, "undo of body removal restores its original joint and the exact document", true);
 } catch (error) {
   check(results, "smoke-live-undo threw", false, error instanceof Error ? error.stack : String(error));
 } finally {
