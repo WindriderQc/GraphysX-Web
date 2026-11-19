@@ -142,6 +142,7 @@ try {
   await page.click('.nacre-load');await ready(page);await phase(page,'complete');
   await page.waitForFunction(()=>JSON.parse(window.render_game_to_text()).view===2);
   await advance(page,0);
+  await page.getByRole('button',{name:'Rejouer la mission'}).waitFor();
   await page.screenshot({path:path.join(out,'nacre-reopened.png')});
   assert.deepEqual(await page.evaluate(()=>['nacre-door-left','nacre-door-right'].map(id=>window.__GRAPHYSX_QUEST3__.host.world.getEntityObject(id).position.x)),[-9.5,9.5]);
   assert.equal(await page.evaluate(()=>window.__GRAPHYSX_QUEST3__.holding),false);
@@ -320,7 +321,7 @@ try {
   const status=recovery.locator('.nacre-status [role=status]');
   await retry.waitFor({state:'visible'});
   assert.match(await status.innerText(),/élément essentiel/);
-  assert.equal(await recovery.locator('.nacre-primary').isDisabled(),true);
+  assert.equal(await recovery.getByRole('button',{name:'Chargement interrompu'}).isDisabled(),true);
   await recovery.screenshot({path:path.join(out,'nacre-loading-error.png')});
   await recovery.unroute(station,failAsset);
   await retry.click();

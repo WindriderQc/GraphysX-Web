@@ -5620,3 +5620,4 @@ Request: "tu me refait un passage pour améliorer encore nos capacités GraphysX
 
 - Read the saved station from browser storage on mount and resume the finished mission at the belvedere. The browser regression closes the original tab and opens a new one before resuming.
 - Report required asset and render preparation failures with a retry action. Keep the mission available when optional decoration is missing.
+- Chromium on the RTX 5070 Ti passed the full NACRE smoke against the local Vite server, including desktop, touch, synthetic XR and forced WebGL context restoration. An independent persistent-profile test closed the entire browser, reopened it and restored the belvedere. The supplied game client passed under the same hardware launch configuration.
