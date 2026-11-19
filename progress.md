@@ -5615,3 +5615,9 @@ Request: "tu me refait un passage pour améliorer encore nos capacités GraphysX
 
 - Final FlightX head aa469adc7d1a7e0eeebae4cb54c3aacdcbda6fa9 passes the complete default local gate: all130 checks,1352 Node passes and one conditional POSIX skip on Windows. Three optional hardware-GPU receptions are explicitly not run. Head and clean tree remain unchanged through the gate; receipts are retained in output/flightx/full-gate-final*. FlightX, CubZ, Impreza and DNA desktop/touch journeys pass; native FlightX and CubZ hinge/pivot captures were inspected.
 - Published main advanced to aba51bb with shared energy/material modulation while that gate was running. Preserve both progress sections and integrate the published changes into this owned branch. Qualify the combined shared runtime with another complete default local gate before release; the earlier full pass remains evidence for aa469ad only. The native archive and stale primary checkout remain untouched.
+
+## 2026-11-19 - NACRE checkpoint and loading recovery
+
+- Read the saved station from browser storage on mount and resume the finished mission at the belvedere. The browser regression closes the original tab and opens a new one before resuming.
+- Report required asset and render preparation failures with a retry action. Keep the mission available when optional decoration is missing.
+- Chromium on the RTX 5070 Ti passed the full NACRE smoke against the local Vite server, including desktop, touch, synthetic XR and forced WebGL context restoration. An independent persistent-profile test closed the entire browser, reopened it and restored the belvedere. The supplied game client passed under the same hardware launch configuration.
