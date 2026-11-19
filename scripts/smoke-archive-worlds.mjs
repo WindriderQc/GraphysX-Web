@@ -19,6 +19,7 @@ const open = async (id, worldId) => {
   if (id === "archive-cubz-tracks") await page.click('[data-collection="lab"]');
   await page.click(`[data-scene-id="${id}"]`);
   await page.waitForFunction(id => window.__GRAPHYSX__.state().world.id === id, worldId);
+  if (id === "archive-flightx") await page.click("[data-flightx-studio]");
   await page.waitForSelector(".gx-archive-workbench");
 };
 const meshes = async id => page.evaluate(id => {

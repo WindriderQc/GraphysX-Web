@@ -79,7 +79,9 @@ features. These worlds use the same Studio, world API and pause/step clock as cu
 
 FlightX loads its [original TVM airplane and pipe](docs/FLIGHTX_REVIVAL.md), with six
 source textures, Atmel/2011 poses and SDK-informed forward flight. Open `?app=flightx`
-to inspect, fly, edit and save the scene in the Studio.
+for [four modern training forms](docs/FLIGHTX_MODES.md): free flight, ordered gates,
+timed looping and three laps, with local records and a Studio handoff. The original
+source workbench remains at `?app=flightx&view=source`.
 
 Use Node.js 22 (the CI version). The browser product needs no database, model provider,
 hardware or scene-store service to start:

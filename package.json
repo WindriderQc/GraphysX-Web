@@ -20,6 +20,7 @@
     "smoke:cubz-menu": "node scripts/smoke-cubz-menu.mjs",
     "smoke:impreza": "node scripts/smoke-impreza.mjs",
     "smoke:flightx": "node scripts/smoke-flightx.mjs",
+    "smoke:flightx-modes": "node scripts/smoke-flightx-modes.mjs",
     "audit:legacy": "node scripts/audit-legacy-revival.mjs",
     "assets:cuisine": "node scripts/vendor-archive-cuisine.mjs && node scripts/build-asset-catalog.mjs",
     "assets:maison": "node scripts/vendor-archive-cuisine.mjs ../GraphysX maison && node scripts/build-asset-catalog.mjs",

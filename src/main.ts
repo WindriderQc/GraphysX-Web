@@ -33,6 +33,7 @@ import type { FirstCreationApplication } from "./first-creation-app";
 import type { DnaCreationApplication } from "./dna-creation-app";
 import type { CubzMenuApplication } from "./cubz-menu-app";
 import type { ImprezaApplication } from "./impreza-app";
+import type { FlightxApplication } from "./flightx-app";
 import type { SceneBrowser } from "./scene-browser";
 import type { LiveAgentPresenceController, LiveAgentPresenceState } from "./live-agent-presence";
 import type { LiveMissionRuntimeController, LiveMissionRuntimeState } from "./live-mission-runtime";
@@ -484,7 +485,7 @@ if (appParam === "quest3") {
      * Keyed by id rather than a boolean because this is the seam a second application uses, not
      * a special case for EV3.
      */
-    let appSurface: TenWorkshopApplication | KidxApplication | LlmXApplication | DiskxApplication | EcosystemApplication | NetxApplication | IslandApplication | FirstCreationApplication | DnaCreationApplication | CubzMenuApplication | ImprezaApplication | null = null;
+    let appSurface: TenWorkshopApplication | KidxApplication | LlmXApplication | DiskxApplication | EcosystemApplication | NetxApplication | IslandApplication | FirstCreationApplication | DnaCreationApplication | CubzMenuApplication | ImprezaApplication | FlightxApplication | null = null;
     // Application surfaces own the whole play viewport. Keep this separate from the lazy
     // surface module so later host chrome (notably the asynchronously mounted scene browser)
     // can respect the route before the application's import has finished.
@@ -525,6 +526,34 @@ if (appParam === "quest3") {
             sceneBrowser?.setEnabled(!nestorBlockedByLiveSession());
             host.applyEnvironment();
             enterBrowsedEditor();
+          });
+        }).catch((error: unknown) => showStartupError(root, error));
+        return true;
+      }
+      if (id === "flightx" && new URLSearchParams(location.search).get("view") !== "source") {
+        showroomEnvironment?.(); showroomEnvironment = null;
+        void import("./flightx-app").then(({ mountFlightx }) => {
+          appSurface = mountFlightx(root, host, () => {
+            appSurface?.dispose(); appSurface = null; applicationOpen = false;
+            window.location.assign(import.meta.env.BASE_URL);
+          }, () => {
+            appSurface?.dispose(); appSurface = null; applicationOpen = false;
+            returnFromApplicationStudio = true;
+            const studioLocation = new URL(import.meta.env.BASE_URL, window.location.href);
+            studioLocation.searchParams.set("host", "editor");
+            if (explicitStore) studioLocation.searchParams.set("store", explicitStore);
+            history.replaceState(null, "", studioLocation.pathname + studioLocation.search);
+            sceneBrowser?.setEnabled(!nestorBlockedByLiveSession());
+            host.applyEnvironment(); enterBrowsedEditor();
+            if (host.world.getClock().worldId === "archive-flightx") void import("./archive-workbench").then(({ mountArchiveWorkbench }) => {
+              if (host.mode === "editor" && host.world.getClock().worldId === "archive-flightx") mountArchiveWorkbench(root, host, "flightx");
+            });
+            void host.editorReady().then(editor => {
+              if (host.mode === "editor" && host.api.query({ ids: ["flight-plane-model"] }).length) {
+                if (matchMedia("(max-width: 700px)").matches) editor?.showViewport();
+                else editor?.selectEntity("flight-plane-model");
+              }
+            });
           });
         }).catch((error: unknown) => showStartupError(root, error));
         return true;
@@ -1166,10 +1195,14 @@ if (appParam === "quest3") {
               { world: "common-room", id: "archive-common-room", label: "Common Room", summary: "La coque détaillée de room.tvm et ses textures DDS diffuse et normale. Une visite adaptée au moteur actuel.", meta: "180 sommets · 250 triangles · textures sources · caméra de visite adaptée" },
               { world: "notes", id: "archive-notes", label: "Notes 3D · CubX", summary: "Le bloc spatial de 50 plaques et son ajout séquentiel. Le gestionnaire de texte n’a jamais été retrouvé.", meta: "Composition native · 50 emplacements · ajout, annulation et reprise dans le Studio" },
               { world: "cubz", id: "archive-cubz-tracks", label: "CubZ · étude des pistes TVA", summary: "L’ancienne étude : sept rotations et trois charnières sur des volumes de remplacement. Le menu complet est dans Archives.", meta: "Étude de laboratoire · clés sources · géométrie et pivots adaptés" },
-              { world: "flightx", id: "archive-flightx", label: "FlightX · l’avion retrouvé", summary: "L’avion TVM original, ses 48 groupes et le pipe à sa place C++. Compare la pose source, prends les commandes, puis sauvegarde dans le Studio.", meta: "11 168 triangles · six textures BMP · pose C++ et vol de visite · commandes adaptées" },
+              { world: "flightx", id: "archive-flightx", label: "FlightX · l’avion retrouvé", summary: "Le biplan TVM original : vol libre, portes, chrono ou trois tours. Les parcours actuels restent distincts de la composition C++ et tout s’ouvre dans le Studio.", meta: "Quatre modes actuels · modèles et textures d’origine · source C++ accessible" },
             ] as const).map((entry) => ({
               ...entry,
               open: async () => {
+                if (entry.world === "flightx") {
+                  if (!nestorBlockedByLiveSession()) openApplication("flightx");
+                  return;
+                }
                 const [{ buildArchiveWorld }, { mountArchiveWorkbench }] = await Promise.all([import("./archive-worlds"), import("./archive-workbench")]);
                 if (nestorBlockedByLiveSession()) return;
                 const result = host.api.create(buildArchiveWorld(entry.world));
