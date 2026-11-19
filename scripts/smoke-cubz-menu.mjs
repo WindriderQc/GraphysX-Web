@@ -1,3 +1,4 @@
+import { enterCompleteStudio } from "./studio-smoke-helpers.mjs";
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -195,7 +196,7 @@ try {
     const world = window.__GRAPHYSX_HOST__.world;
     return window.__GRAPHYSX__.query({ tag: "cubz-source-mesh" }).map(entity => { const object = world.getEntityObject(entity.id); object.updateWorldMatrix(true, false); return [entity.id, object.matrixWorld.toArray()]; });
   });
-  await page.click("[data-cubz-studio]");
+  await page.click("[data-cubz-studio]"); await enterCompleteStudio(page);
   await page.waitForFunction(() => window.__GRAPHYSX_HOST__.mode === "editor");
   await page.waitForSelector(".gx-ed-toolbar"); await draw(page);
   assert.equal(await page.locator(".gx-cubz").count(), 0);
@@ -246,7 +247,7 @@ try {
   });
   await page.waitForFunction(() => JSON.parse(window.render_game_to_text()).application?.phase === "unavailable");
   const foreign = await page.evaluate(() => window.__GRAPHYSX__.exportDocument());
-  await page.click("[data-cubz-studio]"); await page.waitForSelector(".gx-ed-toolbar");
+  await page.click("[data-cubz-studio]"); await enterCompleteStudio(page); await page.waitForSelector(".gx-ed-toolbar");
   assert.deepEqual(await page.evaluate(() => window.__GRAPHYSX__.exportDocument()), foreign, "replacing the scene keeps its identity and authored fields when entering Studio");
   assert.deepEqual(errors, [], "desktop: no browser, shader, HTTP or transport errors");
   receipts.push({ device: "desktop", choices: 8, mechanics: mechanicalErrors, studioMaxMatrixError: Math.max(...differences), studioHoverContrast: studioContrast, errors });
@@ -317,7 +318,7 @@ try {
       await page.locator('[data-cubz-choice="0"]').waitFor();
       await page.waitForFunction(() => Boolean(window.__GRAPHYSX_SCENE_BROWSER__));
       assert.equal(await page.evaluate(() => window.__GRAPHYSX_SCENE_BROWSER__.element.hidden), true, "store chrome is ceded to the menu");
-      await page.click("[data-cubz-studio]"); await page.waitForSelector(".gx-ed-toolbar");
+      await page.click("[data-cubz-studio]"); await enterCompleteStudio(page); await page.waitForSelector(".gx-ed-toolbar");
       assert.equal(await page.evaluate(() => window.__GRAPHYSX_SCENE_BROWSER__.element.hidden), false, "Studio restores an already-mounted store browser");
       assert.equal(new URL(page.url()).searchParams.get("store"), store.url, "explicit store address survives the Studio route");
       await capture(page, "cubz-studio-with-store");

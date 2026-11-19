@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { enterCompleteStudio } from "./studio-smoke-helpers.mjs";
 import { SMOKE_TIMEOUT, applySmokeTimeout, launchSmokeBrowser } from "./smoke-harness.mjs";
 
 const BASE = process.env.SMOKE_BASE || "http://127.0.0.1:4188/";
@@ -301,6 +302,7 @@ try {
   await play.screenshot({ path: path.join(ART, "top20-browse-search.png") });
   await play.fill(".gx-browse .gx-shelf-search", "physics sketchbook");
   await play.locator('.gx-browse [data-shelf-key]:visible').click();
+  await enterCompleteStudio(play);
   await play.waitForSelector('.gx-ed-toolbar');
   // Dispatch the actual exit button in the same task as the edit, before its 650ms debounce.
   await play.evaluate(() => {
@@ -329,6 +331,7 @@ try {
   });
   await play.reload({ waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
   await play.click('.gx-welcome .gx-go-editor');
+  await enterCompleteStudio(play);
   await play.waitForSelector('.gx-ed-recover:not([hidden])');
   await selectDraftForRecovery(play, out.quickExit.key);
   await play.click('.gx-ed-recover');

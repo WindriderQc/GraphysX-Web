@@ -85,7 +85,7 @@ export function mountFirstCreation(root: HTMLElement, host: PlatformHost, onExit
       button.setAttribute("aria-pressed", String(button.dataset.tone === tone?.id)));
     status.textContent = notice || (slot ? "Enregistrée dans ce navigateur." : "Ta scène sera enregistrée dans ce navigateur.");
     editor.hidden = !slot || dirty;
-    if (slot) editor.href = import.meta.env.BASE_URL + "?host=editor&localScene=" + encodeURIComponent(slot.name);
+    if (slot) editor.href = import.meta.env.BASE_URL + "?host=editor&studio=simple&paused=1&localScene=" + encodeURIComponent(slot.name);
     saveButton.textContent = slot?.name === nameInput.value.trim() ? "Mettre à jour" : "Enregistrer";
     motionButton.textContent = api.state()?.paused ? "Animer" : "Pause";
   };

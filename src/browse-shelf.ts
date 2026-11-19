@@ -45,6 +45,7 @@ export type BrowseShelfOptions = {
   featuredComposed?: { id: string; eyebrow: string; badges: readonly string[] };
   /** Called after a starter is loaded, so the caller can take the showroom down and open the editor. */
   onOpen?: (starterId: string) => void;
+  onOpenPersonalScenes?: () => void;
   /** Composed archive scenes, listed above the starters because they are the recovered ones. */
   composed?: readonly ComposedSceneEntry[];
   initialCollection?: ContentCollection;
@@ -77,6 +78,13 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
   close.title = "Revenir à GraphysX";
   close.setAttribute("aria-label", "Fermer les mondes et revenir à GraphysX");
   head.append(title, close);
+  if (options.onOpenPersonalScenes) {
+    const personal = document.createElement("button"); personal.type = "button"; personal.className = "gx-browse-close gx-browse-personal";
+    personal.textContent = "Mes créations ↗";
+    personal.title = "Retrouver mes scènes enregistrées dans ce navigateur";
+    personal.addEventListener("click", () => { dispose(); options.onOpenPersonalScenes?.(); });
+    head.insertBefore(personal, close);
+  }
 
   const blurb = document.createElement("p");
   blurb.className = "gx-browse-blurb";
@@ -375,6 +383,7 @@ ${SHELF_PERSONALIZATION_CSS}
 .gx-browse-badge{padding:3px 7px;border:1px solid rgba(79,208,230,.3);border-radius:999px;
   background:rgba(79,208,230,.08);color:var(--gx-accent);font-size:9px;font-weight:650;letter-spacing:.05em}
 @media (max-width:640px){.gx-browse{padding:12px}.gx-browse-card{padding:16px;max-height:92vh}
+  .gx-browse-head h2{flex-basis:100%;font-size:17px;letter-spacing:.02em}.gx-browse-head .gx-browse-close{flex:1}
   .gx-browse-list{grid-template-columns:1fr}.gx-browse-summary{display:none}
   .gx-browse-row--featured{grid-template-columns:1fr;gap:8px}.gx-browse-featured-copy{padding:2px 4px 5px}
   .gx-browse-row--featured .gx-browse-summary{display:block}}

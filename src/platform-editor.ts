@@ -1,5 +1,8 @@
 import { Box3, MathUtils, Object3D, Raycaster, Vector2, Vector3, type PerspectiveCamera, type Scene, type WebGLRenderer } from "three";
 import { LOCAL_SCENE_PREFIX } from "./local-scenes";
+import { LEGACY_EDITOR_DRAFT_KEY, EDITOR_DRAFT_PREFIX, EDITOR_SLOT_INDEX_KEY, readEditorDraft, browserSceneStorage, readPersonalScene, savePersonalScene, datePersonalScene, type EditorDraft, type PersonalSceneEntry } from "./personal-scenes";
+import { mountSceneSaveDialog } from "./personal-scenes-view";
+import { mountSimpleStudio, type SimpleStudio, type StudioAction } from "./studio-simple";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { TransformControls, type TransformControlsMode } from "three/examples/jsm/controls/TransformControls.js";
 import type { AgentWorldRuntime } from "./agent-world-runtime";
@@ -39,6 +42,10 @@ export interface PlatformEditorDeps {
   onEnvironmentChanged?: () => void;
   /** Leave the editor and return to the showroom. Omit to hide the exit control. */
   onExit?: () => void;
+  /** Open the page's personal scene library; this does not change world authority. */
+  onOpenPersonalScenes?: () => void;
+  onLocalSceneSaved?: (name: string) => void;
+  experience?: "simple" | "complete";
 }
 
 const round = (n: number): number => Math.round(n * 1000) / 1000;
@@ -102,24 +109,8 @@ const SHORTCUTS: ReadonlyArray<[string, string]> = [
   ["Esc", "Close a panel, else deselect"],
 ];
 
-const LEGACY_EDITOR_DRAFT_KEY = "graphysx.editor.draft.v1";
-const EDITOR_DRAFT_PREFIX = "graphysx.editor.draft.v2.";
-const EDITOR_SLOT_INDEX_KEY = "graphysx.editor.slots.v1";
-
-interface EditorDraft {
-  savedAt: string;
-  definition: AgentWorldDefinition;
-}
-
 function newEditorDraftKey(): string {
   return EDITOR_DRAFT_PREFIX + crypto.getRandomValues(new Uint32Array(4)).join("-");
-}
-
-function readEditorDraft(raw: string | null): EditorDraft | null {
-  try {
-    const draft = JSON.parse(raw ?? "null") as EditorDraft | null;
-    return draft?.definition?.id && Array.isArray(draft.definition.entities) && Number.isFinite(Date.parse(draft.savedAt)) ? draft : null;
-  } catch { return null; }
 }
 
 /** One glyph per entity type so a scene tree row is scannable without reading the id. */
@@ -229,6 +220,10 @@ export class PlatformEditor {
   private down: { x: number; y: number } | null = null;
   private addCounter = 0;
   private enabled = true;
+  private experience: "simple" | "complete" = new URLSearchParams(window.location.search).get("studio") === "simple" ? "simple" : "complete";
+  private simpleStudio!: SimpleStudio;
+  private namedScene: PersonalSceneEntry | null = null;
+  private closeSaveDialog: (() => void) | null = null;
 
   /** Remembered in memory for the session — the drawer reopens on the tab you left. */
   private libraryTab: LibraryTab = "prefabs";
@@ -329,6 +324,7 @@ export class PlatformEditor {
   private readonly libraryTabButtons = new Map<LibraryTab, HTMLButtonElement>();
 
   constructor(private readonly deps: PlatformEditorDeps) {
+    this.experience = deps.experience ?? this.experience;
     this.gizmo = new TransformControls(deps.camera, deps.renderer.domElement);
     this.gizmo.setMode("translate");
     this.gizmo.setSpace(this.gizmoSpace);
@@ -398,7 +394,20 @@ export class PlatformEditor {
     this.inspector = ui.inspector;
     this.libraryChips = ui.libraryChips;
     deps.container.append(ui.style, ...this.roots);
+    this.simpleStudio = mountSimpleStudio(deps.container, {
+      action: action => this.simpleAction(action), select: id => this.select(id),
+      patch: (id, patch) => this.patchEntity(id, patch), mode: mode => this.setMode(mode),
+      add: kind => this.addPrimitive(kind), canExit: true,
+    });
     document.documentElement.dataset.gxEditor = "visible";
+    const localName = new URLSearchParams(window.location.search).get("localScene");
+    if (localName) {
+      try {
+        const storage = browserSceneStorage(), entry = storage ? readPersonalScene(storage, LOCAL_SCENE_PREFIX + localName) : null;
+        if (entry?.definition?.id === deps.api.state()?.world.id) this.namedScene = entry;
+      } catch { /* Opening a document never depends on optional date metadata. */ }
+    }
+    this.applyExperience();
     this.setMobilePanel("viewport");
     this.renderLibrary();
     this.setLevelTool(this.levelTool);
@@ -424,6 +433,8 @@ export class PlatformEditor {
   setVisible(visible: boolean): void {
     if (!visible) this.flushDraft();
     this.enabled = visible;
+    if (!visible) this.closeSaveDialog?.();
+    this.applyExperience();
     document.documentElement.dataset.gxEditor = visible ? "visible" : "hidden";
     const display = visible ? "" : "none";
     for (const root of this.roots) root.style.display = display;
@@ -486,6 +497,7 @@ export class PlatformEditor {
     this.refresh();
     if (this.selectedId && window.matchMedia("(max-width: 700px)").matches) {
       this.setMobilePanel("inspector");
+      if (this.experience === "simple") this.simpleStudio?.showInspector();
     }
   }
 
@@ -493,7 +505,83 @@ export class PlatformEditor {
   selectEntity(id: string | null): void { this.select(id); }
 
   /** Application flight/inspection controls can reveal the 3D view on compact layouts. */
-  showViewport(): void { this.setMobilePanel("viewport"); }
+  showViewport(): void { this.setMobilePanel("viewport"); this.simpleStudio?.showViewport(); }
+
+  /** Human entry points choose the simple surface; explicit complete URLs remain supported. */
+  showStudio(): void {
+    let preference = new URLSearchParams(window.location.search).get("studio");
+    try { preference ??= window.localStorage.getItem("graphysx.studio.experience.v1"); } catch { /* UI preferences are optional. */ }
+    this.setExperience(preference === "complete" || preference === "advanced" ? "complete" : "simple");
+  }
+
+  setExperience(experience: "simple" | "complete", remember = false): void {
+    this.experience = experience;
+    if (remember) try { window.localStorage.setItem("graphysx.studio.experience.v1", experience); } catch { /* Keep editing if preferences cannot be written. */ }
+    if (experience === "simple") { this.setLevelsOpen(false); this.setMediaDialogOpen(false); this.stopMediaPreview(); }
+    this.applyExperience(); this.refresh("force");
+    if (this.enabled) queueMicrotask(() => this.deps.container.querySelector<HTMLElement>(experience === "simple" ? ".gx-studio-simple h1" : ".gx-ed-toolbar button")?.focus());
+  }
+
+  uiState(): { experience: string; savedName: string | null; dirty: boolean } {
+    return { experience: this.experience, savedName: this.namedScene?.name ?? null, dirty: this.dirty };
+  }
+
+  private applyExperience(): void {
+    if (this.enabled) document.documentElement.dataset.gxStudio = this.experience;
+    else delete document.documentElement.dataset.gxStudio;
+    this.simpleStudio?.setVisible(this.enabled && this.experience === "simple");
+  }
+
+  /** Re-read after flushing: a draft written by this tab must not be reopened stale. */
+  openPersonalScene(entry: PersonalSceneEntry): string | null {
+    if (!this.flushDraft()) return "Le navigateur ne peut pas garder tes modifications actuelles. Exporte-les avant d’ouvrir une autre scène.";
+    let fresh: PersonalSceneEntry | null = null;
+    try { const storage = browserSceneStorage(); fresh = storage ? readPersonalScene(storage, entry.key) : null; } catch { /* Report a recoverable read failure below. */ }
+    if (!fresh || fresh.raw !== entry.raw) return "Cette sauvegarde a changé. Actualise Mes créations avant de l’ouvrir.";
+    if (!fresh.definition) return "Cette sauvegarde est illisible. Tu peux encore exporter ses données.";
+    const definition = fresh.definition;
+    if (!this.openEditorDocument(() => this.deps.api.load(definition), fresh.kind === "draft" ? "Brouillon repris" : "Scène ouverte", fresh.kind === "draft" ? { key: fresh.key, raw: fresh.raw } : undefined)) {
+      return this.toolbarNotice || "La scène n’a pas pu être ouverte.";
+    }
+    this.namedScene = fresh.kind === "scene" ? fresh : null;
+    this.deps.api.pause(true); this.refresh("force");
+    return null;
+  }
+
+  private simpleAction(action: StudioAction): void {
+    switch (action) {
+      case "undo": this.deps.api.undo(); this.select(null); break;
+      case "redo": this.deps.api.redo(); this.select(null); break;
+      case "play": this.deps.api.pause(!this.deps.api.state()?.paused); this.refresh("skip"); break;
+      case "step": this.deps.api.step(); this.refresh(); break;
+      case "frame": this.focusSelection(); break;
+      case "duplicate": this.duplicateSelected(); break;
+      case "remove": this.removeSelected(); break;
+      case "import": this.importSceneFile(); break;
+      case "export": this.exportScene(); break;
+      case "complete": this.setExperience("complete", true); break;
+      case "my-scenes": this.flushDraft(); this.deps.onOpenPersonalScenes?.(); break;
+      case "exit":
+        if (!this.flushDraft() && !window.confirm("Le navigateur ne peut pas garder ton brouillon. Exporte ton travail avant de quitter. Quitter quand même ?")) return;
+        if (this.deps.onExit) this.deps.onExit(); else window.location.assign(import.meta.env.BASE_URL);
+        break;
+      case "save": this.saveSimpleScene(); break;
+    }
+  }
+
+  private saveSimpleScene(): void {
+    this.closeSaveDialog?.();
+    const expected = this.namedScene, signature = this.documentSignature();
+    this.closeSaveDialog = mountSceneSaveDialog(this.deps.container, {
+      name: expected?.name ?? this.deps.api.exportDocument()?.label ?? "Ma scène",
+      onSave: name => signature !== this.documentSignature()
+        ? { ok: false, reason: "scene", error: "La scène a changé pendant l’ouverture de cette fenêtre. Ferme-la puis choisis Enregistrer à nouveau." }
+        : savePersonalScene(this.deps.api, browserSceneStorage(), name, expected),
+      onSaved: entry => {
+        this.namedScene = entry; this.rememberSlot(entry.name); this.markSaved("Enregistrée : " + entry.name); this.deps.onLocalSceneSaved?.(entry.name); this.refresh("force");
+      },
+    });
+  }
 
   private syncGizmo(): void {
     const accepted = this.deps.api.state()?.selectedIds ?? [];
@@ -532,6 +620,13 @@ export class PlatformEditor {
   private readonly onKeyDown = (event: KeyboardEvent): void => {
     if (!this.enabled) return;
     const key = event.key.toLowerCase();
+    if (this.experience === "simple" && (event.ctrlKey || event.metaKey) && key === "s") {
+      event.preventDefault();
+      // Commit the current field before capturing the document to save.
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+      this.saveSimpleScene();
+      return;
+    }
     if ((event.ctrlKey || event.metaKey) && key === "k") {
       event.preventDefault();
       this.toggleCommandPalette();
@@ -594,6 +689,22 @@ export class PlatformEditor {
     const radius = Math.max(bounds.getSize(new Vector3()).length() / 2, 0.5);
     const { camera, orbit } = this.deps;
     const direction = camera.position.clone().sub(orbit.target).normalize();
+    if (this.experience === "simple") {
+      this.simpleStudio.showViewport();
+      const canvas = this.deps.renderer.domElement.getBoundingClientRect(), region = this.simpleStudio.frameRegion();
+      const width = Math.max(1, Math.min(canvas.right, region.right) - Math.max(canvas.left, region.left));
+      const height = Math.max(1, Math.min(canvas.bottom, region.bottom) - Math.max(canvas.top, region.top));
+      const tanY = Math.tan(MathUtils.degToRad(camera.fov) / 2);
+      const distance = radius * 1.15 / Math.sin(Math.atan(Math.min(tanY * height / canvas.height, tanY * camera.aspect * width / canvas.width)));
+      orbit.target.copy(center); camera.position.copy(center).addScaledVector(direction, distance); orbit.update();
+      camera.updateMatrixWorld();
+      const x = ((region.left + region.right) / 2 - canvas.left) / canvas.width * 2 - 1;
+      const y = 1 - ((region.top + region.bottom) / 2 - canvas.top) / canvas.height * 2;
+      const shift = new Vector3().setFromMatrixColumn(camera.matrixWorld, 0).multiplyScalar(-x * distance * tanY * camera.aspect)
+        .addScaledVector(new Vector3().setFromMatrixColumn(camera.matrixWorld, 1), -y * distance * tanY);
+      camera.position.add(shift); orbit.target.add(shift); orbit.update();
+      return;
+    }
     orbit.target.copy(center);
     camera.position.copy(center.clone().add(direction.multiplyScalar(radius * 3)));
     orbit.update();
@@ -638,11 +749,11 @@ export class PlatformEditor {
     if (kind === "mesh") {
       result = this.deps.api.spawn({ id, type: "mesh", label: "Authored triangle", mesh: { positions: [-1, 0, 0, 1, 0, 0, 0, 1.5, 0], indices: [0, 1, 2], uvs: [0, 0, 1, 0, 0.5, 1] }, transform: { position }, material: { color: "#8ad9ff" } });
     } else if (kind === "box") {
-      result = this.deps.api.spawn({ id, type: "box", geometry: { width: 1.2, height: 1.2, depth: 1.2 }, transform: { position }, material: { color: "#8ad9ff", roughness: 0.6 }, physics: { mode: "dynamic", mass: 1, material: "default" } });
+      result = this.deps.api.spawn({ id, type: "box", label: "Cube", geometry: { width: 1.2, height: 1.2, depth: 1.2 }, transform: { position }, material: { color: "#8ad9ff", roughness: 0.6 }, physics: { mode: "dynamic", mass: 1, material: "default" } });
     } else if (kind === "sphere") {
-      result = this.deps.api.spawn({ id, type: "sphere", geometry: { radius: 0.7 }, transform: { position }, material: { color: "#ffce7a", roughness: 0.4 }, physics: { mode: "dynamic", mass: 1, material: "ball", restitution: 0.6 } });
+      result = this.deps.api.spawn({ id, type: "sphere", label: "Boule", geometry: { radius: 0.7 }, transform: { position }, material: { color: "#ffce7a", roughness: 0.4 }, physics: { mode: "dynamic", mass: 1, material: "ball", restitution: 0.6 } });
     } else {
-      result = this.deps.api.spawn({ id, type: "point-light", intensity: 12, distance: 30, transform: { position: [position[0], 6, position[2]] }, material: { color: "#fff2cf" } });
+      result = this.deps.api.spawn({ id, type: "point-light", label: "Lumière", intensity: 12, distance: 30, transform: { position: [position[0], 6, position[2]] }, material: { color: "#fff2cf" } });
     }
     if (result.ok) this.select(id);
     else this.refresh();
@@ -775,6 +886,7 @@ export class PlatformEditor {
     }
     this.cancelDraftWrite();
     this.draftKey = newEditorDraftKey();
+    this.namedScene = null;
     this.recoveredDraft = typeof draft === "object" ? draft : null;
     this.savedSignature = draft ? null : this.documentSignature();
     this.dirty = false;
@@ -845,6 +957,8 @@ export class PlatformEditor {
     this.pauseButton.classList.toggle("gx-ed-on", paused);
     this.pauseButton.setAttribute("aria-pressed", String(paused));
     this.syncDocumentStatus(false);
+    if (this.namedScene?.definition?.id !== state?.world.id) this.namedScene = null;
+    if (this.experience === "simple") this.simpleStudio?.update({ world: state, selectedId: this.selectedId, savedName: this.namedScene?.name ?? null, dirty: this.dirty, notice: this.toolbarNotice, mode: this.gizmo.getMode() }, inspector);
     this.readout.textContent = this.selectedId
       ? `${this.selectedId} · ${this.gizmo.getMode()} · rev ${state?.revision ?? 0}`
       : `${entities.length} entities · rev ${state?.revision ?? 0} · click to select`;
@@ -953,7 +1067,7 @@ export class PlatformEditor {
     const editing = focus instanceof HTMLElement
       && this.inspector.contains(focus)
       && (focus.tagName === "INPUT" || focus.tagName === "SELECT" || focus.tagName === "TEXTAREA");
-    if (inspector === "force" || (inspector === "auto" && !editing)) this.renderInspector(selected);
+    if (this.experience === "complete" && (inspector === "force" || (inspector === "auto" && !editing))) this.renderInspector(selected);
 
     const needle = this.treeFilter.trim().toLowerCase();
     const visible = needle
@@ -1052,6 +1166,7 @@ export class PlatformEditor {
    */
   private patchEntity(id: string, patch: AgentWorldEntityPatch, onSuccess: "skip" | "force" = "skip"): void {
     const result = this.deps.api.update(id, patch);
+    if (!result.ok) this.toolbarNotice = result.error ?? "Modification refusée";
     this.refresh(result.ok ? onSuccess : "force");
   }
 
@@ -1579,6 +1694,10 @@ export class PlatformEditor {
       exit.classList.add("gx-ed-exit");
       toolbar.append(this.group([exit]));
     }
+    toolbar.append(this.group([
+      this.toolButton("Mode simple", () => this.setExperience("simple", true)),
+      ...(this.deps.onOpenPersonalScenes ? [this.toolButton("Mes créations", () => { this.flushDraft(); this.deps.onOpenPersonalScenes?.(); })] : []),
+    ]));
 
     const modeButtons: Record<TransformControlsMode, HTMLButtonElement> = {
       translate: this.toolButton("Move", () => this.setMode("translate"), "Translate gizmo (W)"),
@@ -2498,12 +2617,19 @@ export class PlatformEditor {
   }
 
   private saveScene(): void {
+    if (this.experience === "simple") { this.saveSimpleScene(); return; }
     const name = window.prompt("Save scene as", "editor-scene");
     if (!name) return;
     const result = this.deps.api.save(name);
     if (result.ok) {
+      this.namedScene = null;
+      try {
+        const storage = browserSceneStorage();
+        if (storage) { datePersonalScene(storage, name.trim()); this.namedScene = readPersonalScene(storage, LOCAL_SCENE_PREFIX + name.trim()); }
+      } catch { /* The API has already confirmed that the scene bytes were saved. */ }
       this.rememberSlot(name.trim());
       this.markSaved(`saved to ${name.trim()}`);
+      this.deps.onLocalSceneSaved?.(name.trim());
     } else {
       this.toolbarNotice = result.error ?? "Save failed";
       this.refresh("skip");
@@ -2513,7 +2639,13 @@ export class PlatformEditor {
   private loadScene(slotName?: string): void {
     const name = (slotName ?? window.prompt("Load saved scene", "editor-scene"))?.trim();
     if (!name) return;
-    if (this.openEditorDocument(() => this.deps.api.load(name), "loaded " + name)) this.rememberSlot(name);
+    try {
+      const storage = browserSceneStorage(), entry = storage ? readPersonalScene(storage, LOCAL_SCENE_PREFIX + name) : null;
+      const error = entry ? this.openPersonalScene(entry) : "Cette scène n’est plus disponible dans ce navigateur.";
+      if (error) this.toolbarNotice = error;
+      else { this.toolbarNotice = "loaded " + name; this.rememberSlot(name); }
+      this.refresh("force");
+    } catch { this.toolbarNotice = "Le stockage de ce navigateur est indisponible."; this.refresh("skip"); }
   }
 
   private importSceneFile(): void {
@@ -3977,6 +4109,8 @@ ${preset.provenance.note}`),
 
   dispose(): void {
     this.flushDraft();
+    this.closeSaveDialog?.();
+    this.simpleStudio.dispose();
     const dom = this.deps.renderer.domElement;
     dom.removeEventListener("pointerdown", this.onPointerDown);
     dom.removeEventListener("pointerup", this.onPointerUp);
@@ -3995,6 +4129,7 @@ ${preset.provenance.note}`),
     this.gizmo.dispose();
     for (const root of this.roots) root.remove();
     delete document.documentElement.dataset.gxEditor;
+    delete document.documentElement.dataset.gxStudio;
   }
 }
 

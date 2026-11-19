@@ -63,6 +63,7 @@ export function mountWelcome(
     onOpenNetX?: () => void;
     onOpenIsland?: () => void;
     onOpenArchive?: () => void;
+    onOpenPersonalScenes?: () => void;
     onNextGeneration?: () => void;
     coauthor?: {
       onAccept?: () => void;
@@ -465,6 +466,16 @@ export function mountWelcome(
     window.addEventListener("pageshow", updateResume);
     window.addEventListener("storage", updateResume);
     entry.append(dna, dnaResume, create, resume);
+    if (hooks?.onOpenPersonalScenes) {
+      const personal = document.createElement("a"); personal.className = "gx-create-resume gx-go-personal";
+      personal.href = import.meta.env.BASE_URL + "?library=local"; personal.textContent = "Mes créations";
+      personal.title = "Retrouver mes scènes enregistrées dans ce navigateur";
+      personal.addEventListener("click", event => {
+        if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return;
+        event.preventDefault(); hooks.onOpenPersonalScenes?.(); dispose();
+      });
+      entry.append(personal);
+    }
     overlay.querySelector("[data-nestor-briefing]")?.after(entry);
   }
   const dispose = () => {
@@ -959,7 +970,7 @@ export function mountWelcome(
       hint.textContent = subtitle;
       button?.replaceChildren(title, hint);
     };
-    label(".gx-go-editor", "Studio", "Éditeur complet");
+    label(".gx-go-editor", "Studio", "Modifier simplement");
     label(".gx-go-browse", "Créations", "Mondes à explorer");
     label(".gx-go-games", "Jouer", "Jeux et défis");
     const browse = dock.querySelector(".gx-go-browse");

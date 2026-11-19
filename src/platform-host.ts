@@ -85,6 +85,10 @@ export interface PlatformHostOptions {
   autoOrbitSpeed?: number;
   /** Called when the visitor leaves the editor, so the host page can restore the welcome. */
   onExitEditor?: () => void;
+  /** Page-owned personal library entry; world loading remains on the ordinary API. */
+  onOpenPersonalScenes?: () => void;
+  onLocalSceneSaved?: (name: string) => void;
+  editorExperience?: "simple" | "complete";
   /**
    * Called when the visitor leaves play. A level replaces the world, so "back" cannot simply
    * mean un-hiding chrome — the page has to decide what to show instead, usually the showroom.
@@ -259,6 +263,9 @@ export class PlatformHost {
   private readonly interactive: boolean;
   private readonly autoOrbit: boolean;
   private readonly onExitEditor?: () => void;
+  private readonly onOpenPersonalScenes?: () => void;
+  private readonly onLocalSceneSaved?: (name: string) => void;
+  private readonly editorExperience?: "simple" | "complete";
   private readonly onExitPlay?: () => void;
   private readonly playExitLabel?: () => string;
   private readonly controls: OrbitControls;
@@ -501,6 +508,9 @@ export class PlatformHost {
     this.interactive = options.interactive !== false;
     this.autoOrbit = options.autoOrbit === true;
     this.onExitEditor = options.onExitEditor;
+    this.onOpenPersonalScenes = options.onOpenPersonalScenes;
+    this.onLocalSceneSaved = options.onLocalSceneSaved;
+    this.editorExperience = options.editorExperience;
     this.onExitPlay = options.onExitPlay;
     this.playExitLabel = options.playExitLabel;
     // The route decides the opening surface: the showroom opens on `scene`, the editor routes
@@ -634,6 +644,9 @@ export class PlatformHost {
         onEnvironmentChanged: () => this.applyEnvironment(),
         // Only offer a way out when there is a showroom to go back to.
         onExit: this.onExitEditor ? () => this.exitEditor() : undefined,
+        onOpenPersonalScenes: this.onOpenPersonalScenes,
+        onLocalSceneSaved: this.onLocalSceneSaved,
+        experience: this.editorExperience,
       });
       // The editor arrives via a dynamic import, so the mode can move on while it is in flight.
       // A level played before the chunk resolved would otherwise have the authoring chrome pop

@@ -1,3 +1,4 @@
+import { enterCompleteStudio } from "./studio-smoke-helpers.mjs";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -78,6 +79,7 @@ try {
 
     if (name === "desktop") {
       await atelier.getByRole("link", { name: /Ouvrir dans l’éditeur/ }).click();
+      await enterCompleteStudio(page);
       await page.locator(".gx-ed-toolbar").waitFor();
       assert.deepEqual(await readScene(), authored);
       await page.locator(".gx-ed-exit").click();

@@ -1,3 +1,4 @@
+import { enterCompleteStudio } from "./studio-smoke-helpers.mjs";
 import { SMOKE_TIMEOUT, applySmokeTimeout, launchSmokeBrowser } from "./smoke-harness.mjs";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
@@ -29,6 +30,7 @@ try {
   await page.waitForFunction(() => !!window.__GRAPHYSX_HOST__, { timeout: SMOKE_TIMEOUT });
   await page.waitForSelector(".gx-welcome", { timeout: SMOKE_TIMEOUT });
   await page.click(".gx-welcome .gx-go-editor");
+  await enterCompleteStudio(page);
   await page.waitForSelector(".gx-ed-toolbar", { timeout: SMOKE_TIMEOUT });
 
   // Keep the real showroom -> editor navigation contract above, then author inside a small
@@ -577,6 +579,7 @@ try {
   }));
   await page.screenshot({ path: path.join(ART, "editor-exit.png"), fullPage: false });
   await page.click(".gx-welcome .gx-go-editor");
+  await enterCompleteStudio(page);
   await page.waitForSelector(".gx-ed-toolbar", { timeout: SMOKE_TIMEOUT });
   await page.$eval(
     '.gx-ed-row-id:text-is("editor-impreza")',

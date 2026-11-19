@@ -5,6 +5,11 @@ Cette revue prolonge le [registre de récupération](REVIVAL_AND_UX.md), qui res
 référence pour les sources historiques. Les priorités ci-dessous décrivent le produit
 observé, sans transformer l'ancien inventaire de 54 scènes en score de complétion actuel.
 
+Le lot suivant, demandé après cette revue, apporte maintenant **Studio simple et Mes créations**.
+Le [guide du parcours](STUDIO_AND_MY_CREATIONS.md) documente l’édition, les sauvegardes locales,
+les brouillons, l’export de secours et le passage au mode complet. Les observations publiques
+historiques ci-dessous gardent leur référence ; la qualification de ce nouveau lot est distincte.
+
 ## Ce que doit comprendre une première visite
 
 GraphysX propose trois intentions principales : **vivre une expérience**, **créer une
@@ -23,7 +28,8 @@ soigner leur continuité, puis à donner aux reprises historiques une entrée ad
 | Créer une scène | Construire avec un accompagnement initial | Évite d'exiger la connaissance de toute la palette du Studio |
 | Créations | Découvrir des expériences sélectionnées et des scènes éditables | NACRE devient la mise en avant, avec une vraie image et une action explicite |
 | Jouer | Lancer BallZ, Ballsy ou Cyber Race ; retrouver les anciens parcours via Archives | Clavier, tactile et simulations de manette ne valent pas réception avec les manettes réelles |
-| Studio | Inspecter, modifier, simuler, enregistrer et exporter un document complet | Puissant mais dense ; vocabulaire et organisation restent partiellement techniques |
+| Studio | Choisir, modifier, simuler et enregistrer simplement ; ouvrir le mode complet au besoin | Une seule World API et un document complet ; français des outils avancés encore à harmoniser |
+| Mes créations | Retrouver, copier, exporter et rouvrir scènes locales et brouillons | Lieu de stockage explicite ; pas de synchronisation automatique ni de migration silencieuse |
 | Ateliers / Créer et apprendre | ADN, Math Lab, KidX | Math Lab distingue nombres/calculs et formules ; KidX reste une expérience enfant dédiée |
 | Ateliers / Explorer en 3D | NACRE, atelier VR, LLMx, île d'Eko | NACRE fonctionne sur écran et en VR ; les fonctions connectées et le casque ont leurs propres conditions |
 | Ateliers / Données AgentX | DiskX, Ecosystem, NetX | Les écrans d'entrée fonctionnent hors connexion ; les données réelles demandent le service privé |
@@ -136,16 +142,15 @@ publique et les contrôles après activation sont enregistrés dans
 
 ## Ce qui reste à améliorer, dans l'ordre
 
-1. **Rendre le Studio abordable par tâche.** Prévoir un niveau simple autour de sélectionner,
-   transformer, matière, simulation et enregistrer, avec les réglages avancés disponibles
-   ensuite. Harmoniser son français et celui des réglages d'affichage communs. Le travail doit se faire dans les panneaux existants,
-   sans recréer un éditeur parallèle. Critère : depuis une variante ADN ou une visite,
-   changer une matière et retrouver son document au retour sans connaître les menus techniques.
-2. **Clarifier où retrouver son travail.** Les sauvegardes locales, les variantes d'application
-   et le catalogue avec serveur optionnel ont des accès différents. Un accès cohérent à
-   « Mes créations », indiquant navigateur local ou serveur choisi, réduirait cette charge.
-   Ne pas déplacer silencieusement les données. Critère : retrouver puis rouvrir une variante
-   nommée après fermeture du navigateur, avec son lieu de stockage visible.
+1. **Studio abordable par tâche : implémenté dans ce lot.** Sélection, transformations,
+   couleur par pièce native, simulation, annulation et sauvegarde utilisent le même éditeur.
+   Le cadrage évite les panneaux ; sur téléphone il replie l’inspecteur. Mode complet garde
+   les outils avancés. Leur français et celui des réglages d’affichage restent à harmoniser.
+2. **Reprise des créations : implémentée dans ce lot.** L’accueil, le Studio et le catalogue
+   ouvrent la même bibliothèque locale. Scènes anciennes, variantes ADN, créations guidées
+   et brouillons restent accessibles ; copie, export, conflit et erreur de stockage ont des
+   réponses explicites. Le serveur optionnel garde sa destination distincte. La réception
+   comprend une vraie fermeture/réouverture du navigateur, sans injection de storageState.
 3. **Unifier les transitions entre expériences.** Généraliser progressivement les verbes
    vivre/modifier/revenir et le transfert du document à d'autres reprises qui ouvrent encore
    directement le Studio. Garder une seule carte par destination. Commencer par Common Room
@@ -157,7 +162,6 @@ publique et les contrôles après activation sont enregistrés dans
    lecteur d'écran, contraste systématique, casque et manettes, audio/micro et backend privé.
    Les captures, transports simulés et contrôleurs synthétiques ne remplacent pas ces essais.
 
-La suite produit recommandée est **le Studio simple et la reprise des créations sauvegardées**,
-car les expériences d'entrée savent déjà conduire à un document modifiable. Cette revue
-livre la cohérence des entrées et une nouvelle visite ; elle ne prétend pas avoir redessiné
-tous les panneaux ou terminé toutes les reprises historiques.
+Après ce lot, la prochaine amélioration produit concerne **les transitions des autres
+expériences et la poursuite de la récupération par preuve**. Les outils avancés, les essais
+sur appareils réels et les reprises historiques restantes gardent leur travail de finition.

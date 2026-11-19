@@ -7,6 +7,10 @@ discoverable tool bridge.
 
 Live application: <https://graphysx.specialblend.ca>
 
+**Simple Studio and My creations:** edit objects, name/save a scene and find existing local
+scenes or drafts from one library. Advanced tools remain in Complete mode; JSON import/export
+keeps a portable backup. See the [Studio and personal scenes guide](docs/STUDIO_AND_MY_CREATIONS.md).
+
 > **Status: v1 met, deployed.** The site opens into the platform showroom; a human and
 > an agent edit the same live scene through one runtime; a game rebuilt on-platform plays
 > to a win. The archive host has retired; converted scenes and assets remain in the shared

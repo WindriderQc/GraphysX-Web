@@ -1,3 +1,4 @@
+import { enterCompleteStudio } from "./studio-smoke-helpers.mjs";
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -102,7 +103,7 @@ try {
   });
   await choose(page, "gates"); await choose(page, "free");
   assert.deepEqual(canonical(await page.evaluate(() => window.__GRAPHYSX__.exportDocument())), canonical(authored), "Changing forms during this visit retains the complete edited document");
-  await page.click("[data-flightx-studio]"); await page.locator(".gx-ed-toolbar").waitFor();
+  await page.click("[data-flightx-studio]"); await enterCompleteStudio(page); await page.locator(".gx-ed-toolbar").waitFor();
   await page.waitForFunction(() => window.__GRAPHYSX__?.query({ ids: ["flight-plane-model"] })[0]?.materialSlots?.length === 48);
   assert.deepEqual(canonical(await page.evaluate(() => window.__GRAPHYSX__.exportDocument())), canonical(authored));
   assert.equal(await page.locator(".gx-flightx").count(), 0);

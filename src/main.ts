@@ -141,6 +141,7 @@ const hostOriginAllowList = parseHostOriginAllowList(import.meta.env.VITE_GRAPHY
 // case for EV3 — hence a value, not a boolean.
 const appParam = document.documentElement.dataset.mathLabLevel === "numbers" ? "make-ten" : (params.get("app") ?? "").trim();
 const localScene = params.get("localScene")?.trim() || null;
+const localDraft = params.get("localDraft")?.trim() || null;
 
 const sessionParam = params.get("session");
 const liveSessionRequested = Boolean(
@@ -258,7 +259,10 @@ if (appParam === "quest3") {
       }
       restoreShowroomOnEditorExit = false;
       requestShowroomInteraction(false);
-      void host.enterEditor();
+      void host.enterEditor().then(() => {
+        if (host.mode !== "editor" || nestorBlockedByLiveSession()) return;
+        host.api.pause(true); host.editor?.showStudio();
+      });
     };
     const enterBrowsedEditor = (): void => {
       if (nestorBlockedByLiveSession()) {
@@ -270,7 +274,62 @@ if (appParam === "quest3") {
       }
       restoreShowroomOnEditorExit = true;
       requestShowroomInteraction(false);
-      void host.enterEditor();
+      void host.enterEditor().then(() => {
+        if (host.mode !== "editor" || nestorBlockedByLiveSession()) return;
+        host.api.pause(true); host.editor?.showStudio();
+      });
+    };
+    const personalSceneLocation = (name: string | null, draftKey: string | null = null): void => {
+      if (nestorBlockedByLiveSession()) return;
+      const target = new URL(import.meta.env.BASE_URL, window.location.href);
+      target.searchParams.set("host", "editor"); target.searchParams.set("studio", host.editor?.uiState().experience ?? "simple"); target.searchParams.set("paused", "1");
+      if (name) target.searchParams.set("localScene", name);
+      if (draftKey) target.searchParams.set("localDraft", draftKey);
+      const explicitStore = new URLSearchParams(window.location.search).get("store");
+      if (explicitStore) target.searchParams.set("store", explicitStore);
+      window.history.replaceState(null, "", target); document.title = (name || "Brouillon") + " · GraphysX";
+      returnFromApplicationStudio = true;
+    };
+    const openPersonalLibrary = (): void => {
+      if (nestorBlockedByLiveSession()) { syncFrontDoor(); return; }
+      stopNestorTour();
+      const fromEditor = host.mode === "editor";
+      requestShowroomInteraction(false);
+      if (!fromEditor) { welcome?.dispose(); welcome = null; }
+      let cancelled = false, opened = false;
+      personalLibraryOpen = true; activeShelf = () => { cancelled = true; personalLibraryOpen = false; };
+      void import("./personal-scenes-view").then(({ mountPersonalScenes }) => {
+        if (cancelled) return;
+        const close = mountPersonalScenes(root, {
+          onOpen: async (entry, isCurrent) => {
+            const editor = await host.editorReady();
+            if (!isCurrent() || !editor) return "L’ouverture a été interrompue.";
+            if (nestorBlockedByLiveSession()) return "Quitte la session partagée avant de changer de scène.";
+            if (sceneBrowser?.session()) return "Une scène du serveur est ouverte. Ferme-la dans le panneau du serveur avant d’ouvrir une scène locale.";
+            const error = editor.openPersonalScene(entry);
+            if (error) return error;
+            opened = true; personalWorld = true; sceneBrowser?.setEnabled(false);
+            welcome?.dispose(); welcome = null; showroomEnvironment?.(); showroomEnvironment = null;
+            host.applyEnvironment(); restoreShowroomOnEditorExit = true;
+            await host.enterEditor();
+            if (host.mode !== "editor" || nestorBlockedByLiveSession()) return null;
+            editor.showStudio(); editor.showViewport(); host.frameWorld();
+            personalSceneLocation(entry.kind === "scene" ? entry.name : null, entry.kind === "draft" ? entry.key : null);
+            requestShowroomInteraction(false);
+            return null;
+          },
+          onClose: () => {
+            personalLibraryOpen = false; activeShelf = null;
+            if (!opened && !fromEditor) remountFrontDoor(".gx-go-personal");
+          },
+          server: sceneBrowser ? { label: new URL(storeUrl, window.location.href).host, onOpen: () => {
+            host.editor?.setExperience("complete"); sceneBrowser?.setEnabled(true);
+            const toggle = sceneBrowser?.element.querySelector<HTMLButtonElement>("[data-action=collapse]");
+            if (toggle?.getAttribute("aria-expanded") === "false") toggle.click();
+          } } : undefined,
+        });
+        activeShelf = () => { cancelled = true; close(); };
+      }).catch((error: unknown) => { personalLibraryOpen = false; if (!cancelled) showStartupError(root, error); });
     };
     /**
      * Asking Nestor for a capability now composes a proposal instead of committing.
@@ -491,6 +550,8 @@ if (appParam === "quest3") {
     // surface module so later host chrome (notably the asynchronously mounted scene browser)
     // can respect the route before the application's import has finished.
     let applicationOpen = false;
+    let personalWorld = false;
+    let personalLibraryOpen = false;
     let returnFromApplicationStudio = false;
     let sceneBrowser: SceneBrowser | null = null;
     const openApplication = (id: string): boolean => {
@@ -753,6 +814,7 @@ if (appParam === "quest3") {
             onOpenNetX: () => { window.location.search = "?app=netx"; },
             onOpenIsland: () => { window.location.search = "?app=island"; },
             onOpenArchive: () => openBrowse("archive"),
+            onOpenPersonalScenes: openPersonalLibrary,
             onNextGeneration: () => {
               if (nestorBlockedByLiveSession()) return;
               const grove = host.api.query({ ids: ["showroom-dna-grove"] })[0];
@@ -832,6 +894,7 @@ if (appParam === "quest3") {
       // Callers can reach here with a welcome card already up (exitEditor mounts one);
       // recomposing must not stack a second card on top of it.
       restoreShowroomOnEditorExit = false;
+      personalWorld = false;
       welcome?.dispose();
       welcome = null;
       composeShowroom(host.api);
@@ -1110,6 +1173,7 @@ if (appParam === "quest3") {
         }
         activeShelf = mountBrowseShelf(root, {
           api: host.api,
+          onOpenPersonalScenes: openPersonalLibrary,
           initialCollection,
           canNavigate: () => !nestorBlockedByLiveSession(),
           featuredComposed: {
@@ -1351,6 +1415,9 @@ if (appParam === "quest3") {
       autoOrbit: appParam !== "maison" && appParam !== "flightx" && appParam !== "impreza" && appParam !== "cubx" && appParam !== "make-ten" && !motionIsReduced() && !editorFirst && appParam !== "creation" && appParam !== "dna" && appParam !== "ev3-lab" && appParam !== "llmx" && appParam !== "diskx" && appParam !== "ecosystem" && appParam !== "netx",
       autoOrbitSpeed: 0.2,
       editorVisible: editorFirst,
+      editorExperience: editorFirst && params.get("studio") !== "simple" ? "complete" : "simple",
+      onOpenPersonalScenes: openPersonalLibrary,
+      onLocalSceneSaved: name => personalSceneLocation(name),
       // CubX and its living shell are the focal point; the shore and physics stay below.
       framing: editorFirst ? undefined : { position: [9, 8, 21], target: [0, 4.6, -6.2] },
       // The entry move belongs to the front door only: arriving in the editor or via a
@@ -1367,7 +1434,7 @@ if (appParam === "quest3") {
       // Leaving the editor restores the welcome overlay and hands the pointer back to the
       // showroom, so it is a place you can come back to rather than a one-way door.
       onExitEditor: editorFirst
-        ? (localScene ? () => window.location.assign(import.meta.env.BASE_URL) : undefined)
+        ? (localScene || localDraft ? () => window.location.assign(import.meta.env.BASE_URL) : undefined)
         : () => {
             // A same-page app-to-Studio copy must not replay the captured startup
             // ?app route when the editor's Home action rebuilds the front door.
@@ -1493,6 +1560,7 @@ if (appParam === "quest3") {
       render_game_to_text: () => JSON.stringify({
         coordinateSystem: "right-handed; +x east, +y up, -z north",
         mode: host.mode,
+        studio: host.mode === "editor" ? host.editor?.uiState() ?? null : null,
         world: host.api.state()?.world ?? null,
         paused: host.api.state()?.paused ?? false,
         joints: host.api.state()?.joints ?? [],
@@ -1618,7 +1686,18 @@ if (appParam === "quest3") {
         seed: seedArchiveBallzLevels,
       },
     });
-    if (editorFirst && localScene && !liveSessionRequested && !storeScene) {
+    if (editorFirst && params.get("studio") === "simple" && params.get("paused") !== "0" && !liveSessionRequested && !storeScene) host.api.pause(true);
+    if (editorFirst && localDraft && !liveSessionRequested && !storeScene) {
+      personalWorld = true;
+      void Promise.all([host.editorReady(), import("./personal-scenes")]).then(([editor, storage]) => {
+        if (host.mode !== "editor" || nestorBlockedByLiveSession()) return;
+        const local = storage.browserSceneStorage(), entry = local ? storage.readPersonalScene(local, localDraft) : null;
+        if (!entry || entry.kind !== "draft" || !editor) throw new Error("Ce brouillon n’est plus disponible. Retrouve tes autres scènes dans Mes créations.");
+        const error = editor.openPersonalScene(entry); if (error) throw new Error(error);
+        editor.showStudio(); editor.showViewport(); host.frameWorld();
+      }).catch((error: unknown) => showStartupError(root, error));
+    } else if (editorFirst && localScene && !liveSessionRequested && !storeScene) {
+      personalWorld = true;
       const opened = host.api.load(localScene);
       if (!opened.ok) throw new Error(opened.error ?? "Local scene could not be opened");
       document.title = localScene + " · GraphysX";
@@ -1651,6 +1730,7 @@ if (appParam === "quest3") {
       // from its own empty world; a rejected lazy import uses the accessible startup recovery.
       if (!appParam || !openApplication(appParam)) mountFrontDoor();
     }
+    if (!editorFirst && !appParam && !liveSessionRequested && params.get("library") === "local") openPersonalLibrary();
 
     // Mounted after the showroom composes so there is always something on screen, and only
     // when a store actually answers: the production deploy is static with no store behind
@@ -1695,7 +1775,7 @@ if (appParam === "quest3") {
         const browser = mountSceneBrowser(root, {
           api: host.api,
           client,
-          initialScene: liveSessionRequested ? null : storeScene,
+          initialScene: liveSessionRequested || personalWorld ? null : storeScene,
           startCollapsed: !editorFirst && !storeScene,
           actor: "browser",
           resetUndoHistory: () => host.world.resetUndoHistory(),
@@ -1728,7 +1808,7 @@ if (appParam === "quest3") {
         // layered over it. The store can answer after the application is already open, so the
         // browser must cede its chrome here at mount time as well as live-session authority.
         sceneBrowser = browser;
-        if (liveSessionRequested || applicationOpen) browser.setEnabled(false);
+        if (liveSessionRequested || applicationOpen || personalWorld || personalLibraryOpen) browser.setEnabled(false);
         Object.assign(window, { __GRAPHYSX_SCENE_BROWSER__: browser, __GRAPHYSX_SCENE_STORE__: { client, browser } });
 
         // Live sessions: identity, roles, presence and incremental operations on top of the

@@ -1,3 +1,4 @@
+import { enterCompleteStudio } from "./studio-smoke-helpers.mjs";
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -118,6 +119,7 @@ try {
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     assert.equal(await app.locator(".gx-dna-card").evaluate((element) => element.scrollWidth <= element.clientWidth), true);
     await studio.click();
+    await enterCompleteStudio(page);
     await page.locator(".gx-ed-toolbar").waitFor();
     assert.equal(await page.evaluate(() => window.__GRAPHYSX__.state().paused), true);
     assert.deepEqual(canonical(await documentOf(page)), canonical(mutated), "Studio opens every authored field of the saved document");

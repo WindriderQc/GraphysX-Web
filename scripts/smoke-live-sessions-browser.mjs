@@ -1,3 +1,4 @@
+import { enterCompleteStudio } from "./studio-smoke-helpers.mjs";
 // Live Sessions, through the product.
 //
 // The protocol smoke proves the server. This proves the thing the product actually claims:
@@ -3059,6 +3060,7 @@ try {
     JSON.stringify(detachedPresence.presence));
   await first.page.waitForSelector(".gx-welcome:not(.gx-welcome--live-observer) .gx-go-editor");
   await first.page.click(".gx-welcome:not(.gx-welcome--live-observer) .gx-go-editor");
+  await enterCompleteStudio(first.page);
   await first.page.waitForFunction(() => {
     const column = document.querySelector(".gx-ed-panel--right");
     return window.__GRAPHYSX_HOST__?.mode === "editor" && Boolean(column) && column.style.display !== "none";
@@ -3169,6 +3171,7 @@ try {
   await first.page.evaluate(async () => window.__GRAPHYSX_LIVE_SESSION__.leave());
   await first.page.waitForSelector(".gx-welcome:not(.gx-welcome--live-observer) .gx-go-editor");
   await first.page.click(".gx-welcome:not(.gx-welcome--live-observer) .gx-go-editor");
+  await enterCompleteStudio(first.page);
   await first.page.waitForFunction(() => window.__GRAPHYSX_HOST__.mode === "editor");
   const postLeaveDraft = await first.page.evaluate(() => {
     window.__GRAPHYSX__.spawn({
