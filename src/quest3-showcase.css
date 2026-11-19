@@ -1,5 +1,6 @@
 .nacre-ui{position:absolute;inset:0;pointer-events:none;color:#e7ede8;font-family:var(--gx-font,'Segoe UI',sans-serif);font-size:14px}
 .nacre-ui *{box-sizing:border-box}.nacre-ui button,.nacre-ui a,.nacre-ui select{pointer-events:auto}
+.nacre-ui .nacre-retry{margin:6px 0;background:#07151e;border:1px solid #ffbd98;border-radius:4px;color:#ffdbbf}
 .nacre-ui::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,#030812c9,transparent 45%),linear-gradient(0deg,#030812d9,transparent 28%)}
 .nacre-caption h1{text-shadow:0 2px 24px #030812}.nacre-status{overflow-wrap:anywhere}.nacre-status [data-error=true]{color:#ffbd98}
 .nacre-top{position:absolute;top:30px;left:36px;right:36px;display:flex;justify-content:space-between;align-items:center;gap:20px}
