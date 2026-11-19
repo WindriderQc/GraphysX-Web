@@ -77,6 +77,8 @@ export const GRAPHYSX_AGENT_WORLD_ASSET_CATALOG: readonly AgentWorldAssetDescrip
   { id: "archive-ballfire", label: "Ballfire", category: "port", format: "graphysx-mesh-json", url: "/assets/ports/archive-ballfire.json", source: "BallZ 2011/Release/Media/Ball/BallFire.tvm" },
   { id: "archive-ballshell", label: "Ballshell", category: "port", format: "graphysx-mesh-json", url: "/assets/ports/archive-ballshell.json", source: "BallZ 2011/Release/Media/Ball/BallShell.tvm" },
   { id: "archive-cuisine", label: "Cuisine · complete Blender archive", category: "archive-prop", format: "graphysx-mesh-json", url: "/assets/ports/archive-cuisine.json", source: "blenderModel/Maison/Cuisine.blend → cuisine-best.fbx" },
+  { id: "archive-flightx-airplane", label: "FlightX · avion TVM original", category: "vehicle", format: "graphysx-mesh-json", url: "/assets/ports/archive-flightx-airplane.json", source: "Yanik C++ BCKUP/Media/Models/Airplane/Airplane.tvm" },
+  { id: "archive-flightx-pipe", label: "FlightX · pipe TVM original", category: "archive-prop", format: "graphysx-mesh-json", url: "/assets/ports/archive-flightx-pipe.json", source: "Yanik C++ BCKUP/Media/Models/pipe1.tvm" },
   { id: "archive-glyph-0", label: "Archive Glyph 0", category: "glyph", format: "graphysx-mesh-json", url: "/assets/ports/archive-glyph-0.json", source: "Media/alphabet/0.tvm" },
   { id: "archive-glyph-1", label: "Archive Glyph 1", category: "glyph", format: "graphysx-mesh-json", url: "/assets/ports/archive-glyph-1.json", source: "Media/alphabet/1.tvm" },
   { id: "archive-glyph-2", label: "Archive Glyph 2", category: "glyph", format: "graphysx-mesh-json", url: "/assets/ports/archive-glyph-2.json", source: "Media/alphabet/2.tvm" },

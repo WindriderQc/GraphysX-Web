@@ -39,6 +39,12 @@ PlatformHost, World API, material slots, persistence and single frame loop.
    a level for the whole entity, not each instance: use spatial chunks for large
    worlds. Picking, material editing and transforms operate on the batch as one
    entity. Animated, skinned, morphed or nested instance batches are refused.
+5. **Portable energy and modulation.** `material.shader.id: "energy"` adds a
+   per-eye Fresnel rim and simulation-driven emission flow to PBR. `modulate`
+   behaviors breathe actual light or material brightness without changing authored
+   values. NACRE uses these for the swept double-helix reactor, containment,
+   atmosphere and magnetic rings. See [Visual effects](VISUAL_EFFECTS.md) for the
+   API, transparent/additive policy, bounds and lifecycle semantics.
 
 ```js
 gx.spawn({

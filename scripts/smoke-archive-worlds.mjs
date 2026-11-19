@@ -82,18 +82,18 @@ try {
   await open("archive-flightx", "archive-flightx");
   await page.waitForFunction(() => window.__GRAPHYSX_HOST__.world.getEntityObject("flight-plane-model")?.children.length > 0);
   await page.evaluate(() => window.__GRAPHYSX__.pause(true));
-  const before = await page.evaluate(() => ({ revision: window.__GRAPHYSX__.state().revision, doc: JSON.stringify(window.__GRAPHYSX__.exportDocument()), x: window.__GRAPHYSX__.query({ ids: ["flight-plane"] })[0].position[0] }));
+  const before = await page.evaluate(() => ({ revision: window.__GRAPHYSX__.state().revision, doc: JSON.stringify(window.__GRAPHYSX__.exportDocument()), z: window.__GRAPHYSX__.query({ ids: ["flight-plane"] })[0].position[2] }));
   await page.locator("canvas").first().click({ position: { x: 900, y: 600 } });
   await page.keyboard.down("w");
   await page.evaluate(() => window.__GRAPHYSX__.step(1));
   await page.keyboard.up("w");
-  const after = await page.evaluate(() => ({ revision: window.__GRAPHYSX__.state().revision, doc: JSON.stringify(window.__GRAPHYSX__.exportDocument()), x: window.__GRAPHYSX__.query({ ids: ["flight-plane"] })[0].position[0] }));
-  check("FlightX keyboard moves the actual plane without document churn", Math.abs(after.x - before.x - 18) < 1e-4 && after.revision === before.revision && after.doc === before.doc);
+  const after = await page.evaluate(() => ({ revision: window.__GRAPHYSX__.state().revision, doc: JSON.stringify(window.__GRAPHYSX__.exportDocument()), z: window.__GRAPHYSX__.query({ ids: ["flight-plane"] })[0].position[2] }));
+  check("FlightX keyboard follows the SDK forward axis without document churn", Math.abs(after.z - before.z + 18) < 1e-4 && after.revision === before.revision && after.doc === before.doc);
   await page.evaluate(() => window.__GRAPHYSX__.step(.5));
-  check("FlightX release stops movement", await page.evaluate(x => Math.abs(window.__GRAPHYSX__.query({ ids: ["flight-plane"] })[0].position[0] - x) < 1e-5, after.x));
+  check("FlightX release stops movement", await page.evaluate(z => Math.abs(window.__GRAPHYSX__.query({ ids: ["flight-plane"] })[0].position[2] - z) < 1e-5, after.z));
   await page.keyboard.down("w"); await page.evaluate(() => window.dispatchEvent(new Event("blur"))); await page.keyboard.up("w");
   await page.evaluate(() => window.__GRAPHYSX__.step(.5));
-  check("FlightX blur clears held controls", await page.evaluate(x => Math.abs(window.__GRAPHYSX__.query({ ids: ["flight-plane"] })[0].position[0] - x) < 1e-5, after.x));
+  check("FlightX blur clears held controls", await page.evaluate(z => Math.abs(window.__GRAPHYSX__.query({ ids: ["flight-plane"] })[0].position[2] - z) < 1e-5, after.z));
   await page.click('[data-archive-action="follow"]');
   await capture("flightx-desktop");
   await page.setViewportSize({ width: 390, height: 844 });
@@ -107,7 +107,7 @@ try {
   await touchControl.hover(); await page.mouse.down();
   await page.evaluate(() => window.__GRAPHYSX__.step(.5));
   await page.mouse.up();
-  check("mobile hold control pilots through the same API", await page.evaluate(x => window.__GRAPHYSX__.query({ ids: ["flight-plane"] })[0].position[0] > x + 8.9, after.x));
+  check("mobile hold control pilots through the same API", await page.evaluate(z => window.__GRAPHYSX__.query({ ids: ["flight-plane"] })[0].position[2] < z - 8.9, after.z));
   await capture("flightx-mobile");
   check("mobile chase camera keeps the plane centered", await page.evaluate(() => {
     const host = window.__GRAPHYSX_HOST__, plane = host.world.getEntityObject("flight-plane");

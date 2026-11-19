@@ -1,7 +1,7 @@
 /** Shared document/runtime validation for source animation and kinematic flight. */
 export const MOTION_FIELDS = Object.freeze({
   keyframes: Object.freeze(["id", "type", "durationSeconds", "startSeconds", "loop", "positions", "rotations", "scales", "visibility"]),
-  flight: Object.freeze(["id", "type", "speed", "rollRateDegrees", "pitchUpDegrees", "pitchDownDegrees"]),
+  flight: Object.freeze(["id", "type", "speed", "rollRateDegrees", "pitchUpDegrees", "pitchDownDegrees", "forwardAxis"]),
 });
 
 export function validateMotionBehavior(behavior) {
@@ -10,6 +10,7 @@ export function validateMotionBehavior(behavior) {
   for (const key of Object.keys(behavior)) if (!fields.includes(key)) throw new Error(`Unsupported ${behavior.type} field: ${key}`);
   if (behavior.id !== undefined && (typeof behavior.id !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,79}$/.test(behavior.id))) throw new Error("Invalid motion behavior id");
   if (behavior.type === "flight") {
+    if (behavior.forwardAxis !== undefined && !["x", "-z"].includes(behavior.forwardAxis)) throw new Error("flight.forwardAxis must be x or -z");
     for (const field of ["speed", "rollRateDegrees", "pitchUpDegrees", "pitchDownDegrees"]) {
       const value = behavior[field];
       if (value !== undefined && (!Number.isFinite(value) || value < 0 || value > 1000)) throw new Error(`flight.${field} must be 0..1000`);

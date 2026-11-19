@@ -170,6 +170,68 @@ try {
   assert.deepEqual(canonical(restored),canonical(document));
   await page.waitForFunction(()=>window.__GRAPHYSX__.state().entities.filter(e=>e.asset).every(e=>e.asset.status==='ready'));
   receipt.roundTrip=true;
+  // Exercise actual runtime materials, not only document vocabulary. Animation must never
+  // mutate authored brightness, compound on patches, leak into child entities or survive detach.
+  receipt.visualEffects=await page.evaluate(async()=>{
+    const {host}=window.__GRAPHYSX_QUEST3__,api=host.api;
+    const must=result=>{if(!result.ok)throw Error(result.error);return result;};
+    const close=(a,b,label)=>{if(Math.abs(a-b)>1e-6)throw Error(`${label}: ${a} != ${b}`);};
+    const before=api.export();api.pause(true);
+    const t=host.world.getElapsedSeconds(),modulation={id:'brightness',type:'modulate',property:'emissiveIntensity',minimumFactor:.5,maximumFactor:1.5,frequencyHz:2,startSeconds:t};
+    must(api.transaction([
+      {op:'spawn',entity:{id:'qa-energy',type:'box',transform:{position:[50,3,0]},material:{emissive:'#20aaff',emissiveIntensity:2,shader:{id:'energy',rimOpacity:true,blend:'additive'}},physics:{mode:'dynamic'},behaviors:[modulation]}},
+      {op:'spawn',entity:{id:'qa-energy-child',type:'sphere',parentId:'qa-energy',material:{emissiveIntensity:3}}},
+      {op:'spawn',entity:{id:'qa-energy-light',type:'point-light',intensity:4,marker:false,transform:{position:[50,3,0]},behaviors:[{...modulation,property:'intensity'}]}},
+    ]));
+    const object=()=>host.world.getEntityObject('qa-energy'),light=()=>host.world.getEntityObject('qa-energy-light');
+    const compiled=async()=>{await host.renderer.compileAsync(host.scene,host.camera);return host.renderer.properties.get(object().material).uniforms;};
+    must(api.step(.125));close(object().material.emissiveIntensity,3,'material peak');close(light().intensity,6,'light peak');
+    const bound=await compiled();close(bound.gxEnergyGain.value,3,'compiled peak');
+    const peakTime=object().material.userData.graphysxEnergyUniforms.gxEnergyTime.value;
+    await new Promise(resolve=>setTimeout(resolve,80));close(object().material.userData.graphysxEnergyUniforms.gxEnergyTime.value,peakTime,'paused shader');
+    must(api.step(.25));close(object().material.emissiveIntensity,1,'material trough');close(light().intensity,2,'light trough');
+    close(host.world.getEntityObject('qa-energy-child').material.emissiveIntensity,3,'child brightness');
+    close(api.export().entities.find(e=>e.id==='qa-energy').material.emissiveIntensity,2,'authored brightness');
+    must(api.update('qa-energy',{material:{emissiveIntensity:4}}));close(object().material.emissiveIntensity,2,'reconfigured base');
+    close(bound.gxEnergyGain.value,2,'cached compiled gain after patch');
+    must(api.update('qa-energy',{material:{shader:{id:'energy',rimOpacity:true,blend:'additive',flowSpeed:1.7,rimPower:5,flowStrength:.2}}}));
+    close(bound.gxEnergyFlowSpeed.value,1.7,'cached compiled flow after patch');close(bound.gxEnergyRimPower.value,5,'cached compiled rim after patch');
+    must(api.detachBehavior('qa-energy','brightness'));close(object().material.emissiveIntensity,4,'detached base');
+    must(api.detachBehavior('qa-energy-light','brightness'));close(light().intensity,4,'detached light');
+    must(api.update('qa-energy',{material:{shader:null}}));
+    if(object().material.userData.graphysxEnergyUniforms)throw Error('Energy shader survived removal');
+    if(object().material.transparent||!object().material.depthWrite||object().material.blending!==1)throw Error('Energy shell left stale transparency/blending');
+    if((await compiled()).gxEnergyGain)throw Error('PBR reused stale energy bindings');
+    must(api.update('qa-energy',{material:{shader:{id:'energy'}}}));
+    close((await compiled()).gxEnergyGain.value,4,'energy reactivation on the same material');
+    must(api.update('qa-energy',{material:{shader:{id:'archive-ppl',bumpAmount:.1,lightPosition:[0,4,0]}}}));
+    if(object().material.userData.graphysxEnergyUniforms||!object().material.userData.graphysxArchivePpl)throw Error('Energy hook survived archived shader switch');
+    if((await compiled()).gxEnergyGain)throw Error('Archived PPL reused stale energy bindings');
+    must(api.update('qa-energy',{material:{shader:{id:'energy',flowStrength:0}}}));
+    let active=await compiled();close(active.gxEnergyGain.value,4,'rim-only reactivation');close(active.gxEnergyFlowStrength.value,0,'compiled rim-only variant');
+    must(api.update('qa-energy',{material:{shader:{id:'energy',flowStrength:.6}}}));
+    active=await compiled();close(active.gxEnergyFlowStrength.value,.6,'compiled flowing variant');
+    must(api.undo());
+    if(object().material.userData.graphysxArchivePpl||!object().material.userData.graphysxEnergyUniforms)throw Error('Archived hook survived energy undo');
+    // A native source material can arrive after its behavior. It must use its own PBR
+    // intensity, not the entity's generic material default, and repeated patches cannot drift.
+    must(api.spawn({id:'qa-energy-native',type:'model',asset:{url:'/assets/quest3/power-cell.glb',format:'gltf'},transform:{position:[50,0,0]},behaviors:[{...modulation,minimumFactor:.5,maximumFactor:.5}]}));
+    const deadline=performance.now()+15000;
+    while(api.query({ids:['qa-energy-native']})[0].asset.status!=='ready'){
+      if(performance.now()>deadline)throw Error('Native modulation readiness');
+      await new Promise(resolve=>setTimeout(resolve,30));
+    }
+    const source=()=>{const values=[];host.world.getEntityObject('qa-energy-native').traverse(o=>{if(o.isMesh)for(const m of Array.isArray(o.material)?o.material:[o.material])if(m.isMeshStandardMaterial)values.push(m.emissiveIntensity);});return values;};
+    const nativeHalf=source();if(!nativeHalf.length)throw Error('No native PBR materials');
+    for(let i=0;i<3;i++)must(api.update('qa-energy-native',{tags:['patched']}));
+    source().forEach((v,i)=>close(v,nativeHalf[i],'native patch drift'));
+    must(api.detachBehavior('qa-energy-native','brightness'));source().forEach((v,i)=>close(v,nativeHalf[i]*2,'native restored base'));
+    const saved=api.export();must(api.create(saved));
+    if(api.export().entities.find(e=>e.id==='qa-energy').material.shader.id!=='energy')throw Error('Round trip lost energy shader');
+    must(api.create(before));
+    return {pauseStep:true,authoredBasePreserved:true,compiledUniformUpdates:true,compiledVariantCycles:true,dynamicBody:true,ownedChildIsolation:true,detach:true,shaderUndo:true,archiveSwitch:true,nativeLateLoad:true,nativePatchDrift:false,roundTrip:true};
+  });
+  await ready(page);
   // Hold a real native model request across a complete world replacement. A late
   // completion must release its own resources rather than attach to an orphan group.
   let releaseNative, nativeRequested;

@@ -3,6 +3,7 @@ import audit from "./content/cubz-tva-animations.json";
 import { sampleCubzOpen, sampleCubzRotation, type CubzRotationSelection } from "./cubz-tva-animation";
 import type { KeyframeTrackBehavior } from "./agent-world-motion";
 import type { AgentWorldDefinition, AgentWorldEntityDefinition, GraphysXAgentWorldApi } from "./agent-world-runtime";
+import { buildRecoveredFlightX } from "./flightx-revival";
 
 const panels = ["Right08", "Top08", "Left08"] as const;
 const sourceCenters = [[0, 25, 0], [0, 25, 100], [-95, 25, 100], [-95, 25, 0], [0, -70, 0], [0, -70, 100], [-95, -70, 100], [-95, -70, 0]];
@@ -73,18 +74,5 @@ export function buildCubzTracks(): AgentWorldDefinition {
 }
 
 export function buildFlightX(): AgentWorldDefinition {
-  return { schema: "graphysx.agent-world/v2", id: "archive-flightx", label: "FlightX · native control channels, adapted scale and presentation",
-    environment: { background: "#7eabc6", ground: { visible: true, size: 2000, color: "#4a655d", grid: true, gridColor: "#739588" },
-      lighting: { source: "studio", intensity: 0.8, yawDegrees: 0, backgroundIntensity: 1, backgroundBlur: 0 } }, entities: [
-      { id: "flight-fill", type: "ambient-light", intensity: 1 },
-      { id: "flight-plane", type: "group", label: "FlightX · local-X kinematic pilot", transform: { position: [0, 16, 0] },
-        behaviors: [{ id: "flight-control", type: "flight", speed: 18 }], tags: ["archive", "adapted-kinematics", "archive-motion"] },
-      { id: "flight-plane-model", type: "model", parentId: "flight-plane", label: "StockRoom airplane · source mesh substitute",
-        asset: { id: "archive-suzanne2-airplane", fitSize: 5.5 }, transform: { rotationDegrees: [0, -90, 0] }, tags: ["source-model-substitution"] },
-      { id: "flight-source-pipe", type: "model", label: "pipe1.tvm · source model, inspection placement", asset: { id: "archive-tvm-pipe1", fitSize: 45 },
-        transform: { position: [65, 22, 0] }, tags: ["archive", "adapted-display-placement"] },
-      ...Array.from({ length: 8 }, (_, index): AgentWorldEntityDefinition => ({ id: `flight-guide-${index}`, type: "torus", label: `Repère de visite ${index + 1}`,
-        geometry: { radius: 6, tube: 0.15 }, transform: { position: [25 + index * 35, 16 + Math.sin(index) * 6, Math.cos(index) * 6], rotationDegrees: [0, 90, 0] },
-        material: { color: "#ffcc78", emissive: "#7a471a", emissiveIntensity: 0.2 }, tags: ["adapted-inspection-marker", "no-source-race-layout"] })),
-    ] };
+  return buildRecoveredFlightX();
 }

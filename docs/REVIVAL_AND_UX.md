@@ -147,14 +147,15 @@ destinations remain absent: the four actions and plates are disclosed replacemen
 Materials, camera and Web interpolation are adapters. Full provenance and validation:
 [CUBZ_MENU.md](CUBZ_MENU.md).
 
-**FlightX inspection flight.** An ordinary `flight` behavior and transient `pilotLive`
-API connect native W/S local-X movement, Z roll, reflected X pitch and orientation reset.
-Space increases the downward pitch channel as the C++ source does; it is not invented drag.
-Keyboard, hold buttons, blur/exit cancellation and optional chase camera use the shared
-host clock. Flight inputs create no authored revisions, history or persisted held keys.
-Web speed/rates, ground, pipe placement and guide rings are adapters. The visible StockRoom
-airplane is a source mesh substitute, not a certified conversion of the native FlightX
-actor. There is no aerodynamic simulation, source race layout or collision-course claim.
+**FlightX inspection flight.** The original TVM airplane (11,168 triangles, 48 surface
+groups), six BMPs and three-group pipe replace the earlier substitution. Native origins,
+pipe placement and distinct Atmel/2011 scales are reachable through undoable source poses.
+The recovered SDK names `MoveRelative` arguments forward/up/right. The model nose advances
+along reflected −Z without an added yaw; old saved behaviors retain their +X default.
+Space adds down-pitch rather than drag. Keyboard/touch, blur cleanup and chase camera use
+the shared clock without persisting held keys. PBR, camera, speed/rates, scale/lift and
+visit rings are adapters. Native collision, SDK timing and race layouts remain uncertified.
+See [FLIGHTX_REVIVAL.md](FLIGHTX_REVIVAL.md).
 
 Motion behavior configuration and key buffers pass the same bounded validator in the
 runtime and the storage service; agents discover them in the published vocabulary. These
@@ -170,7 +171,7 @@ It is a current creation experience, separate from the source-fidelity work belo
 | Historical evidence | Current limitation / next recovery |
 | --- | --- |
 | CubX/CubZ actors and native MenuManager | CubZ's three full actors, source pivots and coupled eight-choice menu are reachable in Archives; the old study is in Lab. The 32 internal buttons/exit mesh and historical destinations remain absent. The distinct CubXActor family and native visual parity are not certified. |
-| `FlightXScene.cpp`, pipe1, Airplane | Controllable v2 inspection flight is now reachable. Native actor/material identity, historical timestep equivalence and source gate/lap layouts remain unproven. |
+| `FlightXScene.cpp`, pipe1, Airplane | Original TVMs, all 51 surface groups, six BMPs, native pipe placement and Atmel/2011 poses are recovered. SDK forward semantics replace the inferred X-coordinate mapping. Native solver/timing/material parity and authored gate/lap layouts remain unproven. |
 | Maison, Kitchen, Unity Arena and Common Room | Complete recovered mesh geometry is reachable. Exact historical lighting/rendering and the absent external Kitchen photograph remain outside parity. |
 | `CarScene.cpp`, `Vehicule.cpp`, heightmaps and orphan car packs | Atmel and later RacinX are now distinct editable worlds with original TVM parts, source heightfields, 100 later rings and an explicitly adapted Rapier drive. See [IMPREZA_REVIVAL.md](IMPREZA_REVIVAL.md). Native tire/network/audio parity and bindings for orphan cars remain unproven. |
 | Serial/Arduino, TCP, NotesManager | Retain protocol/UI evidence. Simulated controls do not certify physical devices, networking or persistence. No hardware transport was opened in this pass. |

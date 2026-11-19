@@ -9,6 +9,7 @@ import { resolveAgentAppearance } from "./agent-appearance.mjs";
 import { resolveModelPresentation } from "./model-presentation.mjs";
 import { materializeMeshCommand } from "./mesh-authoring.mjs";
 import { MOTION_FIELDS, validateMotionBehavior } from "./motion-behaviors.mjs";
+import { ENERGY_FIELDS, MODULATE_FIELDS, VISUAL_LIMITS, validateEnergyShader, validateModulateBehavior } from "./visual-effects.mjs";
 import { assertInlineMesh, assertInlinePixels, assertMeshSceneBudget, assertMeshTextureCoordinates, MESH_FIELDS, MESH_GROUP_FIELDS, MESH_LIMITS, PIXEL_FIELDS, PIXEL_LIMITS } from "./inline-mesh.mjs";
 import {
   assertAuthoredSceneCommandNamespaces,
@@ -60,6 +61,7 @@ export const FIELDS = Object.freeze({
     "color", "emissive", "emissiveIntensity", "roughness", "metalness", "opacity", "wireframe", "texture",
     "normalTexture", "normalScale", "shader", "side",
   ]),
+  energyShader: ENERGY_FIELDS,
   geometry: Object.freeze(["width", "height", "depth", "radius", "tube", "radialSegments"]),
   path: Object.freeze(["points", "closed", "tension"]),
   asset: Object.freeze(["id", "url", "format", "fitSize", "alphaTest", "colorKey", "colorKeyTolerance", "instances", "lods", "lightmap"]),
@@ -115,6 +117,7 @@ export const FIELDS = Object.freeze({
     bob: Object.freeze(["id", "type", "axis", "amplitude", "frequencyHz", "phaseDegrees"]),
     orbit: Object.freeze(["id", "type", "center", "radius", "speedDegrees", "phaseDegrees", "axis"]),
     pulse: Object.freeze(["id", "type", "minimumScale", "maximumScale", "frequencyHz", "phaseDegrees"]),
+    modulate: MODULATE_FIELDS,
     "look-at": Object.freeze(["id", "type", "targetId"]),
     "follow-spline": Object.freeze(["id", "type", "splineId", "speed", "phase", "loop", "orientToPath"]),
     keyframes: MOTION_FIELDS.keyframes,
@@ -151,7 +154,7 @@ export const ENUMS = Object.freeze({
   forceFieldKinds: Object.freeze(["attractor", "flow", "drag", "vortex"]),
   forceFieldShapes: Object.freeze(["sphere", "box", "infinite"]),
   surfaceSketches: Object.freeze(["waveform", "grid-pulse", "plasma"]),
-  shaderIds: Object.freeze(["archive-ppl", "archive-meshlight"]),
+  shaderIds: Object.freeze(["archive-ppl", "archive-meshlight", "energy"]),
   assetFormats: Object.freeze(["graphysx-mesh-json", "gltf"]),
 });
 
@@ -165,6 +168,8 @@ export const LIMITS = Object.freeze({
   texture: Object.freeze({ repeat: [0.01, 128], offset: [-128, 128], rotationDegrees: [-360_000, 360_000] }),
   material: Object.freeze({ emissiveIntensity: [0, 100], roughness: [0, 1], metalness: [0, 1], opacity: [0, 1], normalScale: [0, 8] }),
   shader: Object.freeze({ bumpAmount: [0, 0.5], parallaxStrength: [0, 0.5], specularMultiplier: [0, 20], lightPosition: [-100_000, 100_000] }),
+  energyShader: VISUAL_LIMITS,
+  modulate: VISUAL_LIMITS,
   modelMaterialOverride: Object.freeze({ unit: [0, 1], emissiveIntensity: [0, 100] }),
   geometry: Object.freeze({ size: [0.0001, 10_000], radialSegments: [3, 512] }),
   mesh: MESH_LIMITS,
@@ -227,6 +232,7 @@ const MODEL_ASSET_IDS = new Set([
   "archive-slide-large", "archive-suzanne-door-gate", "archive-suzanne-finish-line", "archive-suzanne-level",
   "archive-suzanne-piston-stand", "archive-suzanne-piston-trigger", "archive-suzanne-piston",
   "archive-suzanne-rotator-cube", "archive-suzanne-rotator", "archive-suzanne2-airplane", "archive-suzanne2-boned-gate",
+  "archive-flightx-airplane", "archive-flightx-pipe",
   "archive-suzanne2-super-cage", "archive-tvm-90right", "archive-tvm-ballz-track1", "archive-tvm-corridor",
   "archive-tvm-cubx-btn1", "archive-tvm-cubx-btn2", "archive-tvm-cubx", "archive-tvm-finish-tvm", "archive-tvm-fleche",
   "archive-tvm-half-empty-ball", "archive-tvm-invert-sphere", "archive-tvm-pipe1", "archive-tvm-prisme",
@@ -398,6 +404,11 @@ function validateTexture(value, label, allowImportedMedia = false) {
 function validateShader(value, label, allowImportedMedia = false) {
   if (value === null) return;
   requireRecord(value, label);
+  if (value.id === "energy") {
+    try { validateEnergyShader(value); }
+    catch (error) { reject(error instanceof Error ? error.message : String(error)); }
+    return;
+  }
   if (value.id === "archive-ppl") {
     allowedKeys(value, new Set(["id", "bumpAmount", "lightPosition"]), label);
     requireFinite(value.bumpAmount, `${label}.bumpAmount`, ...LIMITS.shader.bumpAmount);
@@ -722,6 +733,9 @@ function validateBehaviors(value, label) {
     } else if (behavior.type === "pulse") {
       allowedKeys(behavior, setOf(FIELDS.behaviors.pulse), itemLabel);
       for (const key of ["minimumScale", "maximumScale", "frequencyHz", "phaseDegrees"]) if (behavior[key] !== undefined) requireFinite(behavior[key], `${itemLabel}.${key}`);
+    } else if (behavior.type === "modulate") {
+      try { validateModulateBehavior(behavior); }
+      catch (error) { reject(error instanceof Error ? error.message : String(error)); }
     } else if (behavior.type === "look-at") {
       allowedKeys(behavior, setOf(FIELDS.behaviors["look-at"]), itemLabel);
       requireStableId(behavior.targetId, `${itemLabel}.targetId`);

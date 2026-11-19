@@ -77,6 +77,10 @@ CubX notes, CubZ TVA animation studies, controllable FlightX and the native phys
 Their panels distinguish source geometry/behavior from adapted presentation and missing
 features. These worlds use the same Studio, world API and pause/step clock as current work.
 
+FlightX loads its [original TVM airplane and pipe](docs/FLIGHTX_REVIVAL.md), with six
+source textures, Atmel/2011 poses and SDK-informed forward flight. Open `?app=flightx`
+to inspect, fly, edit and save the scene in the Studio.
+
 Use Node.js 22 (the CI version). The browser product needs no database, model provider,
 hardware or scene-store service to start:
 

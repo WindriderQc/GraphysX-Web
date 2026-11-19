@@ -492,7 +492,7 @@ if (appParam === "quest3") {
     let returnFromApplicationStudio = false;
     let sceneBrowser: SceneBrowser | null = null;
     const openApplication = (id: string): boolean => {
-      if (id !== "make-ten" && id !== "ev3-lab" && id !== "llmx" && id !== "diskx" && id !== "ecosystem" && id !== "netx" && id !== "island" && id !== "creation" && id !== "dna" && id !== "cubx" && id !== "impreza") return false;
+      if (id !== "make-ten" && id !== "ev3-lab" && id !== "llmx" && id !== "diskx" && id !== "ecosystem" && id !== "netx" && id !== "island" && id !== "creation" && id !== "dna" && id !== "cubx" && id !== "impreza" && id !== "flightx") return false;
       if (applicationOpen) return true;
       applicationOpen = true;
       requestShowroomInteraction(false);
@@ -525,6 +525,24 @@ if (appParam === "quest3") {
             sceneBrowser?.setEnabled(!nestorBlockedByLiveSession());
             host.applyEnvironment();
             enterBrowsedEditor();
+          });
+        }).catch((error: unknown) => showStartupError(root, error));
+        return true;
+      }
+      if (id === "flightx") {
+        showroomEnvironment?.(); showroomEnvironment = null;
+        void Promise.all([import("./archive-worlds"), import("./archive-workbench")]).then(([{ buildArchiveWorld }, { mountArchiveWorkbench }]) => {
+          const result = host.api.create(buildArchiveWorld("flightx"));
+          if (!result.ok) throw new Error(result.error ?? "Could not open FlightX");
+          applicationOpen = false;
+          returnFromApplicationStudio = true;
+          host.applyEnvironment(); enterBrowsedEditor();
+          mountArchiveWorkbench(root, host, "flightx");
+          void host.editorReady().then(editor => {
+            if (host.mode === "editor" && host.api.query({ ids: ["flight-plane-model"] }).length) {
+              if (matchMedia("(max-width: 700px)").matches) editor?.showViewport();
+              else editor?.selectEntity("flight-plane-model");
+            }
           });
         }).catch((error: unknown) => showStartupError(root, error));
         return true;
@@ -1148,7 +1166,7 @@ if (appParam === "quest3") {
               { world: "common-room", id: "archive-common-room", label: "Common Room", summary: "La coque détaillée de room.tvm et ses textures DDS diffuse et normale. Une visite adaptée au moteur actuel.", meta: "180 sommets · 250 triangles · textures sources · caméra de visite adaptée" },
               { world: "notes", id: "archive-notes", label: "Notes 3D · CubX", summary: "Le bloc spatial de 50 plaques et son ajout séquentiel. Le gestionnaire de texte n’a jamais été retrouvé.", meta: "Composition native · 50 emplacements · ajout, annulation et reprise dans le Studio" },
               { world: "cubz", id: "archive-cubz-tracks", label: "CubZ · étude des pistes TVA", summary: "L’ancienne étude : sept rotations et trois charnières sur des volumes de remplacement. Le menu complet est dans Archives.", meta: "Étude de laboratoire · clés sources · géométrie et pivots adaptés" },
-              { world: "flightx", id: "archive-flightx", label: "FlightX · vol libre", summary: "Reprendre les commandes de FlightX : déplacement relatif, rotations et caméra de poursuite. Clavier et commandes tactiles.", meta: "Commandes C++ adaptées · avion et pipe sources · repères de visite modernes" },
+              { world: "flightx", id: "archive-flightx", label: "FlightX · l’avion retrouvé", summary: "L’avion TVM original, ses 48 groupes et le pipe à sa place C++. Compare la pose source, prends les commandes, puis sauvegarde dans le Studio.", meta: "11 168 triangles · six textures BMP · pose C++ et vol de visite · commandes adaptées" },
             ] as const).map((entry) => ({
               ...entry,
               open: async () => {
@@ -1251,13 +1269,13 @@ if (appParam === "quest3") {
     };
     // These applications own their scene from the first frame. Avoid booting the showroom
     // and its cubemap only to discard them when the app mounts.
-    const directSceneApp = (appParam === "make-ten" || appParam === "ev3-lab" || appParam === "creation" || appParam === "dna" || appParam === "cubx" || appParam === "impreza") && !editorFirst && !storeScene && !liveSessionRequested;
+    const directSceneApp = (appParam === "make-ten" || appParam === "ev3-lab" || appParam === "creation" || appParam === "dna" || appParam === "cubx" || appParam === "impreza" || appParam === "flightx") && !editorFirst && !storeScene && !liveSessionRequested;
     const host = new PlatformHost(root, {
       world: directSceneApp ? {
         schema: "graphysx.agent-world/v2", id: appParam + "-startup", label: appParam === "creation" || appParam === "dna" || appParam === "cubx" ? "GraphysX" : "KidX",
         environment: { background: "#142d38", sky: null }, entities: [],
       } : undefined,
-      autoOrbit: appParam !== "impreza" && appParam !== "cubx" && appParam !== "make-ten" && !motionIsReduced() && !editorFirst && appParam !== "creation" && appParam !== "dna" && appParam !== "ev3-lab" && appParam !== "llmx" && appParam !== "diskx" && appParam !== "ecosystem" && appParam !== "netx",
+      autoOrbit: appParam !== "flightx" && appParam !== "impreza" && appParam !== "cubx" && appParam !== "make-ten" && !motionIsReduced() && !editorFirst && appParam !== "creation" && appParam !== "dna" && appParam !== "ev3-lab" && appParam !== "llmx" && appParam !== "diskx" && appParam !== "ecosystem" && appParam !== "netx",
       autoOrbitSpeed: 0.2,
       editorVisible: editorFirst,
       // CubX and its living shell are the focal point; the shore and physics stay below.
@@ -1266,7 +1284,7 @@ if (appParam === "quest3") {
       // screenshot harness should put you where you asked to be, immediately. `?intro=0`
       // opts out. The default welcome approaches slowly; application entry keeps its
       // existing short move. Both use the host's interruptible focus mechanism.
-      intro: appParam !== "impreza" && appParam !== "cubx" && appParam !== "make-ten" && !motionIsReduced() && !editorFirst && appParam !== "creation" && appParam !== "dna" && appParam !== "llmx" && appParam !== "diskx" && appParam !== "ecosystem" && appParam !== "netx" && new URLSearchParams(window.location.search).get("intro") !== "0"
+      intro: appParam !== "flightx" && appParam !== "impreza" && appParam !== "cubx" && appParam !== "make-ten" && !motionIsReduced() && !editorFirst && appParam !== "creation" && appParam !== "dna" && appParam !== "llmx" && appParam !== "diskx" && appParam !== "ecosystem" && appParam !== "netx" && new URLSearchParams(window.location.search).get("intro") !== "0"
         ? appParam ? true : { durationSeconds: 10, distanceScale: 2.15, azimuthDegrees: 18 }
         : false,
       // `?post=bloom` turns the demo post stack on for any route (bloom + SMAA through the

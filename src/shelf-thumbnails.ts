@@ -43,8 +43,9 @@ export function createSceneThumbnail(id: string, label: string): HTMLImageElemen
   // scrolling never reveals empty cards and a missing checked-in preview fails visibly.
   image.loading = "eager";
   image.decoding = "async";
+  const fileId = id === "archive-flightx" ? "archive-flightx-native-tvm" : id;
   image.src = SHELF_SCENE_THUMBNAIL_IDS.has(id)
-    ? `/assets/shelf-thumbnails/${encodeURIComponent(id)}.jpg`
+    ? `/assets/shelf-thumbnails/${encodeURIComponent(fileId)}.jpg`
     : makeFallbackThumbnail(label);
   return image;
 }
