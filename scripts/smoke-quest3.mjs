@@ -21,10 +21,16 @@ const audioState=page=>page.evaluate(()=>{
     }))};
 });
 try {
-  const page=applySmokeTimeout(await browser.newPage({viewport:{width:1440,height:960},hasTouch:true}));
+  const context=await browser.newContext({viewport:{width:1440,height:960},hasTouch:true});
+  const openPage=async()=>{
+    const tab=applySmokeTimeout(await context.newPage());
+    tab.on('pageerror',e=>errors.push(String(e)));
+    tab.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
+    return tab;
+  };
+  let page=await openPage();
   const legacyPlanetRequests=[];
   page.on('request',request=>{if(/\/assets\/quest3\/planet\.(?:glb|ktx2)(?:\?|$)/.test(request.url()))legacyPlanetRequests.push(request.url());});
-  page.on('pageerror',e=>errors.push(String(e)));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
   await page.goto(new URL('?app=quest3',base).href);
   await page.waitForFunction(()=>{
     const app=window.__GRAPHYSX_QUEST3__;if(!app)return false;
@@ -126,9 +132,21 @@ try {
   await page.screenshot({path:path.join(out,'nacre-observation.png')});
   await page.click('.nacre-save');
   assert.ok(await page.evaluate(()=>window.__GRAPHYSX__.state().savedWorlds.includes('NACRE · Ma station')));
-  await page.click('.nacre-reset');await phase(page,'cell');await page.click('.nacre-load');await ready(page);await phase(page,'complete');
+  const firstTab=page;
+  await firstTab.close();
+  assert.equal(firstTab.isClosed(),true);
+  page=await openPage();
+  await page.goto(new URL('?app=quest3',base).href);await ready(page);await phase(page,'standby');
+  assert.deepEqual(await page.evaluate(()=>window.__GRAPHYSX__.state().savedWorlds),[],'the new runtime has no in-memory slots');
+  assert.equal(await page.locator('.nacre-load').isEnabled(),true,'the saved station is discoverable on the new tab');
+  await page.click('.nacre-load');await ready(page);await phase(page,'complete');
+  await page.waitForFunction(()=>JSON.parse(window.render_game_to_text()).view===2);
+  await advance(page,0);
+  await page.getByRole('button',{name:'Rejouer la mission'}).waitFor();
+  await page.screenshot({path:path.join(out,'nacre-reopened.png')});
   assert.deepEqual(await page.evaluate(()=>['nacre-door-left','nacre-door-right'].map(id=>window.__GRAPHYSX_QUEST3__.host.world.getEntityObject(id).position.x)),[-9.5,9.5]);
   assert.equal(await page.evaluate(()=>window.__GRAPHYSX_QUEST3__.holding),false);
+  receipt.closedAndReopened=true;
   receipt.desktopMission={completed:true,doorMidpoint:doorX,animation,audio,saveCheckpoint:true};
   await page.evaluate(()=>{
     const api=window.__GRAPHYSX__,saved=api.export(),planet=saved.entities.find(e=>e.id==='nacre-planet');
@@ -150,7 +168,7 @@ try {
   await page.evaluate(document=>window.__GRAPHYSX__.create(document),document);await ready(page);
   // Three's actual LOD evaluation, rather than a metadata-only assertion.
   await page.evaluate(()=>{const {host}=window.__GRAPHYSX_QUEST3__;host.camera.position.set(0,2,38);host.controls.target.set(0,1,-10);});
-  await page.waitForFunction(()=>window.__GRAPHYSX_QUEST3__.host.world.getEntityObject('nacre-equipment').children[0].levels[1].object.visible);
+  await page.waitForFunction(()=>window.__GRAPHYSX_QUEST3__.host.world.getEntityObject('nacre-equipment').children[0]?.levels[1].object.visible);
   await page.evaluate(()=>window.__GRAPHYSX_QUEST3__.view(1));
   await page.waitForFunction(()=>window.__GRAPHYSX_QUEST3__.host.world.getEntityObject('nacre-equipment').children[0].levels[0].object.visible);
   receipt.lod=true;
@@ -287,7 +305,66 @@ try {
   await page.tap('.nacre-menu summary');await page.tap('.nacre-reset');await advance(page,0);await phase(page,'cell');
   assert.deepEqual(await page.evaluate(()=>['nacre-door-left','nacre-door-right'].map(id=>window.__GRAPHYSX_QUEST3__.host.world.getEntityObject(id).position.x)),[-3.25,3.25]);
   receipt.mobileMission=true;
-  await page.close();
+  await context.close();
+
+  // Fail a dedicated asset request at the browser boundary and leave the real scene loader,
+  // storage, renderer and retry UI in charge of the outcome.
+  const recovery=applySmokeTimeout(await browser.newPage({viewport:{width:1000,height:720}}));
+  recovery.on('pageerror',e=>errors.push(String(e)));
+  const failAsset=route=>route.fulfill({status:503,body:'Intentional asset outage'});
+  const station='**/assets/quest3/station.glb';
+  const stars='**/assets/quest3/star.glb';
+  await recovery.route(station,failAsset);
+  await recovery.route(stars,failAsset);
+  await recovery.goto(new URL('?app=quest3',base).href);
+  const retry=recovery.locator('.nacre-retry');
+  const status=recovery.locator('.nacre-status [role=status]');
+  await retry.waitFor({state:'visible'});
+  assert.match(await status.innerText(),/élément essentiel/);
+  assert.equal(await recovery.getByRole('button',{name:'Chargement interrompu'}).isDisabled(),true);
+  await recovery.screenshot({path:path.join(out,'nacre-loading-error.png')});
+  await recovery.unroute(station,failAsset);
+  await retry.click();
+  await ready(recovery);
+  await recovery.waitForFunction(()=>document.querySelector('.nacre-status [role=status]').textContent.includes('décor est indisponible'));
+  assert.equal(await recovery.locator('.nacre-primary').isEnabled(),true);
+  assert.equal(await retry.isVisible(),false);
+  await recovery.unroute(stars,failAsset);
+  // The next world contains only primitives. Fail its first warm-up, then retry that exact scene.
+  const primitive={...document,label:'NACRE primitive fallback',entities:document.entities.filter(e=>['nacre-socket-base','nacre-ambient','nacre-sun'].includes(e.id)).map(e=>{const {parentId,...entity}=e;return entity;})};
+  await recovery.evaluate(scene=>{
+    const {host}=window.__GRAPHYSX_QUEST3__;
+    const compile=host.renderer.compileAsync.bind(host.renderer);
+    host.renderer.compileAsync=()=>{
+      host.renderer.compileAsync=compile;
+      return Promise.reject(new Error('Intentional renderer warm-up refusal'));
+    };
+    const result=host.api.create(scene);
+    if(!result.ok)throw Error(result.error);
+  },primitive);
+  await retry.waitFor({state:'visible'});
+  assert.match(await status.innerText(),/rendu a échoué/);
+  await retry.click();
+  await ready(recovery);
+  await recovery.waitForFunction(()=>!document.querySelector('.nacre-primary').disabled);
+  assert.equal(await recovery.evaluate(()=>window.__GRAPHYSX__.export().label),primitive.label);
+  assert.equal(await recovery.locator('.nacre-primary').isEnabled(),true);
+  await recovery.evaluate(()=>{
+    const gl=window.__GRAPHYSX_QUEST3__.host.renderer.getContext();
+    window.nacreTestContext=gl.getExtension('WEBGL_lose_context');
+    if(!window.nacreTestContext)throw Error('WEBGL_lose_context is required to exercise graphics recovery');
+    window.nacreTestContext.loseContext();
+  });
+  await recovery.getByRole('button',{name:'Recharger la page'}).waitFor({state:'visible'});
+  assert.match(await status.innerText(),/contexte graphique a été perdu/);
+  assert.equal(await recovery.locator('.nacre-primary').isDisabled(),true);
+  await recovery.evaluate(()=>window.nacreTestContext.restoreContext());
+  await ready(recovery);
+  await recovery.waitForFunction(()=>!document.querySelector('.nacre-primary').disabled);
+  assert.equal(await retry.isVisible(),false);
+  assert.equal(await recovery.evaluate(()=>window.__GRAPHYSX__.export().label),primitive.label);
+  receipt.loadingRecovery={requiredAssetRetried:true,optionalDecorDegraded:true,compileRetried:true,primitiveSceneReady:true,webglContextRestored:true};
+  await recovery.close();
 
   const xr=applySmokeTimeout(await browser.newPage({viewport:{width:1280,height:800}}));
   xr.on('pageerror',e=>errors.push(String(e)));

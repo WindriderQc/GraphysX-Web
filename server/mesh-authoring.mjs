@@ -1,5 +1,6 @@
 import { assertInlineMesh, assertInlinePixels, assertMeshSceneBudget } from './inline-mesh.mjs';
 import { buildInlineMesh } from './mesh-construction.mjs';
+import { entitySubtreeIds } from './entity-subtree.mjs';
 export const EDIT_LIMITS=Object.freeze({ ranges:64, rectangles:64 });
 export const EDIT_FIELDS=Object.freeze(['positions','indices','normals','uvs']);
 export const RANGE_FIELDS=Object.freeze(['start','values','delta']);
@@ -83,11 +84,14 @@ export function materializeMeshCommand(command,entities) {
 }
 export function materializeMeshCommands(commands,entities) {
   if(!commands.some(c=>c?.meshBuild!==undefined||c?.patch?.meshBuild!==undefined||c?.patch?.meshEdits!==undefined||c?.patch?.pixelEdits!==undefined)) return commands;
-  const draft=entities.map(e=>({...e}));
+  let draft=entities.map(e=>({...e}));
   return commands.map(command=>{
     const next=materializeMeshCommand(command,draft);
     if(next?.op==='spawn') draft.push(next.entity);
-    if(next?.op==='remove') {const index=draft.findIndex(e=>e.id===next.id);if(index>=0) draft.splice(index,1);}
+    if(next?.op==='remove') {
+      const removed = entitySubtreeIds(draft, next.id);
+      draft = draft.filter(entity => !removed.has(entity.id));
+    }
     if(next?.op==='update') {
       const index=draft.findIndex(e=>e.id===next.id);
       if(index>=0) draft[index]={...draft[index],...next.patch,...(next.patch.material?{material:{...draft[index].material,...next.patch.material}}:{})};

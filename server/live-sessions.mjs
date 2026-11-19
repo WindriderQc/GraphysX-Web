@@ -31,6 +31,7 @@
 // can mint an owner session. See `enabled` below.
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { applyCommands, describeCommands } from "./scene-commands.mjs";
 import { materializeMeshCommands } from "./mesh-authoring.mjs";
 import { httpError, readJsonBody, sendJson } from "./http-util.mjs";
@@ -280,6 +281,7 @@ export function computeInverseCommands(preDefinition, commands, outputs) {
   const byId = new Map((preDefinition.entities ?? []).map((entity) => [entity.id, entity]));
   const order = new Map((preDefinition.entities ?? []).map((entity, index) => [entity.id, index]));
   const inverseGroups = [];
+  const removedIds = new Set();
 
   for (let index = 0; index < commands.length; index += 1) {
     const command = commands[index];
@@ -301,6 +303,7 @@ export function computeInverseCommands(preDefinition, commands, outputs) {
       for (const id of ids) {
         const entity = byId.get(id);
         if (!entity) return null;
+        removedIds.add(id);
         restores.push({ op: "spawn", entity: structuredClone(entity) });
       }
       inverseGroups.push(restores);
@@ -329,7 +332,38 @@ export function computeInverseCommands(preDefinition, commands, outputs) {
   }
 
   // Applied in reverse: undoing "remove A then spawn B" must despawn B before restoring A.
-  return inverseGroups.reverse().flat();
+  const inverse = inverseGroups.reverse().flat();
+  for (const joint of preDefinition.joints ?? []) {
+    if (removedIds.has(joint.bodyA) || removedIds.has(joint.bodyB)) {
+      inverse.push({ op: "add-joint", joint: structuredClone(joint) });
+    }
+  }
+  return inverse;
+}
+
+function verifiedInverse(before, next) {
+  const inverse = computeInverseCommands(before, next.resolvedCommands, next.outputs);
+  if (!inverse?.length || inverse.length > LIMITS.commandsPerOp) return null;
+  try {
+    const restored = applyCommands(next.definition, inverse).definition;
+    return isDeepStrictEqual(before, restored) ? inverse : null;
+  } catch {
+    return null;
+  }
+}
+
+function changedSceneSlots(before, after) {
+  const changed = [];
+  for (const [key, prefix] of [["entities", ""], ["joints", "@joint:"]]) {
+    const previous = new Map((before[key] ?? []).map(item => [item.id, item]));
+    for (const item of after[key] ?? []) {
+      if (!isDeepStrictEqual(previous.get(item.id), item)) changed.push(prefix + item.id);
+      previous.delete(item.id);
+    }
+    for (const id of previous.keys()) changed.push(prefix + id);
+  }
+  if (!isDeepStrictEqual(before.environment, after.environment)) changed.push("@environment");
+  return changed;
 }
 
 /**
@@ -547,6 +581,7 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
       revision: record.revision,
     };
     if (record.revision === previousRevision) return null;
+    session.externalRevision = record.revision;
     const event = {
       schema: LIVE_SESSION_SCHEMA,
       event: "resync",
@@ -721,6 +756,7 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
       missionAcceptedByMember: new Map(),
       /** Last store-proven document, used only if a terminal store read itself fails. */
       authoritative: { definition: structuredClone(record.definition), revision: record.revision },
+      externalRevision: record.revision,
       closing: false,
       closed: false,
       /**
@@ -903,7 +939,7 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
    * inside the same millisecond are still serialised by the store's per-scene write chain
    * rather than by this check alone.
    */
-  async function submitOperation(session, member, body) {
+  async function submitOperation(session, member, body, undoEntry = null) {
     requireCapability(member, "mutate");
 
     const opId = assertId(body?.opId, "opId");
@@ -967,6 +1003,13 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
     if (!record) throw httpError(`The scene backing this session is gone: ${session.sceneName}`, 410);
     adoptExternalRecord(session, record);
 
+    if (undoEntry && undoEntry.revision < session.externalRevision) {
+      throw httpError("Cannot safely undo across an external scene revision", 409, {
+        code: "undo-unsafe",
+        revision: session.externalRevision,
+      });
+    }
+
     if (baseRevision !== undefined && baseRevision !== null) {
       if (baseRevision !== record.revision) {
         throw httpError(`Revision conflict: expected ${baseRevision}, current ${record.revision}`, 409, {
@@ -981,6 +1024,9 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
     try {
       next = applyCommands(record.definition, commands);
     } catch (error) {
+      if (undoEntry) {
+        throw httpError("The scene changed and the inverse no longer applies", 409, { code: "undo-unsafe" });
+      }
       // 422, deliberately not the validator's own 400. The envelope was well-formed and
       // authorised; the *content* was refused — a missing entity, a duplicate id, a
       // session-only entity in a document. A client can act on that distinction: a 400
@@ -989,6 +1035,14 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
       throw httpError(error?.message ?? "Operation rejected", 422, { code: "operation-rejected" });
     }
 
+    const changed = changedSceneSlots(record.definition, next.definition);
+    if (undoEntry && changed.some(id => !undoEntry.touched.includes(id))) {
+      throw httpError("The inverse would change other scene objects", 409, { code: "undo-unsafe" });
+    }
+    const touched = [...new Set([...touchedEntityIds(next.resolvedCommands, next.outputs), ...changed])];
+    const inverse = verifiedInverse(record.definition, next);
+    const authoritative = structuredClone(next.definition);
+    const at = new Date(now()).toISOString();
     const intent = assertLabel(body?.intent, "intent", describeCommands(commands, next.outputs))?.slice(0, LIMITS.intentChars);
     const written = await store.put(session.sceneName, next.definition, record.revision, {
       actor: member.actorId,
@@ -1013,14 +1067,13 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
       intent,
       baseRevision: record.revision,
       revision: written.revision,
-      at: new Date(now()).toISOString(),
+      at,
+      inverse,
+      touched,
+      undone: false,
     };
-    // Computed here or never: after this write the pre-state is gone.
-    event.inverse = computeInverseCommands(record.definition, commands, next.outputs);
-    event.touched = touchedEntityIds(commands, next.outputs);
-    event.undone = false;
     session.authoritative = {
-      definition: structuredClone(next.definition),
+      definition: authoritative,
       revision: written.revision,
     };
     const receipt = { ok: true, opId, seq: event.seq, revision: written.revision, baseRevision: record.revision, outputs: next.outputs, intent };
@@ -1093,7 +1146,7 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
       path: "transaction",
       commands: entry.inverse,
       intent: `undid: ${entry.intent}`.slice(0, LIMITS.intentChars),
-    });
+    }, entry);
     entry.undone = true;
     return { ...receipt, undoOf: opId };
   }
