@@ -19,6 +19,7 @@ import { createSceneStoreServer, startSceneStore } from "../server/scene-store.m
 import { startStaticServer } from "./static-server.mjs";
 import { applySmokeTimeout, launchSmokeBrowser, SMOKE_TIMEOUT } from "./smoke-harness.mjs";
 import { check, createActor, report, requestText, seedDefinition, sleep, waitForStore } from "./live-session-harness.mjs";
+import { sampleMainRenderFrames } from "./render-budget-sampler.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ARTIFACTS = process.env.SMOKE_ARTIFACTS || path.join(ROOT, "output", "smoke");
@@ -435,45 +436,19 @@ const settleRenderProfile = async (page, viewport, expectedProfile) => {
 
 const sampleRendererBudget = async (page, label, viewport, expectedProfile) => {
   await settleRenderProfile(page, viewport, expectedProfile);
-  return page.evaluate(async ({ sampleLabel, profileName, timeoutMs }) => {
+  const sample = await page.evaluate(sampleMainRenderFrames, { sampleFrames: 24, timeoutMs: SMOKE_TIMEOUT });
+  return page.evaluate(({ sampleLabel, profileName, sample }) => {
     const host = window.__GRAPHYSX_HOST__;
-    const renderer = host.renderer;
-    const previousAutoReset = renderer.info.autoReset;
-    let reading = null;
-    try {
-      renderer.info.autoReset = false;
-      renderer.info.reset();
-      const startFrame = host.frameCount;
-      const startedAt = performance.now();
-      let timedOut = false;
-      await new Promise((resolve) => {
-        const poll = () => {
-          if (host.frameCount - startFrame >= 24) resolve();
-          else if (performance.now() - startedAt >= timeoutMs) {
-            timedOut = true;
-            resolve();
-          } else window.setTimeout(poll, 16);
-        };
-        poll();
-      });
-      const elapsedMs = performance.now() - startedAt;
-      const frames = host.frameCount - startFrame;
-      const render = { ...renderer.info.render };
       const runtime = window.__GRAPHYSX_LIVE_MISSION__?.state() ?? null;
       const evidenceCount = runtime?.mission?.stages.reduce((count, stage) => count + stage.evidence.length, 0) ?? 0;
       const artifactCap = profileName === "mobile" ? 2 : 4;
-      reading = {
+      return {
         label: sampleLabel,
         expectedProfile: profileName,
         profile: { ...host.qualityProfile },
         rootProfile: document.documentElement.dataset.gxRenderProfile ?? null,
         viewport: { width: innerWidth, height: innerHeight },
-        timedOut,
-        elapsedMs: Number(elapsedMs.toFixed(1)),
-        frames,
-        totals: { calls: render.calls, triangles: render.triangles },
-        callsPerFrame: frames ? Number((render.calls / frames).toFixed(2)) : null,
-        trianglesPerFrame: frames ? Number((render.triangles / frames).toFixed(1)) : null,
+        ...sample,
         actorId: window.__GRAPHYSX_LIVE_SESSION__.status.actorId,
         agentCount: window.__GRAPHYSX_LIVE_PRESENCE__?.state().agents.length ?? -1,
         reactionRootCount: window.__GRAPHYSX__.query({ tag: "nestor-live-activity" }).length,
@@ -485,12 +460,7 @@ const sampleRendererBudget = async (page, label, viewport, expectedProfile) => {
         artifactCap,
         expectedArtifactCount: Math.min(evidenceCount, artifactCap),
       };
-    } finally {
-      renderer.info.reset();
-      renderer.info.autoReset = previousAutoReset;
-    }
-    return reading;
-  }, { sampleLabel: label, profileName: expectedProfile, timeoutMs: SMOKE_TIMEOUT });
+  }, { sampleLabel: label, profileName: expectedProfile, sample });
 };
 
 const api = async (base, method, path_, body, credential) => {

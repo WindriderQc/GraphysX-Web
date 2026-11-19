@@ -155,7 +155,11 @@ along reflected −Z without an added yaw; old saved behaviors retain their +X d
 Space adds down-pitch rather than drag. Keyboard/touch, blur cleanup and chase camera use
 the shared clock without persisting held keys. PBR, camera, speed/rates, scale/lift and
 visit rings are adapters. Native collision, SDK timing and race layouts remain uncertified.
-See [FLIGHTX_REVIVAL.md](FLIGHTX_REVIVAL.md).
+See [FLIGHTX_REVIVAL.md](FLIGHTX_REVIVAL.md). The source workbench is retained at
+`?app=flightx&view=source`. The default `?app=flightx` menu offers free flight, ordered
+gates, timed looping and three laps using these native assets, with local records and
+an edit-preserving Studio handoff. Those courses and their simplified controls are
+explicitly current adaptations; see [FLIGHTX_MODES.md](FLIGHTX_MODES.md).
 
 Motion behavior configuration and key buffers pass the same bounded validator in the
 runtime and the storage service; agents discover them in the published vocabulary. These
@@ -171,7 +175,7 @@ It is a current creation experience, separate from the source-fidelity work belo
 | Historical evidence | Current limitation / next recovery |
 | --- | --- |
 | CubX/CubZ actors and native MenuManager | CubZ's three full actors, source pivots and coupled eight-choice menu are reachable in Archives; the old study is in Lab. The 32 internal buttons/exit mesh and historical destinations remain absent. The distinct CubXActor family and native visual parity are not certified. |
-| `FlightXScene.cpp`, pipe1, Airplane | Original TVMs, all 51 surface groups, six BMPs, native pipe placement and Atmel/2011 poses are recovered. SDK forward semantics replace the inferred X-coordinate mapping. Native solver/timing/material parity and authored gate/lap layouts remain unproven. |
+| `FlightXScene.cpp`, pipe1, Airplane | Original TVMs, all 51 surface groups, six BMPs, native pipe placement and Atmel/2011 poses are recovered. SDK forward semantics replace the inferred X-coordinate mapping. Four modern training forms are playable using shared rules; native solver/timing/material parity and historical gate/lap layouts remain unproven. |
 | Maison, Kitchen, Unity Arena and Common Room | Complete recovered mesh geometry is reachable. Exact historical lighting/rendering and the absent external Kitchen photograph remain outside parity. |
 | `CarScene.cpp`, `Vehicule.cpp`, heightmaps and orphan car packs | Atmel and later RacinX are now distinct editable worlds with original TVM parts, source heightfields, 100 later rings and an explicitly adapted Rapier drive. See [IMPREZA_REVIVAL.md](IMPREZA_REVIVAL.md). Native tire/network/audio parity and bindings for orphan cars remain unproven. |
 | Serial/Arduino, TCP, NotesManager | Retain protocol/UI evidence. Simulated controls do not certify physical devices, networking or persistence. No hardware transport was opened in this pass. |

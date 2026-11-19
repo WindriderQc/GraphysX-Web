@@ -7,11 +7,12 @@
  */
 import { startStaticServer } from "./static-server.mjs";
 import { applySmokeTimeout, launchSmokeBrowser, SMOKE_TIMEOUT } from "./smoke-harness.mjs";
+import { sampleMainRenderFrames } from "./render-budget-sampler.mjs";
 
 const root = new URL("../dist/", import.meta.url).pathname.replace(/^\/(?:([A-Za-z]:))/, "$1");
 const server = await startStaticServer({ root, port: 0 });
 const browser = await launchSmokeBrowser({
-  args: ["--no-sandbox", "--use-gl=swiftshader", "--disable-dev-shm-usage"],
+  args: ["--no-sandbox", "--use-gl=angle", "--use-angle=swiftshader", "--disable-dev-shm-usage"],
 });
 
 async function sample(label, viewport, deviceScaleFactor) {
@@ -26,27 +27,11 @@ async function sample(label, viewport, deviceScaleFactor) {
       timeout: SMOKE_TIMEOUT,
     });
     await page.waitForTimeout(1600);
-    return await page.evaluate(async (sampleLabel) => {
+    await page.evaluate(() => window.__GRAPHYSX__.pause(true));
+    const sample = await page.evaluate(sampleMainRenderFrames, { sampleFrames: 24, timeoutMs: 8000 });
+    return await page.evaluate(({ sampleLabel, sample }) => {
       const host = window.__GRAPHYSX_HOST__;
       const renderer = host.renderer;
-      window.__GRAPHYSX__.pause(true);
-      const previousAutoReset = renderer.info.autoReset;
-      renderer.info.autoReset = false;
-      renderer.info.reset();
-      const startedAt = performance.now();
-      const startFrame = host.frameCount;
-      await new Promise((resolve) => {
-        const poll = () => {
-          if (host.frameCount - startFrame >= 24 || performance.now() - startedAt >= 8000) resolve();
-          else requestAnimationFrame(poll);
-        };
-        requestAnimationFrame(poll);
-      });
-      const elapsedMs = performance.now() - startedAt;
-      const frames = host.frameCount - startFrame;
-      const render = { ...renderer.info.render };
-      renderer.info.reset();
-      renderer.info.autoReset = previousAutoReset;
       const canvas = renderer.domElement;
       const overlay = document.querySelector(".gx-overlay-canvas");
       const showroomRig = host.scene.getObjectByName("ShowroomEnvironment");
@@ -62,13 +47,10 @@ async function sample(label, viewport, deviceScaleFactor) {
         overlayBuffer: [overlay?.width ?? 0, overlay?.height ?? 0],
         shadowMapSize: sun?.shadow?.mapSize?.x ?? null,
         authoredReflection: water?.water?.reflection ?? null,
-        elapsedMs: Number(elapsedMs.toFixed(1)),
-        frames,
-        fps: Number((frames * 1000 / elapsedMs).toFixed(1)),
-        callsPerFrame: frames ? Number((render.calls / frames).toFixed(1)) : null,
-        trianglesPerFrame: frames ? Math.round(render.triangles / frames) : null,
+        ...sample,
+        fps: Number((sample.frames * 1000 / sample.elapsedMs).toFixed(1)),
       };
-    }, label);
+    }, { sampleLabel: label, sample });
   } finally {
     await page.close();
   }

@@ -1,7 +1,9 @@
 # FlightX: original models and source poses
 
-Open **Archives → FlightX · l’avion retrouvé**, or `?app=flightx`. The scene uses the
+Open `?app=flightx&view=source` for the original source inspection scene. It uses the
 ordinary Studio, with keyboard/touch controls, Save, Export, undo and the shared world API.
+**Archives → FlightX · l’avion retrouvé**, or `?app=flightx`, now opens the
+[four modern training forms](FLIGHTX_MODES.md), with a separate source comparison link.
 
 ## Recovered
 
@@ -69,8 +71,9 @@ attitude in place and **Retour au départ** resets position separately; the sour
 Camera, speed/rates, ground, visit markers and PBR are adapters. Recovered MGR4 colors
 and alpha do not certify historical appearance: the C++ scene overrides them with
 `StdMat`. Native collision response, aerodynamics, SDK timing and authored race/lap
-layouts remain unverified. The four intended flight forms are not complete. The older
-prototype 14-gate recovery route is not presented as an original layout.
+layouts remain unverified. The four intended flight forms are playable as explicitly
+modern training layouts; their implementation is documented in [FLIGHTX_MODES.md](FLIGHTX_MODES.md).
+The older prototype 14-gate recovery route is not presented as an original layout.
 
 ```powershell
 node scripts/vendor-flightx.mjs --archive=C:/Users/Yanik/codes/GraphysX --check

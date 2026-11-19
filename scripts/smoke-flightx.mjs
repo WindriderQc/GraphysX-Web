@@ -45,7 +45,7 @@ const projectedModel = (page, id) => page.evaluate(id => {
 try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 960 }, reducedMotion: "reduce" });
   const page = applySmokeTimeout(await context.newPage()), errors = errorsFor(page);
-  await page.goto(new URL("?app=flightx&intro=0", base).href); await ready(page);
+  await page.goto(new URL("?app=flightx&view=source&intro=0", base).href); await ready(page);
   await page.evaluate(() => window.__GRAPHYSX__.pause(true));
   const loaded = await page.evaluate(() => {
     const host = window.__GRAPHYSX_HOST__, api = host.api;
@@ -131,7 +131,7 @@ try {
   for (const [width, height] of [[390, 844], [320, 740]]) {
     const context = await browser.newContext({ viewport: { width, height }, hasTouch: true, isMobile: true, reducedMotion: "reduce" });
     const page = applySmokeTimeout(await context.newPage()), errors = errorsFor(page);
-    await page.goto(new URL("?app=flightx&intro=0", base).href); await ready(page);
+    await page.goto(new URL("?app=flightx&view=source&intro=0", base).href); await ready(page);
     await page.locator('.gx-ed-mobile-nav[data-panel="viewport"]').waitFor();
     await page.locator(".gx-ed-mobile-nav").getByRole("button", { name: "Inspect", exact: true }).tap();
     await page.locator('.gx-ed-mobile-nav[data-panel="inspector"]').waitFor();

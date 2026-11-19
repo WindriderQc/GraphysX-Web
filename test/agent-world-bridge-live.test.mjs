@@ -8,7 +8,7 @@ import { after, before, test } from "node:test";
 import { build } from "vite";
 import { applyCommands, validateStoredSceneDefinition } from "../server/scene-commands.mjs";
 
-let temporary, AgentWorldRuntime, createAgentWorldApi, createBridge, invoke, requestSchema, archiveWorlds, motionWorlds, dnaCreation, cubz, motion, flightx;
+let temporary, AgentWorldRuntime, createAgentWorldApi, createBridge, invoke, requestSchema, archiveWorlds, motionWorlds, dnaCreation, cubz, motion, flightx, flightxCourses, flightxRecords;
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
 
 before(async () => {
@@ -32,6 +32,8 @@ before(async () => {
           cubz: join(root, "src/cubz-menu-scene.ts"),
           motionSampler: join(root, "src/agent-world-motion.ts"),
           flightx: join(root, "src/flightx-revival.ts"),
+          flightxCourses: join(root, "src/flightx-courses.ts"),
+          flightxRecords: join(root, "src/flightx-records.ts"),
         },
         output: { format: "es", entryFileNames: "[name].mjs", chunkFileNames: "chunks/[name]-[hash].mjs" },
       },
@@ -47,6 +49,8 @@ before(async () => {
   dnaCreation = await load("dnaCreation");
   cubz = await load("cubz"); motion = await load("motionSampler");
   flightx = await load("flightx");
+  flightxCourses = await load("flightxCourses");
+  flightxRecords = await load("flightxRecords");
   // Only the window transport is substituted. The scene, validators, API factory,
   // tool manifest, dispatch and simulation are the production implementations.
   const window = Object.assign(new EventTarget(), {
@@ -95,6 +99,80 @@ const records = ({ runtime, api }) => structuredClone({
 const snapshot = w => ({ ...records(w), state: w.api.state(), document: w.api.exportDocument(), exported: w.api.export() });
 const request = (method, args) => ({ schema: requestSchema, id: "live-test", method, args });
 const accepted = result => { assert.equal(result.ok, true, result.error); return result.value; };
+
+test("FlightX modern courses use real kinematic crossings and ordered shared rules for all four modes", t => {
+  for (const mode of ["free", "gates", "time", "laps"]) {
+    const definition = flightxCourses.buildFlightxCourse(mode);
+    assert.doesNotThrow(() => validateStoredSceneDefinition(definition));
+    const w = world(t); accepted(w.api.create(definition));
+    assert.equal(w.api.rules.get()?.subjectId ?? null, mode === "free" ? null : "flight-plane");
+    const input = mode === "time" || mode === "laps" ? { thrust: 1, pitch: -1 } : { thrust: 1 };
+    accepted(w.api.pilotLive("flight-plane", input));
+    const steps = mode === "laps" ? 1900 : mode === "free" ? 120 : 680;
+    for (let i = 0; i < steps; i++) accepted(w.api.step(1 / 60));
+    const run = w.api.rules.status();
+    if (mode === "free") { assert.equal(run, null); assert.ok(w.api.query({ ids: ["flight-plane"] })[0].position[2] < -30); }
+    else {
+      assert.equal(run.phase, "complete", mode + ": " + JSON.stringify(run));
+      assert.equal(run.lap, mode === "laps" ? 3 : 1);
+      assert.equal(run.desynced, false);
+      assert.ok(w.api.events().events.some(event => event.type === "trigger.enter" && event.entityIds.includes("flight-plane")));
+    }
+  }
+});
+
+test("FlightX cannot finish by skipping gates, and the timed mode expires on simulation time", t => {
+  const w = world(t); accepted(w.api.create(flightxCourses.buildFlightxCourse("gates")));
+  accepted(w.api.update("flight-plane", { transform: { position: [0, 16, -105] } }));
+  accepted(w.api.step(.1)); assert.equal(w.api.rules.status().lap, 0); assert.equal(w.api.rules.status().phase, "running");
+  accepted(w.api.create(flightxCourses.buildFlightxCourse("time")));
+  accepted(w.api.step(30)); accepted(w.api.step(6));
+  assert.equal(w.api.rules.status().phase, "expired"); assert.equal(w.api.rules.status().outcome, "timeout");
+  assert.equal(w.api.rules.status().lap, 0);
+});
+
+test("FlightX passage volumes accept a short throttle lead before a looping without relying on torus collision orientation", t => {
+  const w = world(t); accepted(w.api.create(flightxCourses.buildFlightxCourse("time")));
+  accepted(w.api.pilotLive("flight-plane", { thrust: 1 })); accepted(w.api.step(.12));
+  accepted(w.api.pilotLive("flight-plane", { pitch: -1 }));
+  for (let i = 0; i < 44; i++) accepted(w.api.step(.25));
+  assert.equal(w.api.rules.status().phase, "complete");
+  const definition = w.api.exportDocument();
+  assert.equal(definition.entities.find(entity => entity.id === "flightx-gate-2").type, "box");
+  assert.equal(definition.entities.find(entity => entity.id === "flightx-gate-ring-2").physics, undefined);
+});
+
+test("FlightX mode changes preserve authored models and additions, and rotate new gates with the departure", t => {
+  const w = world(t); accepted(w.api.create(flightx.buildRecoveredFlightX()));
+  accepted(w.api.update("flight-plane", { transform: { position: [12, 32, 5], rotationDegrees: [0, 90, 0] } }));
+  accepted(w.api.update("flight-plane-model", { label: "My restored biplane" }));
+  accepted(w.api.spawn({ id: "my-flight-addition", type: "box", material: { color: "#ee7835" }, transform: { position: [25, 14, 12] } }));
+  const definition = flightxCourses.buildFlightxCourse("gates", w.api.exportDocument());
+  assert.doesNotThrow(() => validateStoredSceneDefinition(definition));
+  accepted(w.api.create(definition)); accepted(w.api.pilotLive("flight-plane", { thrust: 1 }));
+  for (let i = 0; i < 420; i++) accepted(w.api.step(1 / 60));
+  assert.equal(w.api.rules.status().phase, "complete");
+  assert.equal(w.api.query({ ids: ["flight-plane-model"] })[0].label, "My restored biplane");
+  assert.equal(w.api.query({ ids: ["my-flight-addition"] })[0].material.color, "#ee7835");
+  const free = flightxCourses.buildFlightxCourse("free", w.api.exportDocument());
+  assert.equal(free.rules, undefined); assert.equal(free.entities.some(entity => entity.id === "my-flight-addition"), true);
+});
+
+test("FlightX local records reject malformed values and report storage failure without losing the session result", () => {
+  let value = JSON.stringify({ gates: 9.8, time: "2", laps: -4, free: 2 });
+  const storage = { getItem: () => value, setItem: (key, next) => { assert.equal(key, "graphysx.flightx.best.v1"); value = next; } };
+  assert.deepEqual(flightxRecords.readFlightxBest(storage), { best: { gates: 9.8 }, available: true });
+  const saved = flightxRecords.saveFlightxBest("gates", 8.2, { gates: 9.8 }, storage);
+  assert.equal(saved.stored, true); assert.equal(saved.improved, true); assert.deepEqual(JSON.parse(value), { gates: 8.2 });
+  const quota = { getItem: storage.getItem, setItem: () => { throw new Error("Quota exceeded"); } };
+  const failed = flightxRecords.saveFlightxBest("gates", 7.1, saved.best, quota);
+  assert.equal(failed.stored, false); assert.equal(failed.best.gates, 7.1); assert.equal(JSON.parse(value).gates, 8.2);
+  value = JSON.stringify({ gates: 5.2, laps: 31 });
+  const anotherTab = flightxRecords.saveFlightxBest("time", 10.5, { gates: 8.2 }, storage);
+  assert.equal(anotherTab.best.gates, 5.2); assert.equal(anotherTab.best.laps, 31);
+  value = "{bad json"; assert.deepEqual(flightxRecords.readFlightxBest(storage), { best: {}, available: false });
+  assert.equal(flightxRecords.saveFlightxBest("free", 3, {}, storage).stored, false);
+});
 
 test("DNA mutations cross browser/storage validation and reload identical geometry with one changed gene", t => {
   const { composeDnaCreation, DNA_MUTATIONS, dnaMutationCommands, dnaCreationCanTune, dnaCreationMeasurements } = dnaCreation;

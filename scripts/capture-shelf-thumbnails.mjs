@@ -50,7 +50,7 @@ const browser = await chromium.launch({ headless: true, args: ["--use-angle=swif
 async function capture(id, shelf, selector) {
   const page = await browser.newPage({ viewport: { width: 640, height: 360 }, deviceScaleFactor: 1 });
   const directFlight = id === "archive-flightx";
-  await page.goto(directFlight ? new URL("?app=flightx&intro=0", BASE).href : BASE, { waitUntil: "domcontentloaded", timeout: 60_000 });
+  await page.goto(directFlight ? new URL("?app=flightx&view=source&intro=0", BASE).href : BASE, { waitUntil: "domcontentloaded", timeout: 60_000 });
   await page.waitForFunction(() => Boolean(window.__GRAPHYSX_HOST__), null, { timeout: 60_000 });
   if (!directFlight) {
     await page.click(`.gx-welcome .gx-go-${shelf}`);

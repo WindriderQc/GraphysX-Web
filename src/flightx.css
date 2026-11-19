@@ -1,0 +1,114 @@
+.gx-flightx {
+  --ink: #eef8fb; --muted: #b2c8d5; --accent: #a9ead5;
+  position: fixed; inset: 0; z-index: 30; pointer-events: none;
+  color: var(--ink); font-family: var(--gx-font, sans-serif);
+}
+.gx-flightx [hidden] { display: none !important; }
+.gx-flightx button, .gx-flightx a, .gx-flightx summary { pointer-events: auto; }
+.gx-flightx button {
+  min-height: 44px; padding: 10px 14px; border: 1px solid #c2e4f04d; border-radius: 9px;
+  background: #123345ed; color: var(--ink); font: inherit; cursor: pointer;
+}
+.gx-flightx button:hover { background: #285268; }
+.gx-flightx button:disabled { opacity: .5; cursor: default; }
+.gx-flightx :is(button, a, summary):focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.gx-flightx .gx-flightx-primary { background: var(--accent); color: #10392f; font-weight: 700; border-color: var(--accent); }
+.gx-flightx .gx-flightx-primary:hover { background: #ccffe9; }
+.gx-flightx-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 20px 28px; }
+.gx-flightx-header > span { font-size: 12px; letter-spacing: .08em; background: #0d2c3ed9; padding: 9px 13px; border: 1px solid #c2e4f03b; border-radius: 8px; }
+.gx-flightx-header i { color: var(--muted); padding: 0 9px; font-style: normal; }
+.gx-flightx-menu {
+  position: absolute; top: 102px; bottom: 24px; left: 28px; width: 410px; max-height: 670px;
+  overflow: auto; box-sizing: border-box; padding: 24px; border: 1px solid #c2e4f03b; border-radius: 18px;
+  background: linear-gradient(145deg, #123849f5, #0b2437f2); pointer-events: auto;
+}
+.gx-flightx-kicker { margin: 0; font-size: 9px; letter-spacing: .14em; color: var(--accent); font-weight: 700; }
+.gx-flightx-kicker span { display: block; margin-top: 6px; color: var(--muted); font-size: 8px; }
+.gx-flightx h1 { margin: 17px 0 10px; font-size: 42px; line-height: 1.05; font-weight: 500; letter-spacing: -.055em; }
+.gx-flightx-intro { font-size: 14px; line-height: 1.5; color: var(--muted); margin: 0 0 18px; }
+.gx-flightx-modes { border: 0; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.gx-flightx-modes legend { padding: 0 0 9px; font-size: 12px; }
+.gx-flightx-modes button { padding: 11px; min-height: 112px; display: flex; flex-direction: column; text-align: left; gap: 6px; }
+.gx-flightx-modes button[aria-pressed=true] { background: #24574fee; border-color: var(--accent); }
+.gx-flightx-modes small { font-size: 9px; color: var(--accent); letter-spacing: .1em; }
+.gx-flightx-modes b { font-size: 14px; font-weight: 600; }
+.gx-flightx-modes span { font-size: 11px; line-height: 1.4; color: var(--muted); }
+.gx-flightx-goal { margin: 14px 0; min-height: 32px; font-size: 12px; line-height: 1.5; color: var(--muted); }
+.gx-flightx-menu > .gx-flightx-primary { width: 100%; }
+.gx-flightx-menu-status { font-size: 11px; line-height: 1.5; color: var(--muted); }
+.gx-flightx-details { margin-top: 16px; font-size: 11px; line-height: 1.6; color: var(--muted); }
+.gx-flightx-details summary { cursor: pointer; min-height: 28px; color: var(--ink); }
+.gx-flightx-details a { color: var(--accent); display: block; min-height: 44px; align-content: center; }
+.gx-flightx-hud {
+  position: absolute; top: 96px; left: 28px; width: 300px; padding: 18px; box-sizing: border-box;
+  border: 1px solid #c2e4f03b; border-radius: 14px; background: #0d2c3eea; pointer-events: auto;
+}
+.gx-flightx-hud small, .gx-flightx-result > small { display: block; color: var(--accent); font-size: 10px; letter-spacing: .1em; }
+.gx-flightx-hud b { display: block; margin: 9px 0; font-size: 23px; line-height: 1.2; font-weight: 500; }
+.gx-flightx-hud [data-flightx-time] { font-size: 16px; font-variant-numeric: tabular-nums; }
+.gx-flightx-hud p { font-size: 11px; line-height: 1.45; color: var(--muted); }
+.gx-flightx-flight-actions { display: flex; gap: 5px; }
+.gx-flightx-flight-actions button { min-width: 0; padding: 8px; font-size: 11px; flex: 1; }
+.gx-flightx-hud [data-flightx-flight-status]:empty { display: none; }
+.gx-flightx-touch { position: absolute; left: 28px; right: 28px; bottom: 24px; display: flex; justify-content: space-between; align-items: flex-end; }
+.gx-flightx-direction { display: grid; grid-template-columns: repeat(3, 52px); gap: 6px; }
+.gx-flightx-direction button { min-width: 44px; height: 50px; padding: 4px; font-size: 24px; touch-action: none; user-select: none; }
+.gx-flightx-direction button[data-flightx-input=up] { grid-column: 2; }
+.gx-flightx-direction button[data-flightx-input=left] { grid-row: 2; grid-column: 1; }
+.gx-flightx-direction button[data-flightx-input=down] { grid-row: 2; grid-column: 2; }
+.gx-flightx-direction button[data-flightx-input=right] { grid-row: 2; grid-column: 3; }
+.gx-flightx-throttle { display: grid; gap: 6px; }
+.gx-flightx-throttle button { width: 104px; height: 50px; font-size: 13px; touch-action: none; user-select: none; }
+.gx-flightx-throttle button[data-flightx-input=forward] { background: var(--accent); color: #10392f; font-weight: 700; }
+.gx-flightx-result {
+  position: absolute; top: 115px; right: 28px; width: 350px; max-height: calc(100dvh - 150px); overflow: auto;
+  box-sizing: border-box; padding: 26px; background: #0d2c3ef5; border: 1px solid #b1e7d888; border-radius: 18px; pointer-events: auto;
+}
+.gx-flightx-result h2 { margin: 16px 0; font-size: 34px; font-weight: 500; line-height: 1.1; letter-spacing: -.04em; }
+.gx-flightx-result > b { font-size: 34px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.gx-flightx-result p { color: var(--muted); line-height: 1.5; font-size: 13px; }
+.gx-flightx-result button { width: 100%; margin-top: 9px; }
+body.gx-flightx-active .gx-display-settings { display: none !important; }
+@media (max-height: 800px) {
+  .gx-flightx-menu { padding: 20px; }
+  .gx-flightx h1 { font-size: 34px; margin: 12px 0 8px; }
+  .gx-flightx-intro { font-size: 13px; margin-bottom: 12px; }
+  .gx-flightx-modes button { min-height: 92px; }
+  .gx-flightx-goal { margin: 10px 0; min-height: 0; }
+  .gx-flightx-details { margin-top: 10px; }
+}
+@media (max-width: 900px) {
+  .gx-flightx-header > span { display: none; }
+}
+@media (max-width: 740px) {
+  .gx-flightx-header { padding: 10px 12px; gap: 8px; }
+  .gx-flightx-header button { font-size: 11px; padding: 8px 10px; }
+  .gx-flightx-menu { top: auto; bottom: 12px; left: 12px; right: 12px; width: auto; max-height: 49dvh; padding: 15px; border-radius: 13px; }
+  .gx-flightx-kicker { font-size: 8px; }
+  .gx-flightx-kicker span { display: inline; font-size: 7px; margin-left: 10px; }
+  .gx-flightx h1 { font-size: 29px; margin: 11px 0 7px; }
+  .gx-flightx-intro { font-size: 11px; margin-bottom: 12px; }
+  .gx-flightx-modes { gap: 7px; }
+  .gx-flightx-modes legend { font-size: 11px; padding-bottom: 7px; }
+  .gx-flightx-modes button { padding: 8px; min-height: 84px; gap: 4px; }
+  .gx-flightx-modes b { font-size: 12px; }
+  .gx-flightx-modes span { font-size: 10px; }
+  .gx-flightx-goal { margin: 10px 0; font-size: 11px; min-height: 0; }
+  .gx-flightx-menu-status { font-size: 10px; margin: 8px 0; }
+  .gx-flightx-details { margin-top: 10px; font-size: 10px; }
+  .gx-flightx-hud { top: 70px; left: 12px; right: 12px; width: auto; padding: 11px 13px; display: grid; grid-template-columns: 1fr auto; gap: 5px 9px; }
+  .gx-flightx-hud b { margin: 5px 0; font-size: 18px; }
+  .gx-flightx-hud [data-flightx-time] { font-size: 13px; }
+  .gx-flightx-hud > p { grid-column: 1; margin: 0; font-size: 10px; }
+  .gx-flightx-flight-actions { grid-column: 2; grid-row: 1 / span 2; flex-direction: column; }
+  .gx-flightx-flight-actions button { min-height: 44px; padding: 4px 7px; font-size: 10px; }
+  .gx-flightx-hud .gx-flightx-key-hint { display: none; }
+  .gx-flightx-hud [data-flightx-flight-status] { grid-column: 1 / -1; margin-top: 3px; }
+  .gx-flightx-touch { left: 12px; right: 12px; bottom: 16px; }
+  .gx-flightx-direction { grid-template-columns: repeat(3, 44px); gap: 5px; }
+  .gx-flightx-direction button { height: 46px; font-size: 22px; }
+  .gx-flightx-throttle { gap: 5px; }
+  .gx-flightx-throttle button { width: 83px; height: 46px; padding: 4px; font-size: 11px; }
+  .gx-flightx-result { top: auto; left: 12px; right: 12px; bottom: 12px; width: auto; max-height: 53dvh; padding: 20px; }
+  .gx-flightx-result h2 { font-size: 28px; margin: 12px 0; }
+}
