@@ -62,7 +62,15 @@ const houseVisible = async page => {
 try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 960 }, reducedMotion: "no-preference", acceptDownloads: true });
   const page = applySmokeTimeout(await context.newPage()), errors = errorsFor(page);
-  await page.goto(new URL("?app=maison&intro=0", base).href); await ready(page);
+  await page.goto(new URL("?intro=0", base).href); await page.locator(".gx-welcome--center").waitFor();
+  await page.click(".gx-go-archive"); await page.click('[data-scene-id="archive-maison"]'); await ready(page);
+  assert.equal(new URL(page.url()).searchParams.get("app"), "maison");
+  await page.click("[data-maison-next]"); await page.waitForFunction(() => !window.__GRAPHYSX_HOST__.focusing);
+  assert.equal(await page.evaluate(() => window.__GRAPHYSX_HOST__.autoRotating), false, "Gallery entry must use the visit camera policy");
+  await page.click("[data-maison-view=kitchen]");
+  assert.equal(new URL(page.url()).searchParams.get("view"), "kitchen");
+  await page.reload(); await ready(page); assert.equal((await state(page)).view, "kitchen");
+  await page.click("[data-maison-view=house]");
   const native = await page.evaluate(() => ["maison-source-model", "cuisine-model"].map(id => {
     const api = window.__GRAPHYSX__, object = window.__GRAPHYSX_HOST__.world.getEntityObject(id), model = api.query({ ids: [id] })[0];
     let meshes = 0, triangles = 0; object.traverse(child => { if (child.isMesh) { meshes++; triangles += (child.geometry.index?.count ?? child.geometry.attributes.position.count) / 3; } });
@@ -136,7 +144,7 @@ try {
   await page.goto(new URL("?host=editor&paused=1&localScene=Maison%20visit%20variant", base).href);
   await page.waitForFunction(() => window.__GRAPHYSX__?.query({ ids: ["my-house-addition"] }).length === 1);
   assert.deepEqual(canonical(await page.evaluate(() => window.__GRAPHYSX__.exportDocument())), canonical(authored));
-  assert.deepEqual(errors, []); receipts.push({ device: "desktop", native, guidePauseBlurManualCompletion: true, sourceComparison: true, saveExportReload: true, errors });
+  assert.deepEqual(errors, []); receipts.push({ device: "desktop", native, catalogueEntryRefresh: true, guidePauseBlurManualCompletion: true, sourceComparison: true, saveExportReload: true, errors });
   await context.close(); console.log("PASS Maison: native geometry, all views, real tour/pause/manual/blur/completion, retained edits and Studio/save/export/reload.");
 
   for (const [width, height] of [[390, 844], [320, 640], [844, 390]]) {

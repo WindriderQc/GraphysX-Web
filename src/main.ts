@@ -1232,13 +1232,15 @@ if (appParam === "quest3") {
             ] as const).map((entry) => ({
               ...entry,
               open: async () => {
-                if (entry.world === "maison") {
-                  if (!nestorBlockedByLiveSession()) openApplication("maison");
-                  return;
-                }
-                if (entry.world === "flightx") {
-                  if (!nestorBlockedByLiveSession()) openApplication("flightx");
-                  return;
+                if (entry.world === "maison" || entry.world === "flightx") {
+                  if (nestorBlockedByLiveSession()) return;
+                  // Enter through the app route so refresh and the initial camera policy
+                  // match a direct visit, rather than retaining the showroom host/options.
+                  const destination = new URL(import.meta.env.BASE_URL, window.location.href);
+                  destination.searchParams.set("app", entry.world);
+                  if (explicitStore) destination.searchParams.set("store", explicitStore);
+                  window.location.assign(destination.href);
+                  return new Promise<void>(() => {});
                 }
                 const [{ buildArchiveWorld }, { mountArchiveWorkbench }] = await Promise.all([import("./archive-worlds"), import("./archive-workbench")]);
                 if (nestorBlockedByLiveSession()) return;

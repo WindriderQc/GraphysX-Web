@@ -19,7 +19,7 @@ const open = async (id, worldId) => {
   if (id === "archive-cubz-tracks") await page.click('[data-collection="lab"]');
   await page.click(`[data-scene-id="${id}"]`);
   if (id === "archive-maison") {
-    await page.waitForFunction(() => JSON.parse(window.render_game_to_text()).application?.ready);
+    await page.waitForFunction(() => JSON.parse(window.render_game_to_text?.() ?? "{}").application?.ready);
     const source = await page.locator("[data-maison-source]").getAttribute("href");
     assert.equal(new URL(source).searchParams.get("view"), "source");
     await page.goto(source, { waitUntil: "domcontentloaded" });

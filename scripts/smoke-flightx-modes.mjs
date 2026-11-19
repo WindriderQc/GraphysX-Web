@@ -55,7 +55,12 @@ const flyLoop = async (page, ms) => {
 try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 960 }, reducedMotion: "no-preference", acceptDownloads: true });
   const page = applySmokeTimeout(await context.newPage()), errors = errorsFor(page);
-  await page.goto(new URL("?app=flightx&intro=0", base).href); await waitPhase(page, "menu");
+  await page.goto(new URL("?intro=0", base).href); await page.locator(".gx-welcome--center").waitFor();
+  await page.click(".gx-go-archive"); await page.click('[data-scene-id="archive-flightx"]'); await waitPhase(page, "menu");
+  assert.equal(new URL(page.url()).searchParams.get("app"), "flightx");
+  await choose(page, "time"); assert.equal(new URL(page.url()).searchParams.get("mode"), "time");
+  await page.click("[data-flightx-menu]"); await waitPhase(page, "menu");
+  await page.reload(); await waitPhase(page, "menu"); assert.equal((await state(page)).selectedMode, "time");
   assert.equal(await page.locator("[data-flightx-mode]").count(), 4);
   await visiblePlane(page); await capture(page, "menu-desktop");
   await choose(page, "gates");
@@ -113,7 +118,7 @@ try {
   assert.deepEqual(canonical(await page.evaluate(() => window.__GRAPHYSX__.exportDocument())), canonical(authored));
   await page.goto(new URL("?app=flightx&mode=gates&intro=0", base).href); await waitPhase(page, "menu");
   assert.equal((await state(page)).best.gates, gates.best.gates);
-  assert.deepEqual(errors, []); receipts.push({ device: "desktop", modes: 4, realKeyboard: true, pauseBlurReset: true, orderedGates: gates.rules, timedLoop: timed.rules, threeLaps: laps.rules, saveExportReload: true, errors });
+  assert.deepEqual(errors, []); receipts.push({ device: "desktop", catalogueEntryRefresh: true, modes: 4, realKeyboard: true, pauseBlurReset: true, orderedGates: gates.rules, timedLoop: timed.rules, threeLaps: laps.rules, saveExportReload: true, errors });
   await context.close();
   console.log("PASS FlightX modes: all four forms, real controls, shared ordered rules/timer/laps, records and edited Studio/save/export/reload.");
 

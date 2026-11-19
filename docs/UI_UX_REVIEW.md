@@ -50,6 +50,7 @@ choisir un vol, visiter les deux scènes ou ouvrir dans le Studio.
 | Le lien vers Core dans LLMx était bleu et peu lisible sur fond sombre | L'action permettant de poursuivre la conversation était difficile à identifier | Style lisible et cible de 44 px ; aucun changement de destination ou de profil |
 | Le réglage d'affichage recouvrait les commandes de la nouvelle visite sur téléphone | Collision entre deux zones interactives | Placement propre à la visite ; panneau défilant dans les écrans bas |
 | Sur un écran court, les explications répétées prenaient trop de place au-dessus des cartes | Le catalogue ne montrait qu'un fragment d'aperçu | En-tête compact aux petits formats ; réglage d'affichage extérieur masqué pendant le dialogue |
+| Maison ou FlightX ouvert depuis Archives gardait l'adresse de l'accueil | Un rafraîchissement revenait à l'accueil ; les options de caméra pouvaient dépendre du point d'entrée | Ouverture par l'adresse dédiée, comme CubZ et Impreza ; tests d'entrée catalogue, choix et rafraîchissement |
 
 Le retour du focus suit le [modèle de dialogue WAI-ARIA](https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/).
 La cible de confort retenue pour les nouvelles commandes tactiles principales est 44 px.
@@ -115,7 +116,8 @@ ne qualifient pas à elles seules la nouvelle version.
 Les nouvelles vérifications incluent les trois points de vue de chaque composition,
 les deux éclairages, la balade réelle jusqu'à sa fin, pause/reprise et interruption,
 390/320 px et paysage, le mouvement réduit, les erreurs de chargement récupérables,
-le document étranger, les modifications conservées, la comparaison source et le parcours
+le document étranger, les modifications conservées, la comparaison source, l'entrée depuis
+Archives suivie d'un rafraîchissement conservant la composition ou le mode, et le parcours
 Studio → Save → Export → rechargement. Les contrôles de catalogue couvrent recherche vide,
 préférences, compteurs, actions, vraie image, Tab/Escape et retour du focus.
 
