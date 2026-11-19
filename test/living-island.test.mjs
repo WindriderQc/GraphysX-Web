@@ -4,6 +4,7 @@
 
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { open } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
@@ -421,11 +422,19 @@ describe("living island", () => {
 
   it("switches worlds in place through the operator selector, with a fresh recording each time", async () => {
     const recordDir = join(outDir, "rec-selector");
+    let holdRecording = false;
+    let livingInstance;
+    let releaseRecording;
+    const recordingGate = new Promise(resolve => { releaseRecording = resolve; });
     const running = await startWorldServer({
       module: m, apiMarkdown: (id) => (id === m.LIVING_WORLD_ID ? m.livingApiMarkdown(mesaApi) : mesaApi),
       port: 0, operatorToken: "op-test", recordDir,
+      recordingLimits: { openFile: async (...args) => {
+        if (holdRecording && !String(args[0]).includes(livingInstance)) await recordingGate;
+        return open(...args);
+      } },
     });
-    const post = (body, token = "op-test") => fetch(`${running.url}/world`, { method: "POST", headers: { "content-type": "application/json", ...(token ? { "x-operator-token": token } : {}) }, body: JSON.stringify(body) });
+    const post = (body, token = "op-test") => fetch(`${running.url}/world`, { method: "POST", headers: { "content-type": "application/json", ...(token ? { "x-operator-token": token } : {}) }, body: JSON.stringify(body), signal: AbortSignal.timeout(3000) });
     try {
       assert.equal((await (await fetch(`${running.url}/healthz`)).json()).world, "mesa-island");
       assert.match(await (await fetch(`${running.url}/api.md`)).text(), /^# Mesa World/);
@@ -451,13 +460,28 @@ describe("living island", () => {
       assert.match(await (await fetch(`${running.url}/api.md`)).text(), /^# Living Mesa World/);
       assert.equal(running.world.agentCount, 0, "sessions ended with the old island");
       assert.equal((await fetch(`${running.url}/observe`, { headers: { "x-session": "anything" } })).status, 401);
-      assert.ok(existsSync(join(recordDir, "instances", body.instanceId, "graphysx-recording.ndjson")), "a recording bound to the new instance");
       assert.equal(body.recordingId, body.instanceId);
 
+      livingInstance = body.instanceId;
+      holdRecording = true;
       assert.equal((await post({ world: "mesa-island" })).status, 200, "and back, with nobody joined");
       assert.equal(running.world.worldId, "mesa-island");
-      assert.ok(existsSync(join(recordDir, "instances", running.world.instanceId, "graphysx-recording.ndjson")));
+      const returnedInstance = running.world.instanceId;
+      const livingFile = join(recordDir, "instances", body.instanceId, "graphysx-recording.ndjson");
+      const returnedFile = join(recordDir, "instances", returnedInstance, "graphysx-recording.ndjson");
+      assert.notEqual(returnedInstance, body.instanceId, "each switch has its own recording identity");
+      // The documented writer queues I/O. Hold file opening to reproduce the CI race,
+      // then check persistence at shutdown's existing drain barrier, without a sleep/retry.
+      assert.equal(existsSync(returnedFile), false, "the fixture delays creation of the asynchronous recording");
+      const drained = running.close();
+      releaseRecording();
+      await drained;
+      assert.ok(existsSync(livingFile), "a recording bound to the living instance");
+      assert.ok(existsSync(returnedFile), "a recording bound to the returned instance");
+      assert.equal(JSON.parse(readFileSync(livingFile, "utf8").split("\n")[0]).instanceId, body.instanceId);
+      assert.equal(JSON.parse(readFileSync(returnedFile, "utf8").split("\n")[0]).instanceId, returnedInstance);
     } finally {
+      releaseRecording();
       await running.close();
     }
   });
