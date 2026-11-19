@@ -43,10 +43,12 @@
   border:1px solid #91bac36b;border-radius:14px;background:#0d1b2af7;box-shadow:0 14px 40px #02070be0;
 }
 .gx-center-apps-list > span{padding:5px 8px;color:#b5d8d5;font:700 11px var(--gx-font);letter-spacing:.13em;text-transform:uppercase}
-.gx-welcome.gx-welcome--center .gx-center-apps-list button{
+.gx-center-apps-list h3{margin:6px 0 0;padding:5px 8px;color:#b5d8d5;font:700 10px/1.4 var(--gx-font);letter-spacing:.12em;text-transform:uppercase}
+.gx-welcome.gx-welcome--center .gx-center-apps-list button,.gx-welcome.gx-welcome--center .gx-center-apps-list a{
   min-height:44px;display:flex;align-items:center;justify-content:flex-start;text-align:left;padding:7px 10px;
-  border-radius:7px;font-size:13px;color:#dbe8eb;background:#122436;box-shadow:none;
+  box-sizing:border-box;border:1px solid #82b4be44;border-radius:7px;font:600 13px/1.4 var(--gx-font);color:#dbe8eb;background:#122436;box-shadow:none;text-decoration:none;
 }
+.gx-center-apps-list a:focus-visible{outline:2px solid white;outline-offset:2px}
 .gx-welcome.gx-welcome--center .gx-center-apps-list .gx-go-island{background:#1a393e;border-color:#73c4b882;color:#e4faf2}
 @media(max-width:899px){
   .gx-welcome.gx-welcome--center:not(.gx-welcome--touring){padding-bottom:calc(81px + env(safe-area-inset-bottom))}

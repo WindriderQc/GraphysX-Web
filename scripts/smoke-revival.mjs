@@ -90,6 +90,10 @@ try {
   check("archive entry opens its own collection", (await visible()).every((collection) => collection === "archive") && (await visible()).length > 0);
   await page.screenshot({ path: path.join(artifacts, "archives-desktop.png") });
   await page.click('[data-scene-id="archive-maison"]');
+  await page.waitForFunction(() => JSON.parse(window.render_game_to_text()).application?.ready);
+  check("Maison archive opens its visitor before the advanced source editor", await page.locator(".gx-maison").isVisible() && !(await page.locator(".gx-ed-toolbar").isVisible()));
+  const maisonSource = await page.locator("[data-maison-source]").getAttribute("href");
+  await page.goto(maisonSource, { waitUntil: "domcontentloaded" });
   await page.click('[data-archive-action="kitchen"]');
   await page.waitForFunction(() => window.__GRAPHYSX__.query({ ids: ["cuisine-model"] })[0]?.asset?.status === "ready");
   const kitchenMeshes = await page.evaluate(() => {

@@ -62,8 +62,8 @@ export function mountShelfPersonalization(
   const reset = document.createElement("button");
   reset.type = "button";
   reset.className = "gx-shelf-reset";
-  reset.textContent = "Reset preferences";
-  reset.title = "Clear favorites and recent ordering";
+  reset.textContent = "Effacer favoris et récents";
+  reset.title = "Réinitialiser les favoris et l’ordre récent. Les scènes et parcours sont conservés.";
   controls.append(search, count, reset);
 
   let collection = options.initialCollection ?? "all";
@@ -85,7 +85,12 @@ export function mountShelfPersonalization(
   const empty = document.createElement("div");
   empty.className = "gx-shelf-empty";
   empty.hidden = true;
-  empty.innerHTML = `<strong>No matches</strong><span>Try a course, scene, archive name, or clear the search.</span>`;
+  empty.innerHTML = `<strong>Aucun résultat dans cette collection</strong><span>Essaie un autre nom ou efface la recherche.</span>`;
+  const clearSearch = document.createElement("button");
+  clearSearch.type = "button";
+  clearSearch.className = "gx-shelf-clear-search";
+  clearSearch.textContent = "Effacer la recherche";
+  empty.append(clearSearch);
   list.append(empty);
 
   const update = (): void => {
@@ -98,14 +103,14 @@ export function mountShelfPersonalization(
       const star = item.querySelector<HTMLElement>(".gx-shelf-favorite");
       if (star) {
         star.textContent = favorite ? "★" : "☆";
-        star.title = favorite ? "Remove from favorites" : "Add to favorites";
-        star.setAttribute("aria-label", `${favorite ? "Remove" : "Add"} ${action.dataset.shelfLabel ?? "item"} ${favorite ? "from" : "to"} favorites`);
+        star.title = favorite ? "Retirer des favoris" : "Ajouter aux favoris";
+        star.setAttribute("aria-label", `${favorite ? "Retirer" : "Ajouter"} ${action.dataset.shelfLabel ?? "cet élément"} ${favorite ? "des" : "aux"} favoris`);
         star.setAttribute("aria-pressed", String(favorite));
       }
       const tag = item.querySelector<HTMLElement>(".gx-shelf-personal-tag");
       if (tag) {
         const recent = Number(preferences.recent[key] ?? 0) > 0;
-        tag.textContent = favorite ? "Favorite" : recent ? "Recent" : "";
+        tag.textContent = favorite ? "Favori" : recent ? "Récent" : "";
         tag.hidden = !favorite && !recent;
       }
     }
@@ -131,7 +136,8 @@ export function mountShelfPersonalization(
         || (!!query && !searchable.toLocaleLowerCase().includes(query));
       if (!item.hidden) visible += 1;
     }
-    count.textContent = `${visible} of ${items.length} ${options.label}`;
+    const scopedTotal = items.filter(item => collection === "all" || actionByItem.get(item)?.dataset.shelfCollection === collection).length;
+    count.textContent = `${visible} sur ${scopedTotal} ${options.label}`;
     empty.hidden = visible > 0;
     for (const button of collections.querySelectorAll<HTMLButtonElement>("button")) {
       button.setAttribute("aria-pressed", String(button.dataset.collection === collection));
@@ -169,6 +175,11 @@ export function mountShelfPersonalization(
   }
 
   search.addEventListener("input", applyFilter);
+  clearSearch.addEventListener("click", () => {
+    search.value = "";
+    applyFilter();
+    search.focus();
+  });
   reset.addEventListener("click", () => {
     preferences = emptyPreferences();
     writePreferences(preferences);
@@ -187,16 +198,16 @@ export function mountShelfPersonalization(
 
 export const SHELF_PERSONALIZATION_CSS = `
 .gx-shelf-collections{display:flex;flex-wrap:wrap;gap:6px}
-.gx-shelf-collections button{min-height:42px;padding:9px 13px;border:1px solid #88b7c440;border-radius:999px;background:#102837;color:#b6cbd4;font:600 12px var(--gx-font);cursor:pointer}
+.gx-shelf-collections button{min-height:44px;padding:9px 13px;border:1px solid #88b7c440;border-radius:999px;background:#102837;color:#b6cbd4;font:600 12px var(--gx-font);cursor:pointer}
 .gx-shelf-collections button[aria-pressed=true]{background:#b5eedf;color:#102e35;border-color:#b5eedf}
 .gx-shelf-collections button:focus-visible{outline:2px solid white;outline-offset:2px}
 .gx-shelf-collection-description{margin:0;color:var(--gx-ink-soft);font:13px/1.5 var(--gx-font)}
 .gx-collection-badge{display:block;align-self:flex-start;margin-top:6px;color:#b7d9dc;font:600 10px/1.5 var(--gx-font);letter-spacing:.04em}
 .gx-shelf-tools{display:flex;align-items:center;gap:8px}
-.gx-shelf-search{flex:1;min-width:0;padding:8px 10px;border:1px solid rgba(79,208,230,.3);border-radius:8px;background:rgba(5,18,26,.9);color:var(--gx-ink);font:12px/1.2 var(--gx-font);outline:none}
+.gx-shelf-search{box-sizing:border-box;flex:1;min-width:0;min-height:44px;padding:8px 10px;border:1px solid rgba(79,208,230,.3);border-radius:8px;background:rgba(5,18,26,.9);color:var(--gx-ink);font:12px/1.2 var(--gx-font);outline:none}
 .gx-shelf-search:focus{border-color:var(--gx-accent);box-shadow:0 0 0 3px var(--gx-accent-ring)}
 .gx-shelf-count{color:var(--gx-ink-faint);font:10.5px/1 var(--gx-font);white-space:nowrap}
-.gx-shelf-reset{padding:7px 9px;border:1px solid rgba(120,240,208,.25);border-radius:7px;background:transparent;color:var(--gx-ink-soft);cursor:pointer;font:10.5px/1 var(--gx-font)}
+.gx-shelf-reset{min-height:44px;padding:7px 9px;border:1px solid rgba(120,240,208,.25);border-radius:7px;background:transparent;color:var(--gx-ink-soft);cursor:pointer;font:11px/1.3 var(--gx-font)}
 .gx-shelf-reset:hover,.gx-shelf-reset:focus-visible{border-color:var(--gx-accent);color:var(--gx-ink);outline:none}
 .gx-shelf-item{position:relative;min-width:0}
 .gx-shelf-item--wide{grid-column:1/-1}
@@ -207,6 +218,10 @@ export const SHELF_PERSONALIZATION_CSS = `
 .gx-shelf-personal-tag{position:absolute;z-index:2;left:9px;top:8px;padding:3px 7px;border-radius:999px;background:rgba(4,16,23,.86);border:1px solid rgba(255,205,77,.42);color:#ffdc7a;font:700 8.5px/1 var(--gx-font);letter-spacing:.06em;text-transform:uppercase}
 .gx-shelf-empty{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:28px;border:1px dashed rgba(79,208,230,.28);border-radius:10px;color:var(--gx-ink-faint);text-align:center;font:12px/1.4 var(--gx-font)}
 .gx-shelf-empty[hidden]{display:none}.gx-shelf-empty strong{color:var(--gx-ink);font-size:14px}
-@media(max-width:640px){.gx-shelf-tools{flex-wrap:wrap}.gx-shelf-search{flex-basis:100%}.gx-shelf-reset{margin-left:auto}}
+.gx-shelf-clear-search{min-height:44px;margin-top:8px;padding:9px 15px;border:1px solid #a5e7d4;border-radius:8px;background:#a5e7d4;color:#15333d;font:600 12px var(--gx-font);cursor:pointer}
+.gx-shelf-clear-search:focus-visible{outline:2px solid white;outline-offset:3px}
+body:has(.gx-browse,.gx-shelf) .gx-display-settings{display:none}
+@media(max-width:640px){.gx-shelf-tools{flex-wrap:wrap}.gx-shelf-search{flex-basis:100%}.gx-shelf-reset{margin-left:auto}.gx-shelf-favorite{width:44px;height:44px}}
+@media(max-width:640px) and (max-height:740px){.gx-browse-blurb,.gx-shelf-blurb,.gx-shelf-collection-description{display:none}}
 @media(prefers-reduced-motion:reduce){.gx-shelf-favorite{transition:none}.gx-shelf-favorite:hover{transform:none}}
 `;

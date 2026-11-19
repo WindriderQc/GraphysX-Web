@@ -7,6 +7,7 @@ import type { AgentLevelState } from "./agent-level-library";
  */
 export const SHELF_SCENE_THUMBNAIL_IDS: ReadonlySet<string> = new Set([
   "archive-cubz-menu",
+  "nacre-quest3",
   "archive-impreza-worlds",
   "archive-cubz-tracks",
   "archive-flightx",
@@ -38,12 +39,12 @@ export const SHELF_SCENE_THUMBNAIL_IDS: ReadonlySet<string> = new Set([
 export function createSceneThumbnail(id: string, label: string): HTMLImageElement {
   const image = document.createElement("img");
   image.className = "gx-shelf-thumb";
-  image.alt = `${label} preview`;
+  image.alt = `Aperçu de ${label}`;
   // Opening the gallery is an explicit request to see it. Load the compact set together so
   // scrolling never reveals empty cards and a missing checked-in preview fails visibly.
   image.loading = "eager";
   image.decoding = "async";
-  const fileId = id === "archive-flightx" ? "archive-flightx-native-tvm" : id;
+  const fileId = id === "archive-flightx" ? "archive-flightx-native-tvm" : id === "archive-maison" ? "archive-maison-visit" : id;
   image.src = SHELF_SCENE_THUMBNAIL_IDS.has(id)
     ? `/assets/shelf-thumbnails/${encodeURIComponent(fileId)}.jpg`
     : makeFallbackThumbnail(label);

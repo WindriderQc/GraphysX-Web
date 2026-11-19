@@ -70,10 +70,15 @@ visits the real DNA, physics and flocking systems; manual camera input interrupt
 
 The [revival and UX audit](docs/REVIVAL_AND_UX.md) compares the original C++/C# projects,
 the first web revival and the current product, and records remaining recovery work.
+The [complete UI/UX review](docs/UI_UX_REVIEW.md) maps visitor intentions to destinations,
+documents the November navigation polish and Maison visit, and orders the remaining work.
 It is **not a deletion clearance** for the historical repository.
 
-Archives now opens the complete Maison/Cuisine explorer, Unity Arena, Common Room,
+Archives now opens the complete Maison/Cuisine visit, Unity Arena, Common Room,
 CubX notes, CubZ TVA animation studies, controllable FlightX and the native physics intro.
+Maison (`?app=maison`) offers day/night lighting, three views per native composition and an
+interruptible camera tour. Open its full document in the Studio to save/export a variant;
+the original source explorer remains at `?app=maison&view=source`.
 Their panels distinguish source geometry/behavior from adapted presentation and missing
 features. These worlds use the same Studio, world API and pause/step clock as current work.
 

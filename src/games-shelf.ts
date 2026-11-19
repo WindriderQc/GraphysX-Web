@@ -97,18 +97,18 @@ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptio
   head.className = "gx-shelf-head";
   const title = document.createElement("h2");
   title.id = "gx-games-shelf-title";
-  title.textContent = "Games & Playgrounds";
+  title.textContent = "Jeux & défis";
   const close = document.createElement("button");
   close.type = "button";
   close.className = "gx-shelf-close";
   close.textContent = "← GraphysX";
-  close.title = "Return to GraphysX";
-  close.setAttribute("aria-label", "Close games and return to GraphysX");
+  close.title = "Revenir à GraphysX";
+  close.setAttribute("aria-label", "Fermer les jeux et revenir à GraphysX");
   head.append(title, close);
 
   const blurb = document.createElement("p");
   blurb.className = "gx-shelf-blurb";
-  blurb.textContent = "Levels authored in the level workbench, played on the same runtime. Arrow keys to roll.";
+  blurb.textContent = "Choisis un jeu et son parcours. Les commandes sont présentées au démarrage.";
 
   const list = document.createElement("div");
   list.className = "gx-shelf-list";

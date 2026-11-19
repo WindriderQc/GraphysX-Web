@@ -1,4 +1,5 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
+import assert from "node:assert/strict";
 import path from "node:path";
 import { chromium } from "playwright";
 import { createServer } from "vite";
@@ -76,6 +77,10 @@ async function capture(id, shelf, selector) {
     await page.waitForFunction(() => window.__GRAPHYSX__?.query({ ids: ["flight-plane-model"] })[0]?.materialSlots?.length === 48, null, { timeout: 60000 });
     await page.evaluate(() => { window.__GRAPHYSX__.pause(true); window.__GRAPHYSX__.select([]); window.__GRAPHYSX_HOST__.frameView([3.3, 17.5, -3.7], [.2, 15.7, .65], 0); });
   }
+  if (id === "archive-maison") {
+    await page.waitForFunction(() => JSON.parse(window.render_game_to_text?.() || "{}").application?.ready, null, { timeout: 60000 });
+    await page.evaluate(() => window.__GRAPHYSX_HOST__.frameView([12, 9, 15], [-2.8, 1.7, -.7], 0));
+  }
   // Show reproducible interaction states, rather than an empty notepad or closed hinges.
   if (id === "archive-notes" || id === "archive-cubz-tracks") await page.click(".gx-archive-workbench summary");
   if (id === "archive-notes") {
@@ -95,7 +100,7 @@ async function capture(id, shelf, selector) {
   // child we keep. This also strips the play HUD and win panel for course previews.
   await page.addStyleTag({ content: "#app > :not(canvas),.gx-display-settings{display:none!important}" });
   await page.locator("#app canvas").first().screenshot({
-    path: path.join(OUTPUT, id === "archive-flightx" ? "archive-flightx-native-tvm.jpg" : `${id}.jpg`),
+    path: path.join(OUTPUT, id === "archive-flightx" ? "archive-flightx-native-tvm.jpg" : id === "archive-maison" ? "archive-maison-visit.jpg" : `${id}.jpg`),
     type: "jpeg",
     quality: 84,
   });
@@ -153,7 +158,31 @@ async function captureMathLab() {
   await page.close();
 }
 
+/** Capture the actual standalone observatory, without the mission HUD. */
+async function captureNacre() {
+  const page = await browser.newPage({ viewport: { width: 640, height: 360 }, deviceScaleFactor: 1, reducedMotion: "reduce" });
+  const errors = [];
+  page.on("pageerror", error => errors.push(error.message));
+  page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
+  await page.goto(`http://127.0.0.1:${PORT}/?app=quest3`, { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => window.__GRAPHYSX_QUEST3__?.visualReady);
+  const jpeg = await page.evaluate(() => new Promise(resolve => {
+    const host = window.__GRAPHYSX_QUEST3__.host;
+    const off = host.subscribeAfterRender(() => {
+      off();
+      const preview = document.createElement("canvas"); preview.width = 640; preview.height = 360;
+      preview.getContext("2d").drawImage(host.renderer.domElement, 0, 0, 640, 360);
+      resolve(preview.toDataURL("image/jpeg", .84).split(",")[1]);
+    });
+  }));
+  assert.deepEqual(errors, [], "The observatory preview must capture a healthy renderer");
+  writeFileSync(path.join(OUTPUT, "nacre-quest3.jpg"), Buffer.from(jpeg, "base64"));
+  console.log("captured nacre-quest3 from the rendered observatory");
+  await page.close();
+}
+
 try {
+  if (shouldCapture("nacre-quest3")) await captureNacre();
   if (shouldCapture("cyber-race-1992")) await captureCyberRace();
   if (shouldCapture("math-lab")) await captureMathLab();
   for (const id of BROWSE_IDS) {
