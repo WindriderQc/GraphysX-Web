@@ -8,6 +8,7 @@
 import { resolveAgentAppearance } from "./agent-appearance.mjs";
 import { resolveModelPresentation } from "./model-presentation.mjs";
 import { materializeMeshCommand } from "./mesh-authoring.mjs";
+import { entitySubtreeIds } from "./entity-subtree.mjs";
 import { MOTION_FIELDS, validateMotionBehavior } from "./motion-behaviors.mjs";
 import { ENERGY_FIELDS, MODULATE_FIELDS, VISUAL_LIMITS, validateEnergyShader, validateModulateBehavior } from "./visual-effects.mjs";
 import { assertInlineMesh, assertInlinePixels, assertMeshSceneBudget, assertMeshTextureCoordinates, MESH_FIELDS, MESH_GROUP_FIELDS, MESH_LIMITS, PIXEL_FIELDS, PIXEL_LIMITS } from "./inline-mesh.mjs";
@@ -1147,7 +1148,6 @@ function validateUpdateReferences(entity, entities) {
 }
 
 function applyCommand(definition, command) {
-  command = materializeMeshCommand(command, definition.entities);
   requireRecord(command, "command");
   const entities = definition.entities;
 
@@ -1179,18 +1179,12 @@ function applyCommand(definition, command) {
     allowedKeys(command, new Set(["op", "id"]), "remove command");
     requireStableId(command.id, "remove entity id");
     if (!entities.some((entity) => entity.id === command.id)) reject(`Unknown entity: ${command.id}`);
-    const removed = [command.id];
-    for (let pass = 0; pass < entities.length; pass += 1) {
-      for (const entity of entities) {
-        if (entity.parentId && removed.includes(entity.parentId) && !removed.includes(entity.id)) removed.push(entity.id);
-      }
-    }
-    const removedSet = new Set(removed);
+    const removedSet = entitySubtreeIds(entities, command.id);
     definition.entities = entities.filter((entity) => !removedSet.has(entity.id));
     if (Array.isArray(definition.joints)) {
       definition.joints = definition.joints.filter((joint) => !removedSet.has(joint.bodyA) && !removedSet.has(joint.bodyB));
     }
-    return { op: "remove", ids: removed };
+    return { op: "remove", ids: [...removedSet] };
   }
 
   if (command.op === "set-environment") {
@@ -1267,8 +1261,11 @@ export function applyCommands(definition, commands) {
   }
   const next = structuredClone(definition);
   entityMap(next.entities);
+  const resolvedCommands = [];
   const outputs = commands.map((command) => {
-    const output = applyCommand(next, command);
+    const resolved = materializeMeshCommand(command, next.entities);
+    const output = applyCommand(next, resolved);
+    resolvedCommands.push(resolved);
     // Match the runtime's pre-allocation budget at each step, including temporary peaks
     // in a batch. A whole-mesh update avoids a spawn-before-remove peak entirely.
     assertMeshSceneBudget(next.entities);
@@ -1279,7 +1276,7 @@ export function applyCommands(definition, commands) {
   if (serializedBytes > MAX_DEFINITION_BYTES) {
     reject(`A live-authored scene supports at most ${MAX_DEFINITION_BYTES} serialized bytes`);
   }
-  return { definition: next, outputs };
+  return { definition: next, outputs, resolvedCommands };
 }
 
 /** A short human sentence for a change, used when the caller supplies no intent. */

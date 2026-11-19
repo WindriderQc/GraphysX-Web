@@ -11,6 +11,20 @@ const base=()=>({schema:'graphysx.agent-world/v2',id:'mesh-edit',label:'Mesh edi
 const spawn={op:'spawn',entity:{id:'made',type:'mesh'},meshBuild:recipe};
 const volume=mesh=>{let v=0;for(let i=0;i<mesh.indices.length;i+=3){const [a,b,c]=mesh.indices.slice(i,i+3).map(k=>mesh.positions.slice(k*3,k*3+3));v+=(a[0]*(b[1]*c[2]-b[2]*c[1])+a[1]*(b[2]*c[0]-b[0]*c[2])+a[2]*(b[0]*c[1]-b[1]*c[0]))/6;}return v;};
 
+test('a replay draft frees the same descendant meshes as the store before a new allocation', () => {
+  const positions = Array(4096 * 3).fill(0);
+  positions[3] = 1;
+  positions[7] = 1;
+  const mesh = { positions, indices: [0, 1, 2] };
+  const entities = Array.from({ length: 8 }, (_, i) => ({ id: `full-${i}`, type: 'mesh', mesh }));
+  entities[0].parentId = 'middle';
+  entities.push({ id: 'middle', type: 'box', parentId: 'root' }, { id: 'root', type: 'box' });
+  const commands = [{ op: 'remove', id: 'root' }, spawn];
+  const next = applyCommands({ ...base(), entities }, commands);
+  assert.deepEqual(next.outputs[0].ids, ['root', 'middle', 'full-0']);
+  assert.deepEqual(materializeMeshCommands(commands, entities), next.resolvedCommands);
+});
+
 test('extrusion caps concave profiles, winding is outward and reverse input has the same volume',()=>{
   const mesh=buildInlineMesh(recipe);assert.equal(volume(mesh),8);assert.equal(mesh.positions.length/3,24);assert.equal(mesh.indices.length/3,12);
   assert.equal(volume(buildInlineMesh({...recipe,profile:[...rectangle].reverse()})),8);

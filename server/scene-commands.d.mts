@@ -5,4 +5,5 @@ export function validateInlineMeshDefinition(value: unknown): void;
 export function applyCommands(definition: AgentWorldDefinition, commands: AgentWorldCommand[]): {
   definition: AgentWorldDefinition;
   outputs: unknown[];
+  resolvedCommands: AgentWorldCommand[];
 };
