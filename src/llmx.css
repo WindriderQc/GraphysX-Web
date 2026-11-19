@@ -21,6 +21,8 @@
 .gx-llmx-world strong{font-size:18px;font-weight:500}.gx-llmx-world span{color:#b9cbd0}
 .gx-llmx-environments [data-action=close]{margin-top:20px;width:100%}
 .gx-llmx-conversation{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);width:min(720px,calc(100% - 40px));pointer-events:auto}
+.gx-llmx-core-entry{box-sizing:border-box;display:flex;align-items:center;min-height:44px;margin-bottom:8px;padding:10px 14px;border:1px solid #79c9bb66;border-radius:10px;background:#102c39ed;color:#bceadd;text-decoration:none;font:600 12px/1.45 var(--gx-font)}
+.gx-llmx-core-entry:hover{background:#19414d;color:#e6fff4}.gx-llmx-core-entry:focus-visible{outline:2px solid #bceadd;outline-offset:3px}
 .gx-llmx-talk-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px}
 .gx-llmx-talk-heading p{font-size:13px;margin:0;padding:9px 13px;border-radius:12px;background:#0e161ee8;max-width:75%;line-height:1.4}
 .gx-llmx .gx-llmx-talk-heading button,.gx-llmx .gx-llmx-talk-options button{font-size:12px;padding:7px 12px;min-height:36px}

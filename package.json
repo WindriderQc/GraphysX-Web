@@ -17,6 +17,8 @@
     "smoke:revival": "node scripts/smoke-revival.mjs",
     "smoke:dna-creation": "node scripts/smoke-dna-creation.mjs",
     "smoke:archive-worlds": "node scripts/smoke-archive-worlds.mjs",
+    "smoke:maison": "node scripts/smoke-maison.mjs",
+    "smoke:ux-navigation": "node scripts/smoke-ux-navigation.mjs",
     "smoke:cubz-menu": "node scripts/smoke-cubz-menu.mjs",
     "smoke:impreza": "node scripts/smoke-impreza.mjs",
     "smoke:flightx": "node scripts/smoke-flightx.mjs",

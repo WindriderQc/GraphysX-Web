@@ -30,6 +30,8 @@ export type ComposedSceneEntry = {
   label: string;
   summary: string;
   meta: string;
+  /** The visitor-facing action, distinct from the collection/provenance badge. */
+  openLabel?: string;
   open: () => void | Promise<void>;
 };
 
@@ -39,6 +41,8 @@ export type BrowseShelfOptions = {
   canNavigate?: () => boolean;
   /** One editorial spotlight above the scrolling gallery; scene data remains unchanged. */
   featuredStarter?: { id: string; eyebrow: string; badges: readonly string[] };
+  /** A dedicated experience can be the spotlight without masquerading as an editable starter. */
+  featuredComposed?: { id: string; eyebrow: string; badges: readonly string[] };
   /** Called after a starter is loaded, so the caller can take the showroom down and open the editor. */
   onOpen?: (starterId: string) => void;
   /** Composed archive scenes, listed above the starters because they are the recovered ones. */
@@ -49,7 +53,7 @@ export type BrowseShelfOptions = {
 };
 
 export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOptions): () => void {
-  const { api, canNavigate = () => true, featuredStarter, onOpen, composed = [], onClose } = options;
+  const { api, canNavigate = () => true, featuredStarter, featuredComposed, onOpen, composed = [], onClose } = options;
   injectStyleOnce();
 
   const overlay = document.createElement("div");
@@ -70,8 +74,8 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
   close.type = "button";
   close.className = "gx-browse-close";
   close.textContent = "← GraphysX";
-  close.title = "Return to GraphysX";
-  close.setAttribute("aria-label", "Close scene browser and return to GraphysX");
+  close.title = "Revenir à GraphysX";
+  close.setAttribute("aria-label", "Fermer les mondes et revenir à GraphysX");
   head.append(title, close);
 
   const blurb = document.createElement("p");
@@ -91,7 +95,7 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
   };
 
   const starters = api.starters();
-  const featured = featuredStarter
+  const featured = featuredStarter && !featuredComposed
     ? starters.find((starter) => starter.id === featuredStarter.id)
     : undefined;
   let featuredRow: HTMLButtonElement | null = null;
@@ -130,8 +134,9 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
     summary.textContent = featured.summary;
     const meta = document.createElement("span");
     meta.className = "gx-browse-meta";
-    meta.textContent = `${featured.entityCount} entities  ·  open in editor`;
+    meta.textContent = `${featured.entityCount} objets`;
     copy.append(eyebrow, name, badges, summary, meta);
+    appendOpenLabel(copy, "Ouvrir dans le Studio");
     featuredRow.append(visual, copy);
     featuredRow.addEventListener("click", () => {
       if (!mayNavigate(summary, featuredRow ?? undefined)) return;
@@ -163,6 +168,16 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
     const copy = document.createElement("span");
     copy.className = "gx-shelf-copy";
 
+    const spotlight = featuredComposed?.id === scene.id ? featuredComposed : null;
+    if (spotlight) {
+      row.classList.add("gx-browse-row--featured");
+      visual.classList.add("gx-browse-featured-visual");
+      copy.classList.add("gx-browse-featured-copy");
+      const eyebrow = document.createElement("span");
+      eyebrow.className = "gx-browse-eyebrow"; eyebrow.textContent = spotlight.eyebrow; copy.append(eyebrow);
+      featuredRow = row;
+    }
+
     const name = document.createElement("span");
     name.className = "gx-browse-name";
     name.textContent = scene.label;
@@ -175,7 +190,16 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
     meta.className = "gx-browse-meta";
     meta.textContent = scene.meta;
 
-    copy.append(name, summary, meta);
+    copy.append(name);
+    if (spotlight) {
+      const badges = document.createElement("span"); badges.className = "gx-browse-badges";
+      for (const text of spotlight.badges) {
+        const badge = document.createElement("span"); badge.className = "gx-browse-badge"; badge.textContent = text; badges.append(badge);
+      }
+      copy.append(badges);
+    }
+    copy.append(summary, meta);
+    appendOpenLabel(copy, scene.openLabel ?? "Ouvrir dans le Studio");
     row.append(visual, copy);
     row.addEventListener("click", () => {
       if (!mayNavigate(summary, row)) return;
@@ -222,11 +246,12 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
     const meta = document.createElement("span");
     meta.className = "gx-browse-meta";
     meta.textContent = [
-      `${starter.entityCount} entities`,
-      starter.prefabCount > 0 ? `${starter.prefabCount} prefabs` : null,
+      `${starter.entityCount} objets`,
+      starter.prefabCount > 0 ? `${starter.prefabCount} compositions réutilisables` : null,
     ].filter(Boolean).join("  ·  ");
 
     copy.append(name, summary, meta);
+    appendOpenLabel(copy, "Ouvrir dans le Studio");
     row.append(visual, copy);
     row.addEventListener("click", () => {
       if (!mayNavigate(summary, row)) return;
@@ -248,8 +273,8 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
     row.dataset.shelfCollection = collection;
     const badge = document.createElement("span");
     badge.className = "gx-collection-badge";
-    badge.textContent = collection === "archive" ? "ARCHIVE · fidélité et adaptations documentées"
-      : collection === "lab" ? "LABORATOIRE · étude / prototype" : "CRÉATION · explorer et modifier";
+    badge.textContent = collection === "archive" ? "ARCHIVE · sources et adaptations documentées"
+      : collection === "lab" ? "LABORATOIRE · étude / prototype" : "CRÉATION · expérience actuelle";
     row.querySelector(".gx-shelf-copy")?.append(badge);
   }
   card.append(head, blurb, list);
@@ -295,6 +320,11 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
 
 const STYLE_ID = "gx-browse-shelf-css";
 
+function appendOpenLabel(copy: HTMLElement, label: string): void {
+  const action = document.createElement("span"); action.className = "gx-browse-action";
+  action.textContent = label + " →"; copy.append(action);
+}
+
 function injectStyleOnce(): void {
   if (document.getElementById(STYLE_ID)) return;
   const style = document.createElement("style");
@@ -331,6 +361,7 @@ ${SHELF_PERSONALIZATION_CSS}
 .gx-browse-name{color:var(--gx-ink);font-size:14px;font-weight:600}
 .gx-browse-summary{color:var(--gx-ink-soft);font-size:12px;line-height:1.4}
 .gx-browse-meta{color:var(--gx-ink-faint);font-size:11px;letter-spacing:.03em;margin-top:2px}
+.gx-browse-action{display:block;order:10;margin-top:8px;color:var(--gx-life);font:650 12px/1.4 var(--gx-font)}
 .gx-browse-row--featured{display:grid;grid-template-columns:minmax(250px,.92fr) minmax(0,1.08fr);gap:16px;
   grid-column:1 / -1;
   padding:9px;background:linear-gradient(120deg,rgba(18,48,62,.96),rgba(12,30,42,.9));

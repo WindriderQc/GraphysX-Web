@@ -188,8 +188,8 @@ try {
   await page.screenshot({ path: path.join(ART, "games-returned.png"), fullPage: false });
 
   // ---- Browse Scenes: the third destination, back at the front door ----
-  // Loading a curated scene must open it in the EDITOR (Browse is "load a scene to work on it"),
-  // not play mode — the distinction the mode split exists to preserve.
+  // The spotlight can open a dedicated experience; selecting an editable starter below
+  // must still open the EDITOR, preserving the distinction between authoring and play.
   await page.click(".gx-welcome .gx-go-browse");
   await page.waitForSelector(".gx-browse", { timeout: SMOKE_TIMEOUT });
   await page.waitForFunction(() => {
@@ -198,7 +198,7 @@ try {
   }, null, { timeout: SMOKE_TIMEOUT });
   out.browse = await page.evaluate(() => {
     const rows = [...document.querySelectorAll(".gx-browse-row")];
-    const featuredRows = rows.filter((row) => row.dataset.starterId === "glow-garden");
+    const featuredRows = rows.filter((row) => row.classList.contains("gx-browse-row--featured"));
     const featured = featuredRows[0];
     const cardRect = document.querySelector(".gx-browse-card")?.getBoundingClientRect();
     const featuredRect = featured?.getBoundingClientRect();
@@ -208,17 +208,20 @@ try {
       hasPhysics: rows.some((r) => r.dataset.starterId === "physics-sketchbook"),
       // The Living Systems showcase — the graduated vocabulary in one scene.
       hasLiving: rows.some((r) => r.dataset.starterId === "living-systems"),
-      firstMeta: rows[0]?.querySelector(".gx-browse-meta")?.textContent ?? "",
+      starterMeta: rows.find((row) => row.dataset.starterId === "physics-sketchbook")?.querySelector(".gx-browse-meta")?.textContent ?? "",
+      glowGardenCount: rows.filter((row) => row.dataset.starterId === "glow-garden").length,
       previewCount: rows.filter((row) => row.querySelector("img.gx-shelf-thumb")).length,
       previewLoaded: rows.filter((row) => {
         const image = row.querySelector("img.gx-shelf-thumb");
         return image?.complete && image.naturalWidth > 0;
       }).length,
       featuredCount: featuredRows.length,
+      featuredId: featured?.dataset.sceneId,
       featuredAboveFold: Boolean(cardRect && featuredRect
         && featuredRect.top >= cardRect.top && featuredRect.bottom <= cardRect.bottom),
       featuredBadges: [...(featured?.querySelectorAll(".gx-browse-badge") ?? [])].map((badge) => badge.textContent),
       featuredSummary: featured?.querySelector(".gx-browse-summary")?.textContent ?? "",
+      featuredAction: featured?.querySelector(".gx-browse-action")?.textContent ?? "",
       welcomeGone: !document.querySelector(".gx-welcome"),
     };
   });
@@ -259,15 +262,16 @@ try {
   await mobile.goto(BASE, { waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
   await mobile.waitForSelector(".gx-welcome", { timeout: SMOKE_TIMEOUT });
   await mobile.click(".gx-welcome .gx-go-browse");
-  await mobile.waitForSelector('.gx-browse-row[data-starter-id="glow-garden"]', { timeout: SMOKE_TIMEOUT });
+  await mobile.waitForSelector('.gx-browse-row--featured[data-scene-id="nacre-quest3"]', { timeout: SMOKE_TIMEOUT });
   out.mobileBrowse = await mobile.evaluate(() => {
-    const featured = document.querySelector('.gx-browse-row[data-starter-id="glow-garden"]');
+    const featured = document.querySelector('.gx-browse-row--featured[data-scene-id="nacre-quest3"]');
     const summary = featured?.querySelector(".gx-browse-summary");
     const card = document.querySelector(".gx-browse-card");
     const featuredRect = featured?.getBoundingClientRect();
     const cardRect = card?.getBoundingClientRect();
     return {
       noHorizontalOverflow: document.documentElement.scrollWidth <= window.innerWidth,
+      featuredCount: document.querySelectorAll(".gx-browse-row--featured").length,
       summaryVisible: Boolean(summary && getComputedStyle(summary).display !== "none" && summary.getBoundingClientRect().height > 0),
       featuredStartsAboveFold: Boolean(featuredRect && cardRect && featuredRect.top >= cardRect.top && featuredRect.top < window.innerHeight),
       badgeCount: featured?.querySelectorAll(".gx-browse-badge").length ?? 0,
@@ -325,18 +329,22 @@ const ok =
   out.browse?.rowCount > 0 &&
   out.browse?.hasPhysics === true &&
   out.browse?.hasLiving === true &&
-  /entities/.test(out.browse?.firstMeta ?? "") &&
+  /\d+ objets/.test(out.browse?.starterMeta ?? "") &&
+  out.browse?.glowGardenCount === 1 &&
   out.browse?.previewCount === out.browse?.rowCount &&
   out.browse?.previewLoaded === out.browse?.rowCount &&
   out.browse?.featuredCount === 1 &&
+  out.browse?.featuredId === "nacre-quest3" &&
   out.browse?.featuredAboveFold === true &&
   out.browse?.featuredBadges?.length === 3 &&
-  /luminous trees/.test(out.browse?.featuredSummary ?? "") &&
+  /station sci-fi/.test(out.browse?.featuredSummary ?? "") &&
+  /Explorer la station/.test(out.browse?.featuredAction ?? "") &&
   /mesh is faithful/.test(out.archiveDisclosure?.summary ?? "") &&
   /ARCHIVE/.test(out.archiveDisclosure?.label ?? "") &&
   out.archiveDisclosure?.visible === true &&
   out.browse?.welcomeGone === true &&
   out.mobileBrowse?.noHorizontalOverflow === true &&
+  out.mobileBrowse?.featuredCount === 1 &&
   out.mobileBrowse?.summaryVisible === true &&
   out.mobileBrowse?.featuredStartsAboveFold === true &&
   out.mobileBrowse?.badgeCount === 3 &&

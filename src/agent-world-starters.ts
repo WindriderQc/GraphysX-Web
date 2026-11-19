@@ -47,56 +47,56 @@ export const GRAPHYSX_AGENT_WORLD_STARTERS: readonly AgentWorldStarterDescriptor
   {
     id: "living-systems",
     label: "Living Systems",
-    summary: "The graduated vocabulary in one scene: terrain and a reflecting lake under a sky, a starling flock, a whirlpool force field, particle braziers, and a 2D overlay.",
+    summary: "Un terrain, un lac réfléchissant, une nuée d’oiseaux, un tourbillon, des brasiers de particules et une image superposée : les systèmes vivants réunis dans une scène.",
     prefabCount: 0,
     entityCount: 9
   },
   {
     id: "quarantine",
     label: "The Quarantine",
-    summary: "A ground crowd with contact conversion on: a few pursuers seek the nearest wanderer, and every wanderer they reach turns pursuer, so the population flips as you watch. The recovered zombie-hunt mechanic as ordinary scene data — no player, no scripting.",
+    summary: "Quelques poursuivants transforment les promeneurs qu’ils touchent. Observe la population changer : une mécanique retrouvée, sans personnage à piloter.",
     prefabCount: 0,
     entityCount: 4
   },
   {
     id: "prefab-plaza",
     label: "Prefab Plaza",
-    summary: "A balanced showcase with one of every reusable structure.",
+    summary: "Une place qui réunit les structures réutilisables, à déplacer et à recomposer dans le Studio.",
     prefabCount: 5,
     entityCount: 43
   },
   {
     id: "glow-garden",
     label: "Glow Garden",
-    summary: "Four luminous trees frame a portal and kinetic centerpiece.",
+    summary: "Quatre arbres lumineux entourent un portail et une sculpture animée. Une scène à modifier dans le Studio.",
     prefabCount: 6,
     entityCount: 45
   },
   {
     id: "signal-outpost",
     label: "Signal Outpost",
-    summary: "Two habitat pods, paired beacons and a welcoming portal.",
+    summary: "Deux habitats, des balises jumelles et un portail : un petit avant-poste à transformer.",
     prefabCount: 5,
     entityCount: 41
   },
   {
     id: "signal-trail",
     label: "Signal Trail",
-    summary: "A tiny playable world: awaken three beacons to stabilize the portal.",
+    summary: "Un petit monde jouable : réveille trois balises pour stabiliser le portail.",
     prefabCount: 6,
     entityCount: 45
   },
   {
     id: "constraint-workshop",
     label: "Constraint Workshop",
-    summary: "Editable v2 fixed, revolute/hinge, and rope joints: the archive Physics Lab mechanics as ordinary scene data.",
+    summary: "Assemble et modifie des pièces fixes, articulées ou reliées par une corde : les mécaniques du laboratoire physique retrouvé.",
     prefabCount: 0,
     entityCount: 9
   },
   {
     id: "physics-sketchbook",
     label: "Physics Sketchbook",
-    summary: "A readable agent laboratory for ramps, collisions, materials, mass, and planetary motion.",
+    summary: "Un laboratoire pour essayer les rampes, les collisions, les matières, les masses et les mouvements orbitaux.",
     prefabCount: 0,
     entityCount: 16
   }

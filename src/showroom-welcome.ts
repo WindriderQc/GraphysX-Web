@@ -971,25 +971,21 @@ export function mountWelcome(
     const dna = document.createElement("a");
     dna.href = import.meta.env.BASE_URL + "?app=dna";
     dna.textContent = "ADN × physique · Créer une variante";
-    Object.assign(dna.style, { color: "#98f1d6", padding: "12px", textDecoration: "none" });
     list.append(dna);
     const math = document.createElement("a");
     math.className = "gx-go-ten-workshop";
     math.href = import.meta.env.BASE_URL + "math-lab.html?level=numbers";
     math.textContent = "Math Lab · Nombres et calculs";
-    Object.assign(math.style, { color: "#98f1d6", padding: "12px", textDecoration: "none" });
     list.append(math);
     const vr = document.createElement("a");
     vr.className = "gx-go-vr";
     vr.href = import.meta.env.BASE_URL + "?app=vr-lab";
     vr.textContent = "Atelier VR · Mains et manettes";
-    Object.assign(vr.style, { color: "#98f1d6", padding: "12px", textDecoration: "none" });
     list.append(vr);
     const quest3 = document.createElement("a");
     quest3.className = "gx-go-quest3";
     quest3.href = import.meta.env.BASE_URL + "?app=quest3";
-    quest3.textContent = "NACRE · Observatoire orbital VR";
-    Object.assign(quest3.style, { color: "#98f1d6", padding: "12px", textDecoration: "none" });
+    quest3.textContent = "NACRE · Observatoire sur écran ou en VR";
     list.append(quest3);
     if (hooks?.onOpenIsland) {
       const island = document.createElement("button");
@@ -1000,6 +996,19 @@ export function mountWelcome(
       list.append(island);
     }
     for (const button of dock.querySelectorAll(".gx-go-kidx,.gx-go-llmx,.gx-go-diskx,.gx-go-ecosystem,.gx-go-netx")) list.append(button);
+    const pick = (selector: string): HTMLElement | null => list.querySelector<HTMLElement>(selector);
+    const groups: [string, (HTMLElement | null)[]][] = [
+      ["Créer et apprendre", [dna, math, pick(".gx-go-kidx")]],
+      ["Explorer en 3D", [quest3, vr, pick(".gx-go-llmx"), pick(".gx-go-island")]],
+      ["Données AgentX", [pick(".gx-go-diskx"), pick(".gx-go-ecosystem"), pick(".gx-go-netx")]],
+    ];
+    list.replaceChildren();
+    for (const [name, entries] of groups) {
+      const actions = entries.filter((entry): entry is HTMLElement => entry !== null);
+      if (!actions.length) continue;
+      const heading = document.createElement("h3"); heading.textContent = name;
+      list.append(heading, ...actions);
+    }
     apps.addEventListener("keydown", (event) => {
       if (event.key !== "Escape" || !apps.open) return;
       event.stopPropagation();

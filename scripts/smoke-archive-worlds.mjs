@@ -18,7 +18,13 @@ const open = async (id, worldId) => {
   await page.click(".gx-go-archive");
   if (id === "archive-cubz-tracks") await page.click('[data-collection="lab"]');
   await page.click(`[data-scene-id="${id}"]`);
-  await page.waitForFunction(id => window.__GRAPHYSX__.state().world.id === id, worldId);
+  if (id === "archive-maison") {
+    await page.waitForFunction(() => JSON.parse(window.render_game_to_text?.() ?? "{}").application?.ready);
+    const source = await page.locator("[data-maison-source]").getAttribute("href");
+    assert.equal(new URL(source).searchParams.get("view"), "source");
+    await page.goto(source, { waitUntil: "domcontentloaded" });
+  }
+  await page.waitForFunction(id => window.__GRAPHYSX__?.state().world.id === id, worldId);
   if (id === "archive-flightx") await page.click("[data-flightx-studio]");
   await page.waitForSelector(".gx-archive-workbench");
 };
