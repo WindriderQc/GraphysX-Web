@@ -348,7 +348,21 @@ try {
   await recovery.waitForFunction(()=>!document.querySelector('.nacre-primary').disabled);
   assert.equal(await recovery.evaluate(()=>window.__GRAPHYSX__.export().label),primitive.label);
   assert.equal(await recovery.locator('.nacre-primary').isEnabled(),true);
-  receipt.loadingRecovery={requiredAssetRetried:true,optionalDecorDegraded:true,compileRetried:true,primitiveSceneReady:true};
+  await recovery.evaluate(()=>{
+    const gl=window.__GRAPHYSX_QUEST3__.host.renderer.getContext();
+    window.nacreTestContext=gl.getExtension('WEBGL_lose_context');
+    if(!window.nacreTestContext)throw Error('WEBGL_lose_context is required to exercise graphics recovery');
+    window.nacreTestContext.loseContext();
+  });
+  await recovery.getByRole('button',{name:'Recharger la page'}).waitFor({state:'visible'});
+  assert.match(await status.innerText(),/contexte graphique a été perdu/);
+  assert.equal(await recovery.locator('.nacre-primary').isDisabled(),true);
+  await recovery.evaluate(()=>window.nacreTestContext.restoreContext());
+  await ready(recovery);
+  await recovery.waitForFunction(()=>!document.querySelector('.nacre-primary').disabled);
+  assert.equal(await retry.isVisible(),false);
+  assert.equal(await recovery.evaluate(()=>window.__GRAPHYSX__.export().label),primitive.label);
+  receipt.loadingRecovery={requiredAssetRetried:true,optionalDecorDegraded:true,compileRetried:true,primitiveSceneReady:true,webglContextRestored:true};
   await recovery.close();
 
   const xr=applySmokeTimeout(await browser.newPage({viewport:{width:1280,height:800}}));
