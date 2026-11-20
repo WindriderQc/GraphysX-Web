@@ -12,6 +12,8 @@ Les variantes ADN et les créations guidées ouvrent aussi le Studio simple apr�
    le panneau se replie ; **Modifier** permet d’y revenir.
 4. **Simuler**, **Mettre en pause**, **Un pas**, **Annuler** et **Rétablir** utilisent la
    simulation et l’historique existants.
+   Une scène conservée retrouve sa pause précédente en quittant le Studio. Un accueil
+   reconstruit après une autre scène repart en animation.
 5. **Enregistrer** ou `Ctrl/Cmd+S` donne un nom à la scène. Le même nom met à jour la scène
    ouverte ; un nom différent conserve une copie. Un nom déjà pris ou une sauvegarde modifiée
    dans une autre fenêtre demande un autre nom.
@@ -65,6 +67,7 @@ npm run verify -- --wait
 `studio-simple` vérifie les actions réelles à 1440, 390, 320 et 844 px, le cadrage dégagé,
 le passage au mode complet, l’import/export et les matières natives Maison.
 Il garde aussi le mode complet des deux liens de comparaison source.
+`studio-return` vérifie les vrais boutons de retour et l’horloge réelle, sans avance de temps simulée.
 `my-creations` vérifie notamment le conflit entre onglets, le stockage plein/bloqué,
 les brouillons, l’export de secours et une fermeture/réouverture réelle de Chromium
 sur un profil temporaire propre au test. Les régressions avancées restent vérifiées après

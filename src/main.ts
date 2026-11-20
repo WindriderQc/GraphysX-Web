@@ -223,6 +223,7 @@ if (appParam === "quest3") {
     // Editors entered from Browse hold a different world. Their Showroom exit must rebuild
     // the GraphysX welcome scene instead of mounting Nestor's controls over unrelated scene targets.
     let restoreShowroomOnEditorExit = false;
+    let editorReturnClock: { worldId: string | null; paused: boolean } | null = null;
     // DOM topics and physical consoles share this guard. A live client owns its operation
     // path and role checks, so Nestor cannot make an unbroadcast local commit while attached.
     let nestorBlockedByLiveSession = (): boolean => false;
@@ -256,6 +257,9 @@ if (appParam === "quest3") {
       if (nestorBlockedByLiveSession()) {
         syncFrontDoor();
         return;
+      }
+      if (host.mode !== "editor") {
+        const clock = host.world.getClock(); editorReturnClock = { worldId: clock.worldId, paused: clock.paused };
       }
       restoreShowroomOnEditorExit = false;
       requestShowroomInteraction(false);
@@ -901,6 +905,7 @@ if (appParam === "quest3") {
       welcome?.dispose();
       welcome = null;
       composeShowroom(host.api);
+      host.api.pause(false);
       nestor?.reset();
       host.applyEnvironment();
       showroomEnvironment?.();
@@ -1439,6 +1444,7 @@ if (appParam === "quest3") {
       onExitEditor: editorFirst
         ? (localScene || localDraft ? () => window.location.assign(import.meta.env.BASE_URL) : undefined)
         : () => {
+            const returnClock = editorReturnClock; editorReturnClock = null;
             // A same-page app-to-Studio copy must not replay the captured startup
             // ?app route when the editor's Home action rebuilds the front door.
             if (returnFromApplicationStudio) {
@@ -1450,6 +1456,7 @@ if (appParam === "quest3") {
               focusFrontDoor();
               return;
             }
+            if (returnClock?.worldId === host.world.getClock().worldId && !nestorBlockedByLiveSession()) host.api.pause(returnClock.paused);
             requestShowroomInteraction(true);
             // Door selection is authoritative: center, live observer, or preserved scene.
             mountFrontDoor();

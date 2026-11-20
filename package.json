@@ -30,6 +30,7 @@
     "smoke:nestor-request": "node scripts/smoke-nestor-request.mjs",
     "smoke:editor": "node scripts/smoke-editor.mjs",
     "smoke:studio-simple": "node scripts/smoke-studio-simple.mjs",
+    "smoke:studio-return": "node scripts/smoke-studio-return.mjs",
     "smoke:my-creations": "node scripts/smoke-my-creations.mjs",
     "smoke:top20": "node scripts/smoke-top20.mjs",
     "smoke:standalone": "node scripts/smoke-standalone.mjs",
