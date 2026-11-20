@@ -761,6 +761,7 @@ try {
   await page.click(".gx-go-browse");
   await page.waitForSelector(".gx-browse", { timeout: SMOKE_TIMEOUT });
   await page.click('[data-starter-id="signal-outpost"]');
+  await enterCompleteStudio(page);
   await page.waitForFunction(() => {
     const toolbar = document.querySelector(".gx-ed-toolbar");
     return window.__GRAPHYSX_HOST__.mode === "editor" && !!toolbar && getComputedStyle(toolbar).display !== "none";

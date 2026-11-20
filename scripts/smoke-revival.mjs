@@ -84,7 +84,7 @@ try {
   await page.click('[data-collection="lab"]');
   await page.fill(".gx-browse .gx-shelf-search", "physics");
   check("search is scoped to the selected laboratory", (await visible()).length > 0 && (await visible()).every((collection) => collection === "lab"));
-  await page.click(".gx-browse-close");
+  await page.getByRole("button", { name: "Fermer les mondes et revenir à GraphysX", exact: true }).click();
   await page.click(".gx-go-archive");
   await page.waitForSelector('.gx-browse [data-collection="archive"][aria-pressed="true"]');
   check("archive entry opens its own collection", (await visible()).every((collection) => collection === "archive") && (await visible()).length > 0);
@@ -141,7 +141,7 @@ try {
   await page.click(".gx-go-archive");
   await page.screenshot({ path: path.join(artifacts, "archives-mobile.png") });
   check("mobile catalogue fits the viewport", await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-  await page.click(".gx-browse-close");
+  await page.getByRole("button", { name: "Fermer les mondes et revenir à GraphysX", exact: true }).click();
   await page.click(".gx-go-games");
   await page.waitForSelector(".gx-shelf .gx-shelf-collections");
   check("new games are visible before archive courses", await page.locator('[data-course-id="ballsy-slime"]').isVisible()

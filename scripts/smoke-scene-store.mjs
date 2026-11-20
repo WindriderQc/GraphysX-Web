@@ -1,4 +1,5 @@
 import { SMOKE_TIMEOUT, applySmokeTimeout, launchSmokeBrowser } from "./smoke-harness.mjs";
+import { enterCompleteStudio } from "./studio-smoke-helpers.mjs";
 import assert from "node:assert/strict";
 import { mkdirSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -336,6 +337,7 @@ applySmokeTimeout(page);
   assert.ok(await welcomePage.locator(".gx-sb-row").count() >= 2);
   await welcomePage.getByRole("button", { name: "Collapse stored scenes", exact: true }).click();
   await welcomePage.locator(".gx-go-editor").click();
+  await enterCompleteStudio(welcomePage);
   await welcomePage.waitForFunction(() => document.documentElement.dataset.gxEditor === "visible"
     && document.querySelector(".gx-sb--docked .gx-sb-body")?.getBoundingClientRect().height > 0
     && document.querySelector('.gx-sb [data-action="collapse"]')?.getAttribute("aria-expanded") === "true");
