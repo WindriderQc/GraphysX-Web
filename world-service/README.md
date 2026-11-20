@@ -110,9 +110,12 @@ or the replay server, for example `http://localhost:5173/?app=island&source=http
   read-only like `clawblox replay`: `/healthz`, `/spectate` (same events; a fresh `hello` after
   every seek), `/replay/info`, `/replay/actions`, and the shared transport `POST /replay/play`,
   `/pause`, `/seek?tick=`, `/speed?value=`, `/skip-idle?enabled=`. A resumed world appends a new
-  hello to the same file; the replay follows the resumed timeline. A torn final line is
-  retained as skipped data before the resume hello. Old recordings without new fields
-  remain supported by `replay.mjs`.
+  hello at the start of a new segment. Legacy files with multiple hellos follow the
+  resumed timeline. A hello replaces earlier poses and entity changes at its tick,
+  and changes that follow it at the same tick still apply. Each stream (frames, entity
+  changes, actions) skips decreasing ticks independently, and the replay reports invalid
+  or out-of-order lines as `skipped_lines` in `/replay/info` when there are any.
+  A missing, blank or invalid seek tick returns 400 and leaves playback where it was.
 - `GET /recordings/<recordingId>/healthz`, `/spectate`, `/replay/*` serve the selected
   recording through the existing replay protocol. Only opaque UUIDs under the configured
   recording root are accepted; there is no HTTP file-path parameter and no agent routes.

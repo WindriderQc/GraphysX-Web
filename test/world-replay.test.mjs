@@ -58,6 +58,52 @@ describe("recording timeline", () => {
     assert.equal(nextActionAfter(recording, 1100), null);
   });
 
+  it("applies same-tick changes after their hello in recording order", () => {
+    const hello = tick => ({ kind: "hello", format: FORMAT, tick, document: doc([{ id: "ground", type: "box" }]), ids: { 9: "ground" } });
+    const add = (id, label) => ({ kind: "entities", tick: 10, added: [{ entity: { id, type: "box", label }, numericId: 43 }] });
+    const recording = parseRecording([
+      hello(0), add("old-branch", "Before the checkpoint"), hello(10),
+      add("resumed", "First change"), add("resumed", "Second change"), frame(11, 1),
+    ].map(line).join("\n"));
+    const rebuilt = helloAt(recording, 10);
+    assert.deepEqual(rebuilt.document.entities.map(entity => [entity.id, entity.label]), [
+      ["ground", undefined], ["resumed", "Second change"],
+    ]);
+    assert.deepEqual(rebuilt.ids, { 9: "ground", 43: "resumed" });
+  });
+
+  it("skips decreasing ticks within each stream while preserving valid interleaving", async () => {
+    const entities = tick => ({ kind: "entities", tick });
+    const action = tick => ({ kind: "action", tick, agent: "Eko" });
+    const recording = parseRecording([
+      { kind: "hello", format: FORMAT, tick: 0, document: doc([]) },
+      frame(10, 10), entities(10), action(9), // Inputs may be recorded one tick after they execute.
+      frame(8, 8), entities(8), action(7),
+    ].map(line).join("\n"));
+    assert.deepEqual({
+      lastTick: recording.lastTick, skipped: recording.skipped, frames: recording.frames.map(entry => entry.tick),
+      changes: recording.changes.map(entry => entry.tick), actions: recording.actions.map(entry => entry.tick),
+    }, { lastTick: 10, skipped: 3, frames: [10], changes: [10], actions: [9] });
+    assert.equal(frameAt(recording, 10)?.poses[0][1], 10);
+    assert.equal(frameAt(recording, 8), null);
+    const running = await startReplayServer({ recording, realtime: false });
+    try {
+      const response = await fetch(`${running.url}/replay/info`);
+      assert.equal(response.status, 200);
+      const info = await response.json();
+      assert.equal(info.total_ticks, 10);
+      assert.equal(info.skipped_lines, 3);
+    } finally { await running.close(); }
+  });
+
+  it("includes a resume hello in the timeline even before a new frame is recorded", () => {
+    const hello = tick => ({ kind: "hello", format: FORMAT, tick, document: doc([]) });
+    const recording = parseRecording([hello(0), frame(6, 1), hello(12), frame(11, 2)].map(line).join("\n"));
+    assert.equal(recording.lastTick, 12);
+    assert.equal(recording.skipped, 1);
+    assert.equal(frameAt(recording, 12), null);
+  });
+
   it("a resumed world's timeline replaces what the old one recorded after the resumed tick", () => {
     const resumed = [
       { kind: "hello", format: FORMAT, tickHz: 60, tick: 500, document: doc([{ id: "ground", type: "box" }, { id: "block_1", type: "box" }, { id: "agent-43", type: "agent", label: "Eko" }]), ids: { 9: "ground", 29: "block_1", 43: "agent-43" }, resumedFromTick: 500 },
@@ -108,6 +154,22 @@ async function readEvents(url, done, ms = 3000) {
 }
 
 describe("replay server", () => {
+  it("refuses a missing, blank or invalid seek tick without moving the clock", async () => {
+    const running = await startReplayServer({ recording: parseRecording(sampleRecording()), port: 0, realtime: false });
+    try {
+      const seek = query => fetch(`${running.url}/replay/seek${query}`, { method: "POST" });
+      assert.equal((await (await seek("?tick=123")).json()).current_tick, 123);
+      const results = [];
+      for (const query of ["", "?tick=", "?tick=%20%09", "?tick=abc", "?tick=Infinity"]) {
+        const response = await seek(query);
+        results.push([query, response.status, running.info().current_tick]);
+        await response.json();
+      }
+      assert.deepEqual(results, ["", "?tick=", "?tick=%20%09", "?tick=abc", "?tick=Infinity"].map(query => [query, 400, 123]));
+      assert.equal((await (await seek("?tick=0")).json()).current_tick, 0, "an explicit zero is a valid seek");
+    } finally { await running.close(); }
+  });
+
   it("resets connected viewers when forward playback crosses a recorded resume", async () => {
     const resumed = [
       { kind: "hello", format: FORMAT, tickHz: 60, tick: 600, document: doc([{ id: "resumed-tree", type: "box" }]), ids: { 51: "resumed-tree" } },
