@@ -45,6 +45,7 @@ physique et outils de niveaux. **Mode simple** revient aux commandes essentielle
 Le choix effectué avec ces boutons est mémorisé ; un lien indiquant explicitement `studio`
 garde sa destination. Les anciennes routes techniques `?host=editor` et `?host=standalone`
 continuent d’ouvrir le mode complet ; `?host=editor&studio=simple` ouvre le mode simple.
+Les liens de comparaison Maison/FlightX `view=source` gardent aussi le mode complet par défaut.
 
 Les deux présentations utilisent `PlatformEditor`, le même gizmo et la même World API v2.
 Les objets masqués et les couches d’archive restent dans le document complet sauvegardé,
@@ -63,6 +64,7 @@ npm run verify -- --wait
 
 `studio-simple` vérifie les actions réelles à 1440, 390, 320 et 844 px, le cadrage dégagé,
 le passage au mode complet, l’import/export et les matières natives Maison.
+Il garde aussi le mode complet des deux liens de comparaison source.
 `my-creations` vérifie notamment le conflit entre onglets, le stockage plein/bloqué,
 les brouillons, l’export de secours et une fermeture/réouverture réelle de Chromium
 sur un profil temporaire propre au test. Les régressions avancées restent vérifiées après

@@ -124,6 +124,14 @@ try {
   await namedSave(page, "Ma maison colorée"); await capture(page, "native-maison");
   receipts.push({ nativeSlots: 24, entities: after.entities.length });
   await page.close();
+  for (const app of ["maison", "flightx"]) {
+    const source = applySmokeTimeout(await browser.newPage({ viewport: { width: 1280, height: 900 }, reducedMotion: "reduce" })); active = source;
+    await source.goto(new URL(`?app=${app}&view=source&intro=0`, base).href);
+    await source.locator(".gx-ed-toolbar").waitFor(); await source.locator(".gx-archive-workbench").waitFor();
+    assert.equal((await studioState(source)).experience, "complete", "Explicit archive source comparison retains the advanced editor");
+    receipts.push({ sourceComparison: app, experience: "complete" });
+    await source.close();
+  }
   await writeFile(path.join(output, "studio-simple.json"), JSON.stringify({ receipts, completedAt: new Date().toISOString() }, null, 2));
   console.log("PASS Simple Studio: human entry, transforms, first-click blur, framing, undo/redo, simulation, named save/open/reload, complete mode, JSON import/export and native Maison.");
 } catch (error) { await active?.screenshot({ path: path.join(output, "studio-simple-failure.png") }).catch(() => {}); throw error; }

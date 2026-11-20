@@ -276,7 +276,10 @@ if (appParam === "quest3") {
       requestShowroomInteraction(false);
       void host.enterEditor().then(() => {
         if (host.mode !== "editor" || nestorBlockedByLiveSession()) return;
-        host.api.pause(true); host.editor?.showStudio();
+        host.api.pause(true);
+        const destination = new URLSearchParams(window.location.search);
+        if (destination.get("view") === "source" && !destination.has("studio")) host.editor?.setExperience("complete");
+        else host.editor?.showStudio();
       });
     };
     const personalSceneLocation = (name: string | null, draftKey: string | null = null): void => {
