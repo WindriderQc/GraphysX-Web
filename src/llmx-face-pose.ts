@@ -44,6 +44,9 @@ export type FaceDrivers = {
   think: number;
   /** Warmth, -1 (severe) to 1 (a discreet smile). */
   warmth: number;
+  /** Authored presentation only, never inferred from a user's emotion. */
+  surprise: number;
+  curiosity: number;
   /** Idle breathing phase in radians, advanced by the rig's clock. */
   breath: number;
 };
@@ -58,6 +61,8 @@ export const NEUTRAL_DRIVERS: Readonly<FaceDrivers> = Object.freeze({
   attention: 0.25,
   think: 0,
   warmth: 0,
+  surprise: 0,
+  curiosity: 0,
   breath: 0,
 });
 
@@ -85,6 +90,8 @@ export function clampDrivers(drivers: Partial<FaceDrivers>): FaceDrivers {
     attention: clamp01(drivers.attention ?? NEUTRAL_DRIVERS.attention),
     think: clamp01(drivers.think ?? NEUTRAL_DRIVERS.think),
     warmth: clamp(drivers.warmth ?? 0, -1, 1),
+    surprise: clamp01(drivers.surprise ?? 0),
+    curiosity: clamp01(drivers.curiosity ?? 0),
     breath: Number.isFinite(drivers.breath) ? (drivers.breath as number) : 0,
   };
 }
@@ -290,7 +297,7 @@ export function deriveWeights(asset: FaceAsset, levelName: string): FaceWeights 
     const lipFall = Math.hypot(
       (y - anchors.mouth.y) / (y < anchors.mouth.y ? 0.3 : 0.22),
       x / (anchors.mouth.halfWidth + 0.2),
-      (z - anchors.mouth.z) / 0.34,
+      (z - anchors.mouth.z) / 0.38,
     );
     lip[i] = region[i] === mawIndex ? 0 : clamp01(1 - lipFall);
     cavity[i] = region[i] === mawIndex ? 1 : 0;
@@ -300,8 +307,8 @@ export function deriveWeights(asset: FaceAsset, levelName: string): FaceWeights 
     // cubes a frown gathers and a raised brow lifts: the expressions were authored at full
     // amplitude and delivered at half.
     const browFall = Math.hypot(
-      (y - anchors.brow.y) / (y < anchors.brow.y ? 0.22 : 0.32),
-      Math.max(0, Math.abs(x) - anchors.brow.x - 0.12) / 0.2,
+      (y - anchors.brow.y) / (y < anchors.brow.y ? 0.24 : 0.32),
+      Math.max(0, Math.abs(x) - anchors.brow.x - 0.12) / 0.22,
     );
     // A smooth field across material boundaries, like the lips, not a region flag: keyed to
     // `region === brow` the arch moved as a plate and a lift or a frown opened a row of holes
@@ -596,9 +603,9 @@ export const POSE_LIMITS = Object.freeze({
    * multiply. It is invisible — a cube 40% larger among cubes of the same colour reads as the
    * same surface, where a hole through it does not.
    */
-  stretchFill: 0.42,
+  stretchFill: 0.44,
   /** Exponent on `speak` before it drives the mouth. Below one; see the note where it is used. */
-  mouthResponse: 0.6,
+  mouthResponse: 0.66,
   lipSpread: 0.075,
   /**
    * Vowel shapes, so an "o" and an "i" are told apart in the dock. Rounded (dark tone): the
@@ -611,8 +618,8 @@ export const POSE_LIMITS = Object.freeze({
   vowelRound: 0.4,
   vowelFlat: 0.35,
   /** A smile: the corners of the mouth rise and widen, metres at warmth = 1. */
-  smileLift: 0.09,
-  smileWiden: 0.035,
+  smileLift: 0.115,
+  smileWiden: 0.04,
   lipPurse: 0.03,
   /**
    * Attention and thinking, sized to read at conversation distance. The first values here —
@@ -630,7 +637,7 @@ export const POSE_LIMITS = Object.freeze({
   neutralLidRadians: -0.08,
   thinkLidRadians: 0.08,
   /** The lower lid rises with a smile — the squint that makes a smile sincere — and on a blink. */
-  smileSquintRadians: 0.3,
+  smileSquintRadians: 0.25,
   blinkLowerLidRadians: 0.5,
   /** Pupil size, as a multiple of the sculpted pupil: wide when attentive, narrow when thinking. */
   pupilMin: 0.7,
@@ -641,7 +648,9 @@ export const POSE_LIMITS = Object.freeze({
   thinkGazeX: -0.22,
   /** Whole-mask lateral tilt while attending, radians. A head that listens leans. */
   attentionTilt: 0.045,
-  cheekLift: 0.034,
+  cheekLift: 0.045,
+  curiosityBrowLift: 0.05,
+  surpriseBrowLift: 0.025,
   gazeRadians: 0.34,
   breathAmplitude: 0.006,
 });
@@ -682,9 +691,9 @@ export function poseInto(
    * between 0.2 and 0.7 — it reaches 1 on a shout, not on a sentence. Driving the opening
    * linearly therefore wastes most of the authored range on amplitudes that never occur, and the
    * mouth reads as barely moving while the meter says it is working. Raising to a power below
-   * one puts the visible travel where speech actually lives: 0.3 opens to 49%, 0.5 to 66%.
+   * one puts the visible travel where speech actually lives: 0.3 opens to 45%, 0.5 to 63%.
    */
-  const mouth = Math.pow(d.speak, POSE_LIMITS.mouthResponse);
+  const mouth = Math.max(Math.pow(d.speak, POSE_LIMITS.mouthResponse), d.surprise * 0.42);
 
   // Positive opens. The hinge sits behind and above the chin, so this rotation drops the lips
   // and swings the chin down and *back* — which is what a jaw does. An earlier negative angle
@@ -703,10 +712,11 @@ export function poseInto(
   const purse = POSE_LIMITS.lipPurse * -tone * mouth;
   const rounded = Math.max(0, -tone);
   const flat = Math.max(0, tone);
-  const pinch = POSE_LIMITS.vowelPinch * rounded * mouth;
+  const pinch = POSE_LIMITS.vowelPinch * rounded * mouth + 0.03 * d.surprise;
   const partShape = 1 + POSE_LIMITS.vowelRound * rounded - POSE_LIMITS.vowelFlat * flat;
 
-  const browTarget = POSE_LIMITS.browLift * (d.attention + Math.max(0, d.warmth) * 0.3);
+  const browTarget = POSE_LIMITS.browLift * (d.attention + Math.max(0, d.warmth) * 0.3)
+    + POSE_LIMITS.surpriseBrowLift * d.surprise;
   const frown = POSE_LIMITS.browFrown * d.think;
   const converge = POSE_LIMITS.browConverge * d.think;
   const thinkPurse = POSE_LIMITS.lipPurse * 0.8 * d.think;
@@ -769,13 +779,16 @@ export function poseInto(
       // into separate upper/lower plates even when the outer corners stayed closed. Ease the
       // split through the commissure so both walls remain connected as the aperture opens.
       // The ramp fits the narrow resting seam: the old 90 mm ramp barely moved these lips.
-      const parting = smoothstep(0, 0.035, Math.abs(y - anchors.mouth.y));
+      const parting = smoothstep(0, 0.01, Math.abs(y - anchors.mouth.y));
       py += (upper ? POSE_LIMITS.lipPart * POSE_LIMITS.lipPartUpperShare : -POSE_LIMITS.lipPart) * lw * mouth * corner * parting * partShape;
     }
 
     const bw = brow[i];
     if (bw > 0) {
       py += browTarget * bw;
+      // Continuous through the bridge, rather than two independently lifted plates. A curious
+      // pose raises one arch and gently gathers the other without a crack at the centreline.
+      py += POSE_LIMITS.curiosityBrowLift * d.curiosity * (1.5 * smoothstep(-0.2, 0.2, x) - 0.5) * bw;
       // A slow wave crossing the brow while the engine is busy. Travelling rather than
       // pulsing, so it reads as activity instead of a heartbeat.
       // Phase continuous across the centre line. Keyed on `side` (-1 | +1) it jumped 1.2 rad between
@@ -793,8 +806,8 @@ export function poseInto(
     // The smile is a field around each commissure, crossing lip, cheek and jaw alike: the corner
     // rises and widens, the middle of the mouth stays, and the effect fades over a hand's
     // width so the cheek carries it up. Severity drops the corners, less.
-    const cornerDist = Math.hypot(Math.abs(x) - anchors.mouth.halfWidth, (y - anchors.mouth.y) * 1.3, (z - anchors.mouth.z) * 0.8);
-    const smileW = cavity[i] ? 0 : 1 - smoothstep(0, 0.24, cornerDist);
+    const cornerDist = Math.hypot(Math.abs(x) - anchors.mouth.halfWidth, (y - anchors.mouth.y) * 1.15, (z - anchors.mouth.z) * 0.8);
+    const smileW = cavity[i] ? 0 : 1 - smoothstep(0, 0.27, cornerDist);
     if (smileW > 0) {
       py += POSE_LIMITS.smileLift * (smile - frownMouth) * smileW;
       px += Math.sign(x) * POSE_LIMITS.smileWiden * smile * smileW;
@@ -818,10 +831,11 @@ export function poseInto(
     // there grow with the expression's amplitude — the same trick that closes the lips' seam.
     // Uniform across the band, not parabolic: the field falls off linearly, so the rows spread
     // by the same amount at its edges as at its middle.
-    const browStretch = 4 * bw * (1 - bw) * clamp01(d.attention + d.think + Math.max(0, d.warmth) * 0.3) + 0.5 * bw * d.think;
+    const browStretch = 4 * bw * (1 - bw) * Math.min(1.8, d.attention + d.think + Math.max(0, d.warmth) * 0.3 + 0.65 * d.surprise + 0.8 * d.curiosity) + 0.5 * bw * d.think;
     const smileStretch = 4 * smileW * (1 - smileW) * smile;
+    const cheekStretch = 4 * cw * (1 - cw) * smile;
     // The lips' fill follows the opening's height: a rounded vowel parts them further.
-    const stretch = 1 + POSE_LIMITS.stretchFill * (mouth * partShape * stretchWeight + 1.0 * browStretch + 0.9 * smileStretch);
+    const stretch = 1 + POSE_LIMITS.stretchFill * (mouth * partShape * stretchWeight + 1.0 * browStretch + 0.9 * smileStretch + 0.65 * cheekStretch);
     outScale[i] = buildScale(rise[i], d.build, i) * stretch;
   }
   return count;
@@ -875,7 +889,7 @@ export function eyeTransform(anchors: FaceAnchors, input: Partial<FaceDrivers>):
   const gazeY = clamp(d.gazeY + POSE_LIMITS.thinkGazeY * d.think, -1, 1);
   // The blink owns the lid while it lasts; otherwise the expression sets where the lid rests.
   const restingLid = POSE_LIMITS.neutralLidRadians + POSE_LIMITS.thinkLidRadians * d.think
-    + POSE_LIMITS.attentionLidRadians * d.attention;
+    + POSE_LIMITS.attentionLidRadians * d.attention + 0.27 * Math.max(0, d.warmth) - 0.14 * d.surprise;
   return {
     pivot: { x: anchors.eye.x, y: anchors.eye.y, z: anchors.eye.z },
     yaw: gazeX * POSE_LIMITS.gazeRadians,

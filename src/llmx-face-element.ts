@@ -20,6 +20,7 @@ import {
 } from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { AgentWorldVoxelFace } from "./agent-world-face";
+import { faceExpression } from "./llmx-face-expressions";
 import { POSE_LIMITS, resolveAgentWorldFace, type AgentWorldFaceLevel } from "./llmx-face-pose";
 import { forgeIntroAt, FORGE_INTRO } from "./llmx-forge";
 import { gazeDriversToward } from "./llmx-gaze";
@@ -37,7 +38,8 @@ import { MathStage } from "./llmx-math-stage";
  * follows the pointer anywhere on the page.
  *
  * Attributes: `level` (high | balanced | mobile), `tint` (#rrggbb, the aura and rim),
- * `intro` ("off" to arrive already built).
+ * `intro` ("off" to arrive already built), `expression` (neutral | smile | curious | surprised).
+ * Expressions are explicitly authored poses, never emotion detection.
  * `scene` (`agentx.math-scene.v1`, or null) shows a counting or addition picture beside the mask,
  * which looks at each cube as it appears. Look-only: nothing in the picture is interactive.
  * Events: `llmx-face-ready`, `llmx-face-error` (WebGL unavailable: the host shows its fallback),
@@ -333,7 +335,10 @@ export class LlmXFaceElement extends HTMLElement {
     const reduced = reducedMotion();
     this.elapsed += delta;
     const intro = forgeIntroAt(this.elapsed, reduced);
-    const drivers = embedFaceDrivers(this.current, intro.assembly);
+    const expression = faceExpression(this.getAttribute("expression"));
+    const drivers = { ...embedFaceDrivers(this.current, intro.assembly), ...(expression ? {
+      warmth: expression.warmth, curiosity: expression.curiosity, surprise: expression.surprise, attention: expression.attention,
+    } : { curiosity: 0, surprise: 0 }) };
     const speaking = (drivers.speak ?? 0) > 0;
     if (this.reactions.speech(speaking, now / 1000) && intro.done && !reduced) this.face.nod(0.8);
     // Reduced motion shows the finished picture at once instead of building it cube by cube.
@@ -349,7 +354,7 @@ export class LlmXFaceElement extends HTMLElement {
       ...drivers,
       blink: Math.max(drivers.blink ?? 0, 1 - intro.wake),
       attention: (drivers.attention ?? 0) * intro.wake,
-      ...this.gazeDrivers(now),
+      ...(expression ? { gazeX: expression.gazeX, gazeY: expression.gazeY } : this.gazeDrivers(now)),
     });
     this.face.update(reduced ? 0.1 : delta);
     this.animateAura(delta, intro.assembly, drivers.think ?? 0, drivers.speak ?? 0, reduced);
