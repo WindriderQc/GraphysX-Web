@@ -1,3 +1,4 @@
+import { enterCompleteStudio } from "./studio-smoke-helpers.mjs";
 import assert from "node:assert/strict";
 import { mkdir, writeFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -126,7 +127,7 @@ try {
     return { renamed: renamed.ok, added: added.ok };
   });
   assert.deepEqual(authoredEdits, { renamed: true, added: true });
-  await page.click("[data-impreza-studio]"); await page.locator(".gx-ed-toolbar").waitFor();
+  await page.click("[data-impreza-studio]"); await enterCompleteStudio(page); await page.locator(".gx-ed-toolbar").waitFor();
   phase = "studio-copy";
   assert.equal(new URL(page.url()).searchParams.get("app"), null);
   if (store) assert.equal(new URL(page.url()).searchParams.get("store"), store.url);
@@ -162,7 +163,7 @@ try {
   phase = "changed-world-preservation";
   console.log("PASS Impreza: Studio copy, local Save, JSON Export, Home and saved reload.");
   await page.evaluate(() => { window.__GRAPHYSX__.create({ schema: "graphysx.agent-world/v2", id: "kept-custom-world", label: "Kept", entities: [{ id: "kept-box", type: "box" }] }); window.__GRAPHYSX__.pause(true); });
-  await draw(page); await page.click("[data-impreza-studio]"); await page.locator(".gx-ed-toolbar").waitFor();
+  await draw(page); await page.click("[data-impreza-studio]"); await enterCompleteStudio(page); await page.locator(".gx-ed-toolbar").waitFor();
   assert.equal(await page.evaluate(() => window.__GRAPHYSX__.state().world.id), "kept-custom-world", "Studio preserves a world replaced through the canonical API");
   receipts.push({ device: "desktop", parts, straightError, turnedError, forwardMetres: start.player[2] - forward.player[2], sourceRings: later.sourceRings, studioSaveExportReload: true, errors });
   await context.close(); console.log("PASS Impreza desktop: native parts, two worlds, physical controls, wheel alignment, source drop, Studio/save/export/reload and changed-world preservation.");
@@ -193,7 +194,7 @@ try {
     await page.locator("[data-impreza-inspect]").tap();
     await page.locator('[data-impreza-world="racinx"]').scrollIntoViewIfNeeded(); await page.locator('[data-impreza-world="racinx"]').tap(); await ready(page);
     assert.equal((await read(page)).sourceRings, 100);
-    await page.locator("[data-impreza-studio]").tap(); await page.locator(".gx-ed-toolbar").waitFor();
+    await page.locator("[data-impreza-studio]").tap(); await enterCompleteStudio(page); await page.locator(".gx-ed-toolbar").waitFor();
     assert.equal(await page.evaluate(() => window.__GRAPHYSX_HOST__.orbitEnabled), true);
     receipts.push({ device: "touch", width, height, controls, simultaneousTouch: true, errors });
     await context.close(); console.log(`PASS Impreza ${width}px: 44px controls, simultaneous touch, release, world switch and Studio.`);

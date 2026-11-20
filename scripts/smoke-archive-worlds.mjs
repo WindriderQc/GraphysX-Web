@@ -1,3 +1,4 @@
+import { enterCompleteStudio } from "./studio-smoke-helpers.mjs";
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -26,6 +27,7 @@ const open = async (id, worldId) => {
   }
   await page.waitForFunction(id => window.__GRAPHYSX__?.state().world.id === id, worldId);
   if (id === "archive-flightx") await page.click("[data-flightx-studio]");
+  if (id !== "archive-maison") await enterCompleteStudio(page);
   await page.waitForSelector(".gx-archive-workbench");
 };
 const meshes = async id => page.evaluate(id => {

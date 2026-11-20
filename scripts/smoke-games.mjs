@@ -1,3 +1,4 @@
+import { enterCompleteStudio } from "./studio-smoke-helpers.mjs";
 import { SMOKE_TIMEOUT, applySmokeTimeout, launchSmokeBrowser } from "./smoke-harness.mjs";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
@@ -235,6 +236,7 @@ try {
   }));
   await page.click('.gx-browse [data-collection="lab"]');
   await page.click('.gx-browse-row[data-starter-id="physics-sketchbook"]');
+  await enterCompleteStudio(page);
   await page.waitForTimeout(700);
   out.opened = await page.evaluate(() => {
     const host = window.__GRAPHYSX_HOST__;

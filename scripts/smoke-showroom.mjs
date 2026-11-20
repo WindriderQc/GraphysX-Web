@@ -1,3 +1,4 @@
+import { enterCompleteStudio } from "./studio-smoke-helpers.mjs";
 import assert from "node:assert/strict";
 import { SMOKE_TIMEOUT, applySmokeTimeout, launchSmokeBrowser } from "./smoke-harness.mjs";
 import { mkdirSync } from "node:fs";
@@ -709,6 +710,7 @@ try {
   }));
 
   await page.click(".gx-go-editor");
+  await enterCompleteStudio(page);
   // The editor module is loaded on demand, so wait for it to mount rather than guessing.
   await page.waitForSelector(".gx-ed-toolbar", { timeout: SMOKE_TIMEOUT });
   await page.waitForTimeout(200);
@@ -759,6 +761,7 @@ try {
   await page.click(".gx-go-browse");
   await page.waitForSelector(".gx-browse", { timeout: SMOKE_TIMEOUT });
   await page.click('[data-starter-id="signal-outpost"]');
+  await enterCompleteStudio(page);
   await page.waitForFunction(() => {
     const toolbar = document.querySelector(".gx-ed-toolbar");
     return window.__GRAPHYSX_HOST__.mode === "editor" && !!toolbar && getComputedStyle(toolbar).display !== "none";
@@ -784,6 +787,7 @@ try {
   // preserve that in-memory work while the authoritative readiness check prevents Nestor's
   // controls from being mounted over a world where their scene targets do not exist.
   await page.click(".gx-go-editor");
+  await enterCompleteStudio(page);
   await page.waitForFunction(() => window.__GRAPHYSX_HOST__.mode === "editor", null, { timeout: SMOKE_TIMEOUT });
   out.editorWorldSwap = await page.evaluate(() => {
     const loaded = window.__GRAPHYSX__.loadStarter("signal-outpost");

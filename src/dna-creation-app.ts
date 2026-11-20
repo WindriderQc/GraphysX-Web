@@ -124,7 +124,7 @@ export function mountDnaCreation(root: HTMLElement, host: PlatformHost, onExit: 
     let savedCurrent = false;
     try { savedCurrent = !!slot && localStorage.getItem(LOCAL_SCENE_PREFIX + slot.name) === slot.raw; } catch { /* Storage may be blocked after a successful save. */ }
     studio.hidden = !slot || dirty || !savedCurrent || nameInput.value.trim() !== slot.name;
-    if (slot) studio.href = import.meta.env.BASE_URL + "?host=editor&paused=1&localScene=" + encodeURIComponent(slot.name);
+    if (slot) studio.href = import.meta.env.BASE_URL + "?host=editor&studio=simple&paused=1&localScene=" + encodeURIComponent(slot.name);
     find<HTMLButtonElement>("[data-dna-save]").textContent = slot?.name === nameInput.value.trim() ? "Mettre à jour" : "Enregistrer";
     dropButton.disabled = !canTune || phase === "running";
     dropButton.textContent = phase === "complete" || phase === "incomplete" ? "Rejouer la chute ↓" : "Libérer les graines ↓";

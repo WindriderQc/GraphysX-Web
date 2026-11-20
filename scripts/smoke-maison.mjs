@@ -1,3 +1,4 @@
+import { enterCompleteStudio } from "./studio-smoke-helpers.mjs";
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -132,7 +133,7 @@ try {
   await source.waitForFunction(() => window.__GRAPHYSX__?.state().world.id === "archive-maison-explorer");
   assert.equal(await source.locator(".gx-archive-workbench").isVisible(), true); await source.close();
   assert.deepEqual(canonical(await page.evaluate(() => window.__GRAPHYSX__.exportDocument())), canonical(authored));
-  await page.click("[data-maison-studio]"); await page.locator(".gx-ed-toolbar").waitFor();
+  await page.click("[data-maison-studio]"); await enterCompleteStudio(page); await page.locator(".gx-ed-toolbar").waitFor();
   assert.equal(await page.locator(".gx-maison").count(), 0);
   assert.deepEqual(canonical(await page.evaluate(() => window.__GRAPHYSX__.exportDocument())), canonical(authored));
   page.once("dialog", dialog => dialog.accept("Maison visit variant"));
@@ -169,7 +170,7 @@ try {
     });
     assert.equal(replacement.ok, true, replacement.error);
     await phase(page, "foreign"); assert.equal(await page.locator("[data-maison-view=house]").isDisabled(), true);
-    await page.click("[data-maison-studio]"); await page.locator(".gx-ed-toolbar").waitFor();
+    await page.click("[data-maison-studio]"); await enterCompleteStudio(page); await page.locator(".gx-ed-toolbar").waitFor();
     assert.equal(await page.evaluate(() => window.__GRAPHYSX__.state().world.id), "my-foreign-world");
     assert.deepEqual(errors, []); receipts.push({ device: "foreign-world", preserved: true, errors }); await page.close();
   }

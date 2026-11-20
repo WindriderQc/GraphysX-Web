@@ -113,3 +113,18 @@ export async function launchSmokeBrowser(options = {}) {
   };
   return browser;
 }
+
+/** A smoke-owned disk profile, for real close/relaunch persistence journeys. */
+export async function launchPersistentSmokeContext(userDataDir, options = {}) {
+  hookOnce();
+  const context = await chromium.launchPersistentContext(userDataDir, {
+    executablePath: process.env.SMOKE_CHROMIUM || undefined,
+    headless: true,
+    args: ["--no-sandbox"],
+    ...options,
+  });
+  open.add(context);
+  const close = context.close.bind(context);
+  context.close = async () => { open.delete(context); await close(); };
+  return context;
+}
