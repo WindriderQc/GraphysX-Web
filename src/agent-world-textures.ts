@@ -17,6 +17,15 @@ export type AgentWorldTextureDescriptor = {
  */
 export const GRAPHYSX_AGENT_WORLD_TEXTURES = [
   {
+    id: "cubx-atmel-grass",
+    label: "CubX · herbe d’origine",
+    url: "/assets/ports/cubx-atmel/textures/grass.bmp",
+    category: "nature",
+    description: "Original Atmel welcome terrain texture; source repeat is ten by ten.",
+    defaultRepeat: [10, 10],
+    source: "Yanik C++ BCKUP/Media/Models/grass.bmp"
+  },
+  {
     id: "kidx-first-drive-mat",
     label: "KidX First Drive Mat",
     url: "/assets/kidx/first-drive-mat.svg",

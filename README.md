@@ -79,7 +79,8 @@ documents the November navigation polish and Maison visit, and orders the remain
 It is **not a deletion clearance** for the historical repository.
 
 Archives now opens the complete Maison/Cuisine visit, Unity Arena, Common Room,
-CubX notes, CubZ TVA animation studies, controllable FlightX and the native physics intro.
+CubX notes, the CubZ mechanical menu, its distinct [Atmel welcome](docs/CUBX_ATMEL.md),
+controllable FlightX and the native physics intro. Earlier TVA studies remain in Lab.
 Maison (`?app=maison`) offers day/night lighting, three views per native composition and an
 interruptible camera tour. Open its full document in the Studio to save/export a variant;
 the original source explorer remains at `?app=maison&view=source`.

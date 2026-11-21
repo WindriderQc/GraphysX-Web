@@ -65,3 +65,5 @@
   .gx-cubz-kicker { font-size: 8px; }
 }
 @media (prefers-reduced-motion: reduce) { .gx-cubz button { transition: none; } }
+.gx-cubz-atmel-link { display: block; margin: 0 0 18px; color: #b1edcf; font-size: 13px; line-height: 1.5; text-underline-offset: 3px; }
+.gx-cubz-atmel-link:focus-visible { outline: 2px solid #b1edcf; outline-offset: 4px; }

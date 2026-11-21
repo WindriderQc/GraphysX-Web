@@ -33,7 +33,7 @@ export async function loadCubzSource(): Promise<CubzSource> {
   return data;
 }
 
-function transform(matrix: number[]): Partial<AgentWorldTransform> {
+export function sourceActorTransform(matrix: number[]): Partial<AgentWorldTransform> {
   const position = new Vector3(), quaternion = new Quaternion(), scale = new Vector3();
   reflection.clone().multiply(new Matrix4().fromArray(matrix)).multiply(reflection).decompose(position, quaternion, scale);
   const rotation = new Euler().setFromQuaternion(quaternion);
@@ -41,7 +41,7 @@ function transform(matrix: number[]): Partial<AgentWorldTransform> {
 }
 
 /** MAMD vertices are local. Reflect both geometry and MHI2 transforms once at this boundary. */
-function sourceMesh(mesh: CubzActor["meshes"][number]): NonNullable<AgentWorldEntityDefinition["mesh"]> {
+export function sourceActorMesh(mesh: Pick<CubzActor["meshes"][number], "positions" | "normals" | "uvs" | "indices">): NonNullable<AgentWorldEntityDefinition["mesh"]> {
   const positions = mesh.positions.map((value, index) => index % 3 === 2 ? -value : value);
   const normals = mesh.normals.map((value, index) => index % 3 === 2 ? -value : value);
   const indices = [...mesh.indices];
@@ -86,11 +86,11 @@ export function buildCubzMenu(data: CubzSource): AgentWorldDefinition {
         transform: { position: centre.map(value => -value) as Tuple3 } });
     }
     for (const node of actor.nodes) entities.push({ id: nodeId(id, node.id), type: "group", label: `${node.name} · ${id}`,
-      parentId: node.parent < 0 ? id === "screensaver" ? "cubz-screensaver-offset" : cubzRigId(id) : nodeId(id, node.parent), transform: transform(node.localMatrix), tags: ["cubz-source-node", `source-node-${node.id}`] });
+      parentId: node.parent < 0 ? id === "screensaver" ? "cubz-screensaver-offset" : cubzRigId(id) : nodeId(id, node.parent), transform: sourceActorTransform(node.localMatrix), tags: ["cubz-source-node", `source-node-${node.id}`] });
     for (const mesh of actor.meshes) {
       const choice = boxOwner(actor, mesh.nodeId);
       entities.push({ id: `cubz-${id}-m${mesh.nodeId}`, type: "mesh", parentId: nodeId(id, mesh.nodeId), label: `${actor.nodes[mesh.nodeId].name} · source mesh`,
-        mesh: sourceMesh(mesh), material: { color: "#a8c1c6", metalness: 0.48, roughness: 0.29 }, castShadow: true, receiveShadow: true,
+        mesh: sourceActorMesh(mesh), material: { color: "#a8c1c6", metalness: 0.48, roughness: 0.29 }, castShadow: true, receiveShadow: true,
         tags: ["cubz-source-mesh", ...(id === "rotation" && choice !== null ? [`cubz-choice-${choice}`] : []), `cubz-color-${choice ?? 0}`] });
     }
   }

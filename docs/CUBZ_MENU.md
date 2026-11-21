@@ -76,10 +76,11 @@ and destinations are not established. The four plates and actions (select actor,
 reframe, Studio) are explicit modern replacements. The original oversized outer hit
 boxes are source evidence; Web picking uses the actual visible mesh surfaces.
 
-The distinct **CubXActor** Get2..8 / Rot1..7 / Open family stays separate. Its exports
-and the eight outer CubXActor button meshes inside `CubXScene.rar` are not evidence that
-the missing 32 CubZ internal buttons have been recovered. Its later host has its own
-uninitialized eighth slot and cannot safely be merged into this choreography by name.
+The distinct **CubXActor** family now has its own [Atmel welcome](CUBX_ATMEL.md), reachable
+from this menu or `?app=cubx&view=atmel`. Its seven Get actors, full opening, original
+outer click meshes and scene constellation are recovered independently. Geometry resolves
+the later host's shifted Get index and uninitialized eighth slot. Its eight outer hit
+volumes are a different family from the 32 CubZ internal buttons still not found.
 
 ## One authored timeline, then an editable copy
 

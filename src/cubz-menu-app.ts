@@ -25,6 +25,10 @@ export async function mountCubzMenu(root: HTMLElement, host: PlatformHost, onExi
   let lastPhase = "";
   let disposed = false;
   const compact = matchMedia("(max-width: 740px)"), reduced = matchMedia("(prefers-reduced-motion: reduce)");
+  const atmelLocation = new URL(import.meta.env.BASE_URL, location.href);
+  atmelLocation.searchParams.set("app", "cubx"); atmelLocation.searchParams.set("view", "atmel");
+  const explicitStore = new URLSearchParams(location.search).get("store");
+  if (explicitStore) atmelLocation.searchParams.set("store", explicitStore);
   surface.innerHTML = `
     <header class="gx-cubz-header"><button type="button" data-cubz-exit>← Accueil</button><span>GraphysX <i>/</i> Archives <i>/</i> CubZ</span><button type="button" data-cubz-frame>Recentrer</button></header>
     <div class="gx-cubz-caption" aria-hidden="true"><span>GÉOMÉTRIE RETROUVÉE</span><b>44 pièces. Un seul mouvement.</b></div>
@@ -32,6 +36,7 @@ export async function mountCubzMenu(root: HTMLElement, host: PlatformHost, onExi
       <div class="gx-cubz-kicker">CUBX / CUBZ <span>LE MENU MÉCANIQUE</span></div>
       <h1 id="gx-cubz-title">Un menu<br>qui s’ouvre.</h1>
       <p class="gx-cubz-intro">Choisis un des huit blocs. Il pivote, s’ouvre et révèle son menu.</p>
+      <a class="gx-cubz-atmel-link" href="${atmelLocation.pathname + atmelLocation.search}">Explorer aussi l’accueil Atmel : Terre, panneau et afficheurs →</a>
       <fieldset class="gx-cubz-choices"><legend>Quel bloc veux-tu ouvrir ?</legend><div>${Array.from({ length: 8 }, (_, index) => `<button type="button" data-cubz-choice="${index}" aria-label="Ouvrir le bloc ${index + 1}" aria-pressed="false"><small>BLOC</small><b>0${index + 1}</b></button>`).join("")}</div></fieldset>
       <div class="gx-cubz-status"><span data-cubz-status role="status">Choisis un bloc dans la vue ou ci-dessus.</span><div class="gx-cubz-progress" aria-hidden="true"><i></i></div></div>
       <section class="gx-cubz-inside" data-cubz-inside hidden aria-labelledby="gx-cubz-menu-title"><h2 id="gx-cubz-menu-title">Le menu est ouvert.</h2><p>Quatre actions actuelles pour explorer cette reprise.</p><div>
@@ -131,6 +136,10 @@ export async function mountCubzMenu(root: HTMLElement, host: PlatformHost, onExi
   surface.querySelectorAll<HTMLButtonElement>("[data-cubz-action]").forEach(button => button.addEventListener("click", () => action(button.dataset.cubzAction as CubzAction)));
   find("[data-cubz-exit]").addEventListener("click", onExit);
   find("[data-cubz-studio]").addEventListener("click", studio);
+  find<HTMLAnchorElement>(".gx-cubz-atmel-link").addEventListener("click", event => {
+    observeDocument();
+    if (state().phase === "unavailable" && !event.ctrlKey && !event.metaKey) { event.preventDefault(); notice = "Conserve cette scène dans le Studio avant de changer d’expérience."; refresh(); }
+  });
   find("[data-cubz-close]").addEventListener("click", () => { const current = state(); if (current.phase === "opened") play("return", current.choice!); });
   find("[data-cubz-saver]").addEventListener("click", () => { if (state().phase === "idle") play("saver", 0); });
   find("[data-cubz-reset]").addEventListener("click", () => { api.pause(true); observeDocument(); apply(cubzResetCommands(documentSnapshot)); api.select([]); frame(); });

@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
-import { decodeImprezaTvm, decodeImprezaBmp, decodeImprezaDxt1, webTvmMesh, sourceSha256 } from "../scripts/impreza-source.mjs";
+import { decodeTvmGeometry, decodeImprezaTvm, decodeImprezaBmp, decodeImprezaDxt1, webTvmMesh, sourceSha256 } from "../scripts/impreza-source.mjs";
 import { buildAssetCatalog } from "../scripts/build-asset-catalog.mjs";
 import { productAssetManifest } from "../scripts/product-assets.mjs";
 
-function meshFixture() {
+function meshFixture(materialTag = "MGR3", materialSize = 136) {
   const chunk = (tag, body) => { const header = Buffer.alloc(8); header.write(tag); header.writeUInt32LE(body.length, 4); return Buffer.concat([header, body]); };
   const header = Buffer.alloc(16); header.write("!Dd"); header.writeUInt32LE(16, 12);
   const stats = Buffer.alloc(28); [1, 1, 3, 0, 0, 0, 32].forEach((value, index) => stats.writeUInt32LE(value, index * 4));
@@ -16,8 +16,16 @@ function meshFixture() {
   });
   const indices = Buffer.alloc(6); indices.writeUInt16LE(1, 2); indices.writeUInt16LE(2, 4);
   const groups = Buffer.alloc(16); groups.writeUInt32LE(3); groups.writeUInt32LE(1, 8);
-  return Buffer.concat([header, chunk("MSTA", stats), chunk("MVER", vertices), chunk("MI16", indices), chunk("MATT", Buffer.alloc(4)), chunk("MGRO", groups), chunk("MGR3", Buffer.alloc(136)), chunk("MEND", Buffer.alloc(0)), Buffer.from("preserved-trailer")]);
+  return Buffer.concat([header, chunk("MSTA", stats), chunk("MVER", vertices), chunk("MI16", indices), chunk("MATT", Buffer.alloc(4)), chunk("MGRO", groups), chunk(materialTag, Buffer.alloc(materialSize)), chunk("MEND", Buffer.alloc(0)), Buffer.from("preserved-trailer")]);
 }
+
+test("earlier MGRP geometry uses counted 416-byte materials without widening the vehicle format contract", () => {
+  const bytes = meshFixture("MGRP", 416), decoded = decodeTvmGeometry(bytes, "earlier-menu.tvm");
+  assert.equal(decoded.materialRecordVersion, "MGRP"); assert.equal(decoded.materialRecordSha256, sourceSha256(Buffer.alloc(416)));
+  assert.deepEqual(decoded.positions, decodeImprezaTvm(meshFixture(), "vehicle.tvm").positions);
+  assert.throws(() => decodeImprezaTvm(bytes, "not-a-vehicle.tvm"), /vehicle material/);
+  for (const size of [0, 136, 415, 417, 832]) assert.throws(() => decodeTvmGeometry(meshFixture("MGRP", size), "bad-count.tvm"));
+});
 
 test("counted TVM decode keeps exact native vertices, normals, UVs, material faces, pivot coordinates and trailer identity", () => {
   const bytes = meshFixture(), model = decodeImprezaTvm(bytes, "fixture.tvm");

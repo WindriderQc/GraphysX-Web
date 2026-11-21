@@ -1,0 +1,277 @@
+{
+  "schema": "graphysx.cubx-atmel-pins/v1",
+  "archiveRevision": "f4cf357bc98cfad689d7a40a07fdd2dd0dc15d25",
+  "note": "Read-only source pins for the native CubXActor family and its Atmel welcome composition. Source paths are archive-relative; aliases in the C++ remain explicit.",
+  "records": [
+    {
+      "source": "AtmelCubx/AtmelCubx/ClockDisplay.cpp",
+      "bytes": 9509,
+      "sha256": "faf9c257ca55928b34b25e173b4c5ed0e7573c07d631aac3312301b6aebcb661"
+    },
+    {
+      "source": "AtmelCubx/AtmelCubx/CubX.cpp",
+      "bytes": 6956,
+      "sha256": "bcb046e468fb91a00b8cf3b402fd485d9c8283b2028718dc32c90c16bc81d045"
+    },
+    {
+      "source": "AtmelCubx/AtmelCubx/CubX.h",
+      "bytes": 1246,
+      "sha256": "7308fe8f316898f2b1e927c113b6f9150023545650b6da437b5d6c79077a8931"
+    },
+    {
+      "source": "AtmelCubx/AtmelCubx/CubXScene.cpp",
+      "bytes": 20010,
+      "sha256": "25626834a79e4d8a86f78598ec10f0f6a6c7e81aa94f445d9eae1ded45047ff0"
+    },
+    {
+      "source": "AtmelCubx/AtmelCubx/Land.cpp",
+      "bytes": 1360,
+      "sha256": "4f9a1c724e89e76f4e1ec246bf1f01d143a5e566f8ca6eb083ea6f4bb79713d6"
+    },
+    {
+      "source": "AtmelCubx/AtmelCubx/MenuManager.cpp",
+      "bytes": 1904,
+      "sha256": "cdd3817a9a7ede9ebf40a2bacf8e4c4e4f20c78a22439d8eefa70e2b026d0d5c"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/Alphabet/0.tvm",
+      "bytes": 24444,
+      "sha256": "479e730c460afa3153c37f44e244d85b35b4ec1634b3e6db125fd42ba2248c5d"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/Alphabet/1.tvm",
+      "bytes": 6364,
+      "sha256": "17088fcfb0370fe2f2fa510941b5fb330924e178f6ac5404f5490a2ad739bf71"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/Alphabet/2.tvm",
+      "bytes": 22788,
+      "sha256": "ce50ab70d0bde25a6a71bc1b158472d55b0af59c5b2fbb23dcc7c5ad7fb59e06"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/Alphabet/3.tvm",
+      "bytes": 33268,
+      "sha256": "91ce05ccb78b67c5cf7968577d84a79442ba1a69ebaf2e78a9a4380196ef3e36"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/Alphabet/4.tvm",
+      "bytes": 3660,
+      "sha256": "3007013fdf9988f8a592f253a5f72bb07e27619bbb360145f09bcd5e5df226ea"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/Alphabet/5.tvm",
+      "bytes": 19956,
+      "sha256": "570e33ced012b330802b1d62b7763402b2f566575dac13cfe5a155572e5de463"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/Alphabet/6.tvm",
+      "bytes": 32972,
+      "sha256": "3d6ea39df21d48ee9f0125d94d700ac50fcc60853e08a8b11e86a344b1c09f7f"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/Alphabet/7.tvm",
+      "bytes": 8908,
+      "sha256": "eb32fa3fff4e5bd57e30d3fd04842bb867b25afcdd91b9ad7a860876c3be5890"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/Alphabet/8.tvm",
+      "bytes": 40092,
+      "sha256": "cc202d2d49d4d34f8b04119b07999d595cc2c3cc252234313c867d5b1bf9dae7"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/Alphabet/9.tvm",
+      "bytes": 34316,
+      "sha256": "b5fb1792e74d41c8b77b425d056bb78b55c0a03cf20f9818e3a27fda7555a87c"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/CubXActor/CubXBtn1.tvm",
+      "bytes": 1300,
+      "sha256": "c81b200cf7fd6cb4c92a8e9b50b98c84bc8e391ac0ce1ee0e00899a371574239"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/CubXActor/CubXBtn2.tvm",
+      "bytes": 1300,
+      "sha256": "ef0ab9b3057af15b015150a824d0db65c3a92e28b7e2a2319021fecb6f3dede7"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/CubXActor/CubXBtn3.tvm",
+      "bytes": 1300,
+      "sha256": "4256402f0fecbc85bf6ffee65a7ea73c88f9e5c4ab6e75e48798293d908cefab"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/CubXActor/CubXBtn4.tvm",
+      "bytes": 1300,
+      "sha256": "3152a8586775bc9d0aee4d367fc29716785ac09abaabfb2b3b0eecc47570f713"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/CubXActor/CubXBtn5.tvm",
+      "bytes": 1300,
+      "sha256": "502138b62a2480fbaf14a4b1980f4a719364a5e51011313d4a589f8a8b86620a"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/CubXActor/CubXBtn6.tvm",
+      "bytes": 1300,
+      "sha256": "5a4f82d6903458baf7c2bc7e74b18e01706b3d52d1911c975eb4dbd7b4d3916e"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/CubXActor/CubXBtn7.tvm",
+      "bytes": 1300,
+      "sha256": "9b4c57c9607411918323267aab5a445d9f66adf26e9971be8504e2e02f78ff6b"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/CubXActor/CubXBtn8.tvm",
+      "bytes": 1300,
+      "sha256": "b68d64ee8b070f96f4c4f0151fb1b5da2f1c98a9ad3fd743b304431d42456e49"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/CubXActor/CubXGet2.tva",
+      "bytes": 191814,
+      "sha256": "ffc2af719ddf3818056b5443f9f0590ab9bfbaebe25f91361212e2e8df51d05e"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/CubXActor/CubXGet3.tva",
+      "bytes": 213178,
+      "sha256": "fe2e1bbf3d8b2e49d54c44b614fa5606ab469b7ab31c19877bc44d148e069c2e"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/CubXActor/CubXGet4.tva",
+      "bytes": 192740,
+      "sha256": "11983c3214e86ed33ec7372ff94fbf8bbdf029b3dcd87e492d328829a21d4d8a"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/CubXActor/CubXGet5.tva",
+      "bytes": 217165,
+      "sha256": "f79f63368f47cbe18ef8732d8a8fa29c5f9544d97132651347c1d901cd733b4b"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/CubXActor/CubXGet6.tva",
+      "bytes": 210942,
+      "sha256": "e5deb98eebc6d740d0ab8125586d50192b4f650a7188bd9aed86a6d1d9747e0f"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/CubXActor/CubXGet7.tva",
+      "bytes": 216932,
+      "sha256": "595cec05fe1e561396354bb1d9ac887a0146c94dfa7c0a11e60e6407903391a9"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/CubXActor/CubXGet8.tva",
+      "bytes": 209818,
+      "sha256": "ed98feb2743c8f564d07985fa7202e7189ce3fa049d7a879c4d3e67d8c684887"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/CubXActor/CubXMesh.tvm",
+      "bytes": 105122,
+      "sha256": "92df6d68393067f88f7ab8446a8ad37a9828c38471c600bdbb816321ddc0e36b"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/CubXActor/CubXOpen.tva",
+      "bytes": 165449,
+      "sha256": "3d86d878b0132ea92a4d8de3d5c88b22ae9f459be93fb9491abc31d428657060"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/CubXActor/CubXRot1.tva",
+      "bytes": 167196,
+      "sha256": "bdf3036c37308fdfa38ae215162e92b74e8aa1fc5e9259b8d454bff14eae7dc9"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/CubXActor/CubXRot2.tva",
+      "bytes": 178343,
+      "sha256": "614e2731d6bf38700dc5a65b1153fde6d0e68e44b08853670291aac94328aa45"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/CubXActor/CubXRot3.tva",
+      "bytes": 168931,
+      "sha256": "58592dc0531e8dfc9a59adf4d08c1e5dd0a73e75c82f11d4355dd0dd300ebbba"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/CubXActor/CubXRot4.tva",
+      "bytes": 179851,
+      "sha256": "7c979641646cf0f0690491655de307469cfbf19d91aacff844d7d3a4e6a2a522"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/CubXActor/CubXRot5.tva",
+      "bytes": 177076,
+      "sha256": "5df1a76c1705c6a49b2bb4cf2450f7ab04c547af9bb8118118a1fd04403725a6"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/CubXActor/CubXRot6.tva",
+      "bytes": 180163,
+      "sha256": "abce2475353bc823e97ff2ec9082557d20475e568e290d668b9ffdf849eccc0d"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/CubXActor/CubXRot7.tva",
+      "bytes": 175457,
+      "sha256": "52eb4af86db31022169b356c009d5b73bcd371d493772be059abb080b8257c0e"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/CubXActor/CubeOpensolo.tva",
+      "bytes": 19680,
+      "sha256": "a00a952bd41223035c4dd57b017ca8626526c09700d3ca9966a5effc4b7af99a"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/Models/Box.tvm",
+      "bytes": 1315,
+      "sha256": "2d4f55f2f8740d249567665fdfdafd1b5cda6d66a2eff39870b07e564a665f85"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/Models/Earth.TVM",
+      "bytes": 27918,
+      "sha256": "dddc28d855afc428c7e004f79678077dd14f207ebffbcbcbd09e9a9b63b5e59e"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/Models/Earth.jpg",
+      "bytes": 271198,
+      "sha256": "4ca01ee300a29bd67b01d874404d868c802ec9d4b57f61eec38ff941d4a12855"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/Models/EarthGridXL.bmp",
+      "bytes": 615718,
+      "sha256": "35e8162e7d089a327b654731256ce52c4f35e94479de6ab62dd74c656d4dfdeb"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/Models/MenuDomo.TVM",
+      "bytes": 747316,
+      "sha256": "b983d48c96445548107fd057fc9be0f7ab9b30727bba39dbdeca5fdff0fe7535"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/Models/Sphere.tvm",
+      "bytes": 43596,
+      "sha256": "b9915954cd84782ffb3ea8b757a221d59dbd2bbf5bfc529c464bd7532e88cc19"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/Models/SystemIcon.jpg",
+      "bytes": 6853,
+      "sha256": "fafb7d8e7b1cdafc7c3f6e2e118edaa89cc122b96e86d53b7fc06dcc56fe840a"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/Models/ToolsIcon.png",
+      "bytes": 13496,
+      "sha256": "34697c341dff5219457e9f07ef35237b307e4e0d50e46bc1ce33989432e5cc01"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/Models/fleche.TVM",
+      "bytes": 1228,
+      "sha256": "4cfb3954c5f088199b2f052907c128425f5419c0de02e8fa4a8ea32f59d1279a"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/Models/gold_01.jpg",
+      "bytes": 7199,
+      "sha256": "f61deed0788efdb45196b3ea1e462ce2b4069e8a40dc20e3921be0ec8c806979"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/Models/grass.bmp",
+      "bytes": 3145782,
+      "sha256": "1ae09f42e4136f7f642170855bce3b4afc7bcef6e4ff088a5c58a75adbb57da8"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/Models/marble10.jpg",
+      "bytes": 38814,
+      "sha256": "8ed791e950488ae7e4c1af7446e8f494a4bfcc5b6df3b0719cf6357c833e3d30"
+    },
+    {
+      "source": "Yanik C++ BCKUP/Media/textures n else/Heightmaps/heightmapSplit.jpg",
+      "bytes": 2249,
+      "sha256": "ca090ce5133c73f46fbf4f0041ab587d69daf3922ee58431952ae6db59871522"
+    }
+  ]
+}

@@ -16,6 +16,7 @@ export const VERIFY_STATIC_CHECKS = {
 // reports it as not run unless `--gpu-receptions` is given on a machine with a GPU.
 // See "GPU receptions" in docs/CI_PERFORMANCE.md.
 export const VERIFY_SMOKES = [
+  { name: "cubx-atmel", tier: "apps", script: "scripts/smoke-cubx-atmel.mjs", covers: "Native Atmel welcome: pinned constellation, eight source click meshes and complete cycles, rigid waiting, local glyph edits/undo, protected mobile framing, Studio save/reload and foreign-world loading fence" },
   { name: "studio-return", tier: "core", script: "scripts/smoke-studio-return.mjs", covers: "Actual Home/Simple/Complete/catalogue return and real advancing clock, intentional pause and foreign document retained; behaviour with light renderer" },
   { name: "studio-simple", tier: "core", script: "scripts/smoke-studio-simple.mjs", covers: "Human Simple Studio, 1440/390/320/844 layouts, real edits and blur clicks, unobscured framing, undo/redo, simulation, named save/open/reload, Complete mode, JSON import/export and native Maison material preservation" },
   { name: "my-creations", tier: "core", script: "scripts/smoke-my-creations.mjs", covers: "Existing scene/DNA/guided saves and both draft generations, search/focus, collision-safe copies, unreadable export, stale-tab and quota guards, cold draft restore, real disk-profile browser restart, original-byte custody and blocked storage" },

@@ -20,6 +20,7 @@
     "smoke:maison": "node scripts/smoke-maison.mjs",
     "smoke:ux-navigation": "node scripts/smoke-ux-navigation.mjs",
     "smoke:cubz-menu": "node scripts/smoke-cubz-menu.mjs",
+    "smoke:cubx-atmel": "node scripts/smoke-cubx-atmel.mjs",
     "smoke:impreza": "node scripts/smoke-impreza.mjs",
     "smoke:flightx": "node scripts/smoke-flightx.mjs",
     "smoke:flightx-modes": "node scripts/smoke-flightx-modes.mjs",
