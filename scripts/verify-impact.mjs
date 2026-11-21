@@ -50,6 +50,10 @@ const RULES = [
   { match: /^src\/kidx-code(?:-lab)?\.ts$/, checks: family("kidx-interactive", "kidx-challenges", "kidx-guidance"), label: "KidX code laboratory", deploy: true },
   { match: /^(?:src\/(?:kidx-|ev3-)|public\/assets\/kidx\/|scripts\/kidx-)/, checks: KIDX, label: "KidX workshop", deploy: true },
   { match: /^src\/island[-.]/, checks: family("island"), label: "Clawblox island viewer", deploy: true },
+  // CubZ owns only its authored document and application surface. Its ordinary v2
+  // runtime, host and motion sampler retain the full-suite fallback below.
+  { match: /^src\/cubz-menu(?:-(?:app|scene|buttons))?\.(?:ts|css)$/, checks: ["cubz-menu", "cubz-buttons", "cubx-atmel", "studio-simple", "my-creations", "roundtrip"], label: "CubZ authored mechanical menu and Studio handoff", deploy: true },
+  { match: /^scripts\/audit-cubz-buttons\.mjs$/, checks: [], label: "read-only CubZ archive audit", deploy: false },
   { match: /^src\/(?:ballz-|archive-ballz-levels\.ts)/, checks: GAMES, label: "BallZ games", deploy: true },
   { match: /^(?:src\/results-client\.ts|server\/results-store\.mjs)$/, checks: ["results", "results-browser"], label: "results", deploy: true },
   { match: /^server\/ballsy-[\w-]+\.(?:mjs|d\.mts)$/, checks: ["ballsy", "ballsy-volcano", "ballsy-giant", "ballsy-setup", "ballsy-entrypoints", "ballsy-camera-finish", "ballsy-contact-visual", "ballsy-shared-vr", "store-auth", "live-sessions-security"], label: "shipped Ballsy relay and command vocabulary", deploy: true },

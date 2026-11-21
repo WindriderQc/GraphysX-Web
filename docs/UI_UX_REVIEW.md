@@ -144,7 +144,10 @@ publique et les contrôles après activation sont enregistrés dans
 
 La reprise CubX/Atmel ajoute une autre composition source au même point d’entrée CubZ,
 recherchable par « Atmel », avec trois vues et une copie modifiable dans le Studio.
-Les 32 boutons internes CubZ restent une famille distincte, encore non retrouvée.
+Les 32 boutons internes CubZ et leur sortie commune sont maintenant reconstruits :
+huit menus actuels, quatre touches numérotées chacun, destinations fonctionnelles,
+sélection de pièces, caméras et export. Leurs anciens modèles et destinations ne sont
+pas établis ; [CUBZ_BUTTONS.md](CUBZ_BUTTONS.md) conserve les preuves et les limites.
 Le rechargement des scènes personnelles cadre désormais la géométrie visible après le
 chargement des modèles, dans l’espace dégagé du Studio. Ce cadrage s’annule si une autre
 scène ou un geste de caméra prend la main. Voir [CUBX_ATMEL.md](CUBX_ATMEL.md).
