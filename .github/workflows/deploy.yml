@@ -60,7 +60,9 @@ jobs:
         run: node scripts/write-release-metadata.mjs
 
       - name: Package release
-        run: tar -czf "graphysx-${GITHUB_SHA}.tgz" -C dist .
+        run: |
+          tar -czf "graphysx-${GITHUB_SHA}.tgz" -C dist .
+          cp scripts/prepare-release-assets.mjs "graphysx-assets-${GITHUB_SHA}.mjs"
 
       # The store server is not part of dist/. Until this step existed, a change under
       # server/ could be merged, deployed and green while production kept executing the old
@@ -88,6 +90,7 @@ jobs:
           upload_bytes="$((
             $(stat -c '%s' "$static_archive") +
             $(stat -c '%s' "$server_archive") +
+            $(stat -c '%s' "graphysx-assets-${GITHUB_SHA}.mjs") +
             $(stat -c '%s' server-checksum.txt)
           ))"
 
@@ -138,7 +141,7 @@ jobs:
 
             # Release archives always end in a full hexadecimal Git SHA. Validate the
             # basename before removal so the cleanup cannot widen beyond our own payloads.
-            for archive in "$incoming"/graphysx-*.tgz; do
+            for archive in "$incoming"/graphysx-*.tgz "$incoming"/graphysx-assets-*.mjs; do
               if ! test -e "$archive" && ! test -L "$archive"; then
                 continue
               fi
@@ -146,9 +149,11 @@ jobs:
               case "$name" in
                 graphysx-server-*.tgz) token="${name#graphysx-server-}" ;;
                 graphysx-*.tgz) token="${name#graphysx-}" ;;
+              graphysx-assets-*.mjs) token="${name#graphysx-assets-}" ;;
                 *) continue ;;
               esac
               token="${token%.tgz}"
+              token="${token%.mjs}"
               test "${#token}" -eq 40 || continue
               case "$token" in *[!0-9a-f]*) continue ;; esac
               rm -f -- "$archive"
@@ -232,11 +237,48 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "graphysx-${{ github.sha }}.tgz,graphysx-server-${{ github.sha }}.tgz,server-checksum.txt"
+          source: "graphysx-${{ github.sha }}.tgz,graphysx-server-${{ github.sha }}.tgz,graphysx-assets-${{ github.sha }}.mjs,server-checksum.txt"
           target: /var/www/html/graphysx/incoming
           overwrite: true
           timeout: 120s
           command_timeout: 30m
+
+      - name: Prepare release assets against the live revision
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          command_timeout: 10m
+          script: |
+            set -eu
+            base=/var/www/html/graphysx
+            sha='${{ github.sha }}'
+            test "${#sha}" -eq 40
+            case "$sha" in *[!0-9a-f]*) exit 1 ;; esac
+            archive="$base/incoming/graphysx-$sha.tgz"
+            tool="$base/incoming/graphysx-assets-$sha.mjs"
+            current_target="$(readlink "$base/current" 2>/dev/null || true)"
+            if test "$current_target" != "releases/$sha"; then
+              candidate="$base/releases/$sha"
+              if ! test -e "$candidate" && ! test -L "$candidate"; then
+                candidate="$base/releases/.staging-$sha"
+                mkdir -- "$candidate"
+                tar -xzf "$archive" -C "$candidate"
+              fi
+              test ! -L "$candidate"
+              test -f "$candidate/index.html"
+              if test -n "$current_target"; then
+                live_sha="${current_target#releases/}"
+                test "$current_target" = "releases/$live_sha"
+                test "${#live_sha}" -eq 40
+                case "$live_sha" in *[!0-9a-f]*) exit 1 ;; esac
+                test ! -L "$base/$current_target"
+                test -f "$base/$current_target/index.html"
+                node "$tool" "$candidate" "$base/$current_target"
+              fi
+            fi
+            rm -f -- "$tool"
 
       # Deliberately BEFORE web activation: if the store cannot be updated, no web release is
       # swapped. The complete server tree is extracted off to the side, then directory-renamed
@@ -525,15 +567,13 @@ jobs:
               exit 0
             fi
 
-            rm -rf -- "$staging"
             if test -e "$release" || test -L "$release"; then
               # A retained content-addressed release (normally the previous target) is safe
               # to reuse. Never delete it before the current swap: doing so would damage the
               # rollback path if a later pre-swap command failed.
               validate_release_target "$new_target"
             else
-              mkdir -p "$staging"
-              tar -xzf "$archive" -C "$staging"
+              test ! -L "$staging"
               test -f "$staging/index.html"
               mv -- "$staging" "$release"
             fi

@@ -22,8 +22,8 @@ server {
         application/wasm
         image/svg+xml;
 
-    # Vite emits content-hashed filenames under /assets/, so those are safe to cache
-    # forever. A release that changes a file changes its name.
+    # This covers Vite chunks and public assets. Release preparation rejects changed bytes
+    # under an existing URL and hardlinks missing assets from the preceding release.
     location /assets/ {
         access_log off;
         add_header Cache-Control "public, max-age=31536000, immutable";
