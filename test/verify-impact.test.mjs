@@ -11,6 +11,17 @@ import { findDeploymentBase } from "../scripts/plan-verification.mjs";
 const names = (plan) => plan.smokes.map((smoke) => smoke.name);
 
 describe("verification by changed area", () => {
+  it("covers CubZ's authored menu, all keys and Studio handoff without narrowing shared runtime changes", () => {
+    for (const file of ["src/cubz-menu-app.ts", "src/cubz-menu-scene.ts", "src/cubz-menu-buttons.ts", "src/cubz-menu.css"]) {
+      const plan = selectVerification([file]);
+      assert.equal(plan.mode, "targeted"); assert.equal(plan.deploy, true);
+      for (const check of ["cubz-menu", "cubz-buttons", "cubx-atmel", "studio-simple", "my-creations", "roundtrip", "standalone", "product-assets", "asset-guard"]) assert.ok(names(plan).includes(check));
+    }
+    for (const shared of ["src/agent-world-runtime.ts", "src/agent-world-motion.ts", "src/platform-host.ts", "src/main.ts", "src/cubz-unclassified.ts"]) {
+      assert.equal(selectVerification(["src/cubz-menu-buttons.ts", shared]).mode, "full");
+    }
+    assert.equal(selectVerification(["scripts/audit-cubz-buttons.mjs"]).mode, "static");
+  });
   it("covers the isolated NACRE mission without narrowing shared XR or audio changes", () => {
     for (const file of ["src/quest3-scene.ts", "src/quest3-showcase.ts", "src/quest3-showcase.css", "src/nacre-mission.ts", "public/assets/quest3/audio/reactor-loop.wav"]) {
       const plan = selectVerification([file]);

@@ -292,8 +292,8 @@ try {
     await choice.tap();
     await page.waitForFunction(() => JSON.parse(window.render_game_to_text()).application?.phase === "opened");
     assert.equal((await read(page)).choice, 6);
-    await page.locator('[data-cubz-action="colors"]').tap();
-    assert.equal((await read(page)).diagnostic, true);
+    await page.locator('[data-cubz-action="cylinders"]').tap();
+    assert.equal((await snapshot(page)).selected.length, 12, "compact internal-menu action selects all twelve source cylinder meshes");
     await capture(page, `cubz-${device}-open`);
     await page.locator("[data-cubz-close]").tap();
     await page.waitForFunction(() => JSON.parse(window.render_game_to_text()).application?.phase === "idle");
@@ -303,7 +303,7 @@ try {
     assert.equal(await page.locator(".gx-cubz").count(), 0);
     assert.deepEqual(errors, [], device + ": no browser, shader, HTTP or transport errors");
     receipts.push({ device, touch: true, width, height, errors });
-    await context.close(); console.log("PASS CubZ: " + device + " touch choice/open/diagnostic/return/Studio, usable 44px controls and reduced motion.");
+    await context.close(); console.log("PASS CubZ: " + device + " touch choice/open/internal selection/return/Studio, usable 44px controls and reduced motion.");
   }
   if (["127.0.0.1", "localhost", "[::1]"].includes(new URL(base).hostname)) {
     const temporaryBase = path.resolve(tmpdir());

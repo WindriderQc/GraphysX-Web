@@ -18,7 +18,7 @@
 .gx-cubz-choices legend { font-size: 12px; margin-bottom: 10px; }
 .gx-cubz-choices > div { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
 .gx-cubz-choices button { display: grid; justify-items: start; gap: 4px; min-height: 61px; background: #102d37; padding: 9px; }
-.gx-cubz-choices button small { font-size: 8px; font-weight: 400; letter-spacing: .12em; color: #a0bebf; }
+.gx-cubz-choices button small { font-size: 9px; line-height: 1.35; font-weight: 400; color: #b8d1d1; overflow-wrap: anywhere; }
 .gx-cubz-choices button b { font-size: 19px; font-weight: 500; }
 .gx-cubz-choices button[aria-pressed="true"] { border-color: var(--cubz-accent); background: #27514f; opacity: 1; }
 .gx-cubz-status { margin: 16px 0; font-size: 11px; color: #c7dfd7; min-height: 35px; line-height: 1.5; }
@@ -30,6 +30,8 @@
 .gx-cubz-inside > div { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
 .gx-cubz-inside button { display: grid; text-align: left; gap: 5px; font-size: 10px; color: #a2d8cf; }
 .gx-cubz-inside b { font-weight: 400; font-size: 11px; color: var(--cubz-ink); }
+.gx-cubz-inside button span { display: flex; justify-content: space-between; align-items: center; font-size: 16px; }
+.gx-cubz-inside button small { font-size: 8px; color: #b8d1d1; }
 .gx-cubz-controls { display: flex; flex-wrap: wrap; gap: 6px; }
 .gx-cubz-controls button { font-size: 10px; flex: 1 0 auto; padding: 8px; }
 .gx-cubz-secondary { display: flex; gap: 8px; margin: 8px 0 12px; }
@@ -58,7 +60,7 @@
   .gx-cubz-intro { font-size: 11px; line-height: 1.5; margin-bottom: 12px; }
   .gx-cubz-choices button { min-width: 0; min-height: 51px; padding: 7px 10px; grid-template-columns: 1fr; gap: 2px; align-items: center; }
   .gx-cubz-choices button b { font-size: 17px; }
-  .gx-cubz-choices button small { font-size: 7px; }
+  .gx-cubz-choices button small { font-size: 9px; }
   .gx-cubz-caption { left: 18px; top: 77px; bottom: auto; gap: 5px; }
   .gx-cubz-caption b { font-size: 12px; }
   .gx-cubz-caption span { font-size: 8px; }
