@@ -170,6 +170,35 @@ try {
   assert.ok(rotationDelta(0)>0&&rotationDelta(1)>rotationDelta(0)*3,'clouds drift independently above the rotating Earth');
   assert.ok(Math.max(...animation.map(s=>s[2].scale[0]))-Math.min(...animation.map(s=>s[2].scale[0]))>.025,'the reactor visibly breathes');
   assert.ok(Math.abs(rotationDelta(3))>.1,'the powered gyroscope moves');
+  const reactorModulation=await page.evaluate(async()=>{
+    const {host}=window.__GRAPHYSX_QUEST3__;
+    const coreId='nacre-reactor-core',lightId='nacre-reactor-light';
+    const rings=Array.from({length:4},(_,index)=>'nacre-reactor-ring-'+index);
+    const ids=[coreId,lightId,...rings];
+    const authored=()=>ids.map(id=>{
+      const entity=host.api.query({ids:[id]})[0];
+      return id===lightId?entity.intensity:entity.material.emissiveIntensity;
+    });
+    const bases=authored(),samples=[];
+    for(let frame=0;frame<6;frame++){
+      await window.advanceTime(125);
+      samples.push(ids.map(id=>{
+        const object=host.world.getEntityObject(id);
+        if(id===lightId)return object.children.find(child=>child.isPointLight).intensity;
+        const material=Array.isArray(object.material)?object.material[0]:object.material;
+        return material.emissiveIntensity;
+      }));
+    }
+    return {bases,samples,after:authored()};
+  });
+  assert.deepEqual(reactorModulation.after,reactorModulation.bases,'modulation preserves the authored reactor values');
+  reactorModulation.bases.forEach((base,index)=>{
+    const samples=reactorModulation.samples.map(frame=>frame[index]);
+    assert.ok(base>0&&Math.min(...samples)<base*.9&&Math.max(...samples)>base*1.1,
+      'the powered core, point light and rings modulate their rendered intensities: '+JSON.stringify({index,base,samples}));
+  });
+  receipt.reactorModulation=reactorModulation;
+  await page.screenshot({path:path.join(out,'nacre-reactor-modulation.png')});
   const audio=await audioState(page);
   assert.equal(audio.context,'running');assert.equal(audio.listener,true);assert.ok(audio.oneShots>=2);
   assert.equal(audio.sources.length,3);assert.ok(audio.sources.every(s=>s.spatial&&s.panning==='HRTF'));

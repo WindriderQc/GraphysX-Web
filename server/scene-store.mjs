@@ -151,7 +151,7 @@ function scenePath(dir, name) {
  * Validate the complete authored write before it can become a stored revision or relay cut.
  * The runtime still owns resource resolution; authored fields share the command validator.
  */
-function assertDefinition(definition) {
+function assertDefinition(definition, previousDefinition) {
   if (!definition || typeof definition !== "object") throw new Error("A scene definition object is required");
   if (definition.schema !== WORLD_SCHEMA) throw new Error(`Scene schema must be ${WORLD_SCHEMA}`);
   if (typeof definition.id !== "string" || !definition.id.trim()) throw new Error("Scene definition requires an id");
@@ -165,7 +165,7 @@ function assertDefinition(definition) {
   if (ephemeral.length > 0) {
     throw new Error(`Scene documents cannot contain session-only entities: ${ephemeral.slice(0, 5).join(", ")}`);
   }
-  validateStoredSceneDefinition(definition);
+  validateStoredSceneDefinition(definition, previousDefinition);
 }
 
 function assertName(name) {
@@ -258,11 +258,12 @@ export function createSceneStore({ dir = DEFAULT_DIR } = {}) {
      */
     async put(name, definition, expectedRevision, { actor = null, intent = null } = {}) {
       assertName(name);
-      assertDefinition(definition);
       if (actor !== null && !NAME_PATTERN.test(actor)) throw new Error(`Invalid actor id: ${actor}`);
       await ready;
       return queueWrite(name, async () => {
         const current = await readRecord(dir, name);
+        // Only the current stored revision can grandfather an old ignored effect.
+        assertDefinition(definition, current?.definition);
         const currentRevision = current?.revision ?? 0;
         if (expectedRevision !== undefined) {
           if (!Number.isInteger(expectedRevision) || expectedRevision < 0) {

@@ -46,6 +46,34 @@ test('runtime and storage reject inverted, non-finite and unbounded modulation',
   }
 });
 
+test('scene commands and new documents reject intensity on a box without changing the scene', () => {
+  const definition = world();
+  const box = { id: 'plain', type: 'box' };
+  const intensity = { ...behavior, property: 'intensity' };
+  const invalid = { ...box, behaviors: [intensity] };
+  const error = /modulate.*intensity.*light entity.*plain.*box/i;
+  assert.throws(() => applyCommands(definition, [{ op: 'spawn', entity: invalid }]), error);
+  assert.throws(() => validateStoredSceneDefinition({ ...definition, entities: [invalid] }), error);
+  definition.entities.push(box);
+  const before = structuredClone(definition);
+  assert.throws(() => applyCommands(definition, [
+    { op: 'update', id: box.id, patch: { label: 'Rejected batch' } },
+    { op: 'attach-behavior', id: box.id, behavior: intensity },
+  ]), error);
+  assert.deepEqual(definition, before);
+});
+
+test('scene commands accept light intensity on the three light types and box emissive intensity', () => {
+  const definition = world();
+  const lights = ['ambient-light', 'directional-light', 'point-light'].map(type => ({
+    id: type, type, intensity: 0, behaviors: [{ ...behavior, property: 'intensity' }],
+  }));
+  const entities = [...lights, { id: 'plain', type: 'box', behaviors: [behavior] }];
+  const next = applyCommands(definition, entities.map(entity => ({ op: 'spawn', entity }))).definition;
+  assert.doesNotThrow(() => validateStoredSceneDefinition(next));
+  assert.deepEqual(next.entities.slice(1), entities);
+});
+
 test('energy uniforms follow simulation time and preserve authored PBR properties',()=>{
   const material=new MeshStandardMaterial({metalness:.4,roughness:.3,emissiveIntensity:2});
   applyEnergyShader(material,shader);updateEnergyShader(material,12.25);

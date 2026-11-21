@@ -189,7 +189,7 @@ import {
   type ArchivePplSettings,
 } from "./archive-ppl-material";
 import { applyEnergyShader, updateEnergyShader, type EnergyShaderSettings } from "./energy-material";
-import { validateEnergyShader, validateModulateBehavior } from "../server/visual-effects.mjs";
+import { findModulateTargetError, modulateTargetError, validateEnergyShader, validateModulateBehavior } from "../server/visual-effects.mjs";
 import {
   allAgentWorldSkies,
   resolveAgentWorldSky,
@@ -1826,11 +1826,21 @@ export class AgentWorldRuntime {
   }
 
   create(definition: AgentWorldDefinition): AgentWorldResult<AgentWorldState> {
+    try {
+      validateWorldDefinition(definition);
+      for (const entity of definition.entities) assertModulateTargets(entity);
+    } catch (error) {
+      this.recordEvent("world.rejected", error instanceof Error ? error.message : String(error));
+      return this.failure(error);
+    }
+    return this.replaceDefinition(definition);
+  }
+
+  private replaceDefinition(definition: AgentWorldDefinition): AgentWorldResult<AgentWorldState> {
     const before = this.exportHistoryDefinition();
     const beforeSelection = [...this.selectedIds];
     const beforeElapsedSeconds = this.elapsedSeconds;
     try {
-      validateWorldDefinition(definition);
       this.loadDefinition(definition);
       this.history.push(before);
       if (this.history.length > 40) this.history.shift();
@@ -2441,7 +2451,8 @@ export class AgentWorldRuntime {
   }
 
   load(nameOrDefinition: string | AgentWorldDefinition): AgentWorldResult<AgentWorldState> {
-    if (typeof nameOrDefinition !== "string") return this.create(nameOrDefinition);
+    // Old snapshots can still be opened and repaired without changing their authored data.
+    if (typeof nameOrDefinition !== "string") return this.replaceDefinition(nameOrDefinition);
     let definition = this.savedWorlds.get(nameOrDefinition) ?? null;
     if (!definition) {
       try {
@@ -2452,7 +2463,7 @@ export class AgentWorldRuntime {
       }
     }
     if (!definition) return this.failure(`Unknown snapshot: ${nameOrDefinition}`);
-    const result = this.create(definition);
+    const result = this.replaceDefinition(definition);
     if (result.ok) this.recordEvent("snapshot.loaded", nameOrDefinition);
     return result;
   }
@@ -2742,8 +2753,9 @@ export class AgentWorldRuntime {
     for (const joint of joints) this.refreshJointHandle(joint, true);
   }
 
-  private spawnInternal(source: AgentWorldEntityDefinition, allowUnresolvedLookAt = false): string {
-    const definition = this.resolveEntity(source, allowUnresolvedLookAt);
+  private spawnInternal(source: AgentWorldEntityDefinition, options?: { deferReferences?: boolean; legacyModulation?: boolean }): string {
+    const definition = this.resolveEntity(source, options?.deferReferences);
+    if (!options?.legacyModulation) assertModulateTargets(definition);
     if (this.entities.has(definition.id)) throw new Error(`Entity id already exists: ${definition.id}`);
     if (definition.parentId && !this.entities.has(definition.parentId)) throw new Error(`Unknown parent entity: ${definition.parentId}`);
     const object = this.validatingCommands ? this.worldRoot : createEntityObject(definition);
@@ -2986,6 +2998,8 @@ export class AgentWorldRuntime {
   private attachBehaviorInternal(id: string, behavior: AgentWorldBehavior): string {
     const runtime = this.requireEntity(id);
     validateBehavior(behavior, this.entities);
+    const modulationError = modulateTargetError(behavior, runtime.definition);
+    if (modulationError) throw new Error(modulationError);
     if (
       runtime.definition.physics
       && !["kinematic", "trigger"].includes(runtime.definition.physics.mode)
@@ -3184,7 +3198,7 @@ export class AgentWorldRuntime {
       for (let index = pending.length - 1; index >= 0; index -= 1) {
         const entity = pending[index];
         if (!entity.parentId || this.entities.has(entity.parentId)) {
-          this.spawnInternal(entity, true);
+          this.spawnInternal(entity, { deferReferences: true, legacyModulation: true });
           pending.splice(index, 1);
         }
       }
@@ -3194,6 +3208,8 @@ export class AgentWorldRuntime {
     for (const runtime of this.entities.values()) {
       for (const behavior of runtime.definition.behaviors) validateBehavior(behavior, this.entities);
       for (const interaction of runtime.definition.interactions) validateInteraction(interaction, this.entities);
+      const modulationError = findModulateTargetError(runtime.definition);
+      if (modulationError) this.recordEvent("behavior.ignored", modulationError);
     }
     this.updateSimulation(0);
     // A wholesale replacement invalidates any incremental picture a consumer was keeping,
@@ -3218,7 +3234,7 @@ export class AgentWorldRuntime {
         for (let index = pending.length - 1; index >= 0; index -= 1) {
           const definition = pending[index];
           if (!definition.parentId || this.entities.has(definition.parentId)) {
-            spawned.push(this.spawnInternal(definition, true));
+            spawned.push(this.spawnInternal(definition, { deferReferences: true }));
             pending.splice(index, 1);
           }
         }
@@ -5728,6 +5744,11 @@ function resolveActor(actor?: AgentWorldActor): Required<AgentWorldActor> {
 
 function validateStableId(id: string, label: string): void {
   if (!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,79}$/.test(id)) throw new Error(`Invalid ${label}: ${id}`);
+}
+
+function assertModulateTargets(entity: AgentWorldEntityDefinition | ResolvedEntity): void {
+  const error = findModulateTargetError(entity);
+  if (error) throw new Error(error);
 }
 
 function validateBehavior(behavior: AgentWorldBehavior, entities: Map<string, RuntimeEntity>, allowUnresolvedLookAt = false): void {
