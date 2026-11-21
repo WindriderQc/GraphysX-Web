@@ -23,6 +23,7 @@ export class NacreMission {
   private readonly off: () => void;
   private owner: string | null = null;
   private pendingRestore = false;
+  private rejectedStep: { apply: () => boolean; waitingForPlayer: boolean } | null = null;
   private lastStage = -1;
   private audioKey = "";
   private audible = true;
@@ -35,7 +36,9 @@ export class NacreMission {
     this.world = { api, getElapsedSeconds: () => world.getElapsedSeconds(), getEntityObject: id => world.getEntityObject(id),
       applyHostPoses: poses => world.applyHostPoses(poses), subscribeEvents: listener => world.subscribeEvents(listener) };
     this.off = world.subscribeEvents(event => {
-      if (event.type === "world.loaded") { this.owner = null; this.pendingRestore = true; this.audioKey = ""; this.lastStage = -1; }
+      if (event.type === "world.loaded") {
+        this.owner = null; this.pendingRestore = true; this.rejectedStep = null; this.audioKey = ""; this.lastStage = -1;
+      }
     });
   }
 
@@ -46,6 +49,7 @@ export class NacreMission {
   }
   get muted(): boolean { return this.tags().includes("audio:muted"); }
   get holding(): boolean { return this.phase === "carrying" && this.owner !== null; }
+  get needsRetry(): boolean { return this.rejectedStep?.waitingForPlayer ?? false; }
   get progress(): number {
     const phase = this.phase;
     if (phase !== "charging" && phase !== "opening") return online(phase) ? 1 : 0;
@@ -63,6 +67,12 @@ export class NacreMission {
     const result = this.world.api.transaction(commands);
     if (!result.ok) this.notice = "La station n’a pas pu appliquer cette action.";
     return result.ok;
+  }
+  private applyStep(apply: () => boolean): boolean {
+    const committed = apply();
+    // Keep the exact failed step, with one automatic retry before asking the player.
+    this.rejectedStep = committed ? null : { apply, waitingForPlayer: false };
+    return committed;
   }
   private cue(id: string, interactionId: string): void {
     if (this.audible && !this.muted) this.world.api.interact(id, interactionId);
@@ -114,11 +124,12 @@ export class NacreMission {
     return true;
   }
   activate(): boolean {
+    if (this.rejectedStep) return this.needsRetry && this.applyStep(this.rejectedStep.apply);
     if (this.phase !== "docked") { this.notice = "Insérez d’abord la cellule d’énergie."; return false; }
+    if (!this.changePhase("charging", this.pulse("nacre-reactor-core", true))) return false;
     this.lastStage = -1;
-    const result = this.change([this.phaseCommand("charging"), ...this.pulse("nacre-reactor-core", true)]);
-    if (result) this.notice = "Champ magnétique en formation…";
-    return result;
+    this.notice = "Champ magnétique en formation…";
+    return true;
   }
 
   private energy(level: number, powered: boolean): AgentWorldCommand[] {
@@ -142,8 +153,8 @@ export class NacreMission {
       return [...this.removeMotion(id, "nacre-door-open"), update(id, { transform: { position: [side * (open ? 9.5 : 3.25), 3, -21.5] } })];
     });
   }
-  private openDoors(): void {
-    const commands: AgentWorldCommand[] = [this.phaseCommand("opening"), ...this.energy(1, true)];
+  private openDoors(): boolean {
+    const commands = this.energy(1, true);
     for (const side of [-1, 1]) {
       const id = side < 0 ? "nacre-door-left" : "nacre-door-right";
       commands.push({ op: "attach-behavior", id, behavior: {
@@ -154,7 +165,16 @@ export class NacreMission {
         }),
       } });
     }
-    if (this.change(commands)) this.notice = "Réacteur stable. Ouverture du belvédère…";
+    if (!this.changePhase("opening", commands)) return false;
+    this.notice = "Réacteur stable. Ouverture du belvédère…";
+    return true;
+  }
+  private finishOpening(restore = false): boolean {
+    const commands = this.doorCommands(true);
+    if (restore) commands.push(...this.energy(1, true));
+    if (!this.changePhase("ready", commands)) return false;
+    this.notice = "Belvédère ouvert. Approchez de la Terre.";
+    return true;
   }
   complete(observer: Vector3): boolean {
     if (this.phase !== "ready" || !observer.toArray().every(Number.isFinite) || observer.distanceTo(new Vector3(...NACRE.destination)) > 2.5) return false;
@@ -163,10 +183,10 @@ export class NacreMission {
   }
   reset(): boolean {
     if (!this.phase) return false;
-    this.owner = null; this.lastStage = -1;
-    const ok = this.change([this.phaseCommand("cell"), this.setCell([...NACRE.home]), ...this.doorCommands(false), ...this.energy(0, false), ...this.pulse("nacre-reactor-core", false)]);
-    if (ok) { this.notice = "Une cellule. Un réacteur. À vous de jouer."; this.audioKey = ""; this.syncAudio(); }
-    return ok;
+    if (!this.changePhase("cell", [this.setCell([...NACRE.home]), ...this.doorCommands(false), ...this.energy(0, false), ...this.pulse("nacre-reactor-core", false)])) return false;
+    this.owner = null; this.lastStage = -1; this.rejectedStep = null;
+    this.notice = "Une cellule. Un réacteur. À vous de jouer.";
+    return true;
   }
   toggleMute(): void {
     if (!this.phase) return;
@@ -175,22 +195,38 @@ export class NacreMission {
     this.audioKey = ""; this.syncAudio();
   }
   setAudible(value: boolean): void { this.audible = value; this.syncAudio(); }
+  private audioCommands(phase: NacrePhase, enabled: boolean): AgentWorldCommand[] {
+    return [
+      update("nacre-charge-sound", { sound: { source: "/assets/quest3/audio/charge-loop.wav", autoplay: enabled && phase === "charging" } }),
+      update("nacre-reactor-sound", { sound: { source: "/assets/quest3/audio/reactor-loop.wav", autoplay: enabled && online(phase) } }),
+      update("nacre-door-sound", { sound: { source: "/assets/quest3/audio/door-loop.wav", autoplay: enabled && phase === "opening" } }),
+    ];
+  }
+  private changePhase(phase: NacrePhase, commands: AgentWorldCommand[]): boolean {
+    const enabled = this.audible && !this.muted;
+    if (!this.change([this.phaseCommand(phase), ...commands, ...this.audioCommands(phase, enabled)])) return false;
+    this.audioKey = `${phase}:${enabled}`;
+    return true;
+  }
   private syncAudio(): void {
     const phase = this.phase;
     if (!phase) return;
     const enabled = this.audible && !this.muted;
-    const key = [phase, enabled].join(":");
-    if (this.audioKey === key) return;
-    this.audioKey = key;
-    this.change([
-      update("nacre-charge-sound", { sound: { source: "/assets/quest3/audio/charge-loop.wav", autoplay: enabled && phase === "charging" } }),
-      update("nacre-reactor-sound", { sound: { source: "/assets/quest3/audio/reactor-loop.wav", autoplay: enabled && online(phase) } }),
-      update("nacre-door-sound", { sound: { source: "/assets/quest3/audio/door-loop.wav", autoplay: enabled && phase === "opening" } }),
-    ]);
+    const key = `${phase}:${enabled}`;
+    if (this.audioKey !== key && this.change(this.audioCommands(phase, enabled))) this.audioKey = key;
   }
   tick(): void {
-    let phase = this.phase;
+    const phase = this.phase;
     if (!phase) { this.owner = null; return; }
+    const rejected = this.rejectedStep;
+    if (rejected) {
+      if (!rejected.waitingForPlayer) {
+        if (rejected.apply()) this.rejectedStep = null;
+        else rejected.waitingForPlayer = true;
+      }
+      this.syncAudio();
+      return;
+    }
     if (this.pendingRestore) {
       this.pendingRestore = false;
       // The briefly published first mission used the original immutable GLB URL.
@@ -206,19 +242,22 @@ export class NacreMission {
         }
       }
       // Durable checkpoints survive export/load; tracked hands and partial startup do not.
-      if (phase === "carrying") { this.change([this.phaseCommand("cell"), this.setCell([...NACRE.home])]); phase = "cell"; }
-      if (phase === "charging") { this.change([this.phaseCommand("docked"), ...this.energy(0, false), ...this.pulse("nacre-reactor-core", false)]); phase = "docked"; }
-      if (phase === "opening") { this.change([this.phaseCommand("ready"), ...this.doorCommands(true), ...this.energy(1, true)]); phase = "ready"; }
+      if (phase === "carrying") this.applyStep(() => this.changePhase("cell", [this.setCell([...NACRE.home])]));
+      if (phase === "charging") this.applyStep(() => this.changePhase("docked", [...this.energy(0, false), ...this.pulse("nacre-reactor-core", false)]));
+      if (phase === "opening") this.applyStep(() => this.finishOpening(true));
+    } else if (phase === "charging") {
+      const progress = this.progress, stage = Math.min(4, Math.floor(progress * 4 + 1e-9));
+      if (progress >= 1) this.applyStep(() => this.openDoors());
+      else if (stage !== this.lastStage) this.applyStep(() => {
+        if (!this.change(this.energy(Math.max(.08, progress), false))) return false;
+        this.lastStage = stage;
+        this.notice = "Champ magnétique en formation…";
+        return true;
+      });
+    } else if (phase === "opening" && this.progress >= 1) {
+      this.applyStep(() => this.finishOpening());
     }
     if (phase !== "carrying") this.owner = null;
-    if (phase === "charging") {
-      const progress = this.progress, stage = Math.min(4, Math.floor(progress * 4 + 1e-9));
-      if (progress >= 1) this.openDoors();
-      else if (stage !== this.lastStage) { this.lastStage = stage; this.change(this.energy(Math.max(.08, progress), false)); }
-    } else if (phase === "opening" && this.progress >= 1) {
-      this.change([this.phaseCommand("ready"), ...this.doorCommands(true)]);
-      this.notice = "Belvédère ouvert. Approchez de la Terre.";
-    }
     this.syncAudio();
   }
   /** Commit the last tracked pose if an author explicitly saves while carrying. */

@@ -6,7 +6,7 @@ import { NACRE, NacreMission } from '../src/nacre-mission.ts';
 // A command port, not a second game implementation. Browser reception exercises the
 // same controller against the real World API, native geometry and XR input spaces.
 function fixture(){
-  const entities=new Map(),objects=new Map(),listeners=new Set(),interactions=[];
+  const entities=new Map(),objects=new Map(),listeners=new Set(),interactions=[],refusals=[];
   const ids=[NACRE.state,NACRE.cell,NACRE.socket,'nacre-reactor-core','nacre-reactor-light','nacre-control','nacre-reactor-particles',
     'nacre-door-left','nacre-door-right','nacre-charge-sound','nacre-reactor-sound','nacre-door-sound','nacre-window-chime','nacre-station','nacre-planet','nacre-clouds',
     ...Array.from({length:4},(_,i)=>'nacre-reactor-ring-'+i),...Array.from({length:3},(_,i)=>'nacre-gyro-'+i),
@@ -20,6 +20,11 @@ function fixture(){
     create(saved){entities.clear();for(const e of saved.entities)entities.set(e.id,structuredClone(e));seconds=0;listeners.forEach(f=>f({type:'world.loaded'}));return{ok:true};},
     query({ids}){return ids.map(id=>entities.get(id)).filter(Boolean);},
     transaction(commands){
+      const refusal = refusals.find(rule => rule.remaining > 0 && rule.matches(commands));
+      if (refusal) {
+        refusal.remaining--;
+        return { ok: false, error: 'Injected NACRE transaction refusal' };
+      }
       if(commands.some(c=>!entities.has(c.id)))return{ok:false,error:'Unknown entity'};
       for(const c of commands){
         const entity=entities.get(c.id),object=objects.get(c.id);
@@ -43,10 +48,15 @@ function fixture(){
   };
   const mission=new NacreMission(world,api);
   return{mission,entities,objects,interactions,advance(value){seconds+=value;mission.tick();},
+    refuse(matches, remaining = 1) { refusals.push({ matches, remaining }); },
     load(){seconds=0;listeners.forEach(f=>f({type:'world.loaded'}));mission.tick();},
     dock(){mission.begin();mission.take('right');mission.move('right',new Vector3(...NACRE.dock),new Quaternion());mission.release('right');},
   };
 }
+
+const changesPhase = phase => commands => commands.some(command =>
+  command.id === NACRE.state && command.patch?.tags?.includes('phase:' + phase));
+const loops = ({ entities }) => ['charge', 'reactor', 'door'].filter(name => entities.get(`nacre-${name}-sound`).sound.autoplay);
 
 test('NACRE guards progression, input ownership and a real socket-distance release',()=>{
   const f=fixture(),m=f.mission;
@@ -99,6 +109,101 @@ test('NACRE fractional clocks reach the exact half-charge stage and final bounda
   f.advance(1.21);f.advance(1.19);
   assert.ok(f.entities.get('nacre-reactor-light').intensity>2,'half charge must advance beyond the first quarter stage');
   f.advance(2.4);assert.equal(f.mission.phase,'opening');f.mission.dispose();
+});
+
+test('NACRE reapplies a refused charge stage before advancing to a later stage', () => {
+  const f = fixture();
+  f.dock();
+  f.mission.activate();
+  f.advance(.6);
+  const light = f.entities.get('nacre-reactor-light');
+  const previous = light.intensity;
+  f.refuse(commands => commands.some(command => command.id === 'nacre-reactor-light'));
+  f.advance(.66);
+  assert.equal(light.intensity, previous);
+  assert.deepEqual(loops(f), ['charge']);
+  f.advance(.1);
+  assert.ok(light.intensity > previous, 'retry the rejected stage while still in the same quarter');
+  assert.equal(f.mission.phase, 'charging');
+});
+
+test('NACRE retries opening and commits the final door pose before announcing the belvedere', () => {
+  const f = fixture();
+  f.dock();
+  f.mission.activate();
+  f.advance(0);
+  f.refuse(changesPhase('opening'));
+  f.advance(NACRE.chargeSeconds);
+  assert.equal(f.mission.phase, 'charging');
+  assert.deepEqual(loops(f), ['charge']);
+  assert.equal(f.entities.get('nacre-door-left').behaviors.length, 0);
+  f.advance(.02);
+  assert.equal(f.mission.phase, 'opening');
+  assert.deepEqual(loops(f), ['reactor', 'door']);
+  assert.equal(f.entities.get('nacre-door-left').behaviors[0].startSeconds, NACRE.chargeSeconds + .02);
+  f.refuse(changesPhase('ready'));
+  f.advance(NACRE.doorSeconds);
+  assert.equal(f.mission.phase, 'opening');
+  assert.doesNotMatch(f.mission.notice, /Belvédère ouvert/);
+  assert.equal(f.entities.get('nacre-door-left').behaviors.length, 1);
+  assert.deepEqual(loops(f), ['reactor', 'door']);
+  f.advance(.02);
+  assert.equal(f.mission.phase, 'ready');
+  assert.deepEqual(f.objects.get('nacre-door-left').position.toArray(), [-9.5, 3, -21.5]);
+  assert.deepEqual(f.objects.get('nacre-door-right').position.toArray(), [9.5, 3, -21.5]);
+  assert.match(f.mission.notice, /Belvédère ouvert/);
+  assert.deepEqual(loops(f), ['reactor']);
+});
+
+test('NACRE does not cache a rejected audio update', () => {
+  const f = fixture();
+  f.dock();
+  f.mission.activate();
+  f.advance(0);
+  assert.deepEqual(loops(f), ['charge']);
+  f.refuse(commands => commands.some(command => command.patch?.sound?.autoplay === false));
+  f.mission.setAudible(false);
+  assert.deepEqual(loops(f), ['charge']);
+  f.advance(.02);
+  assert.deepEqual(loops(f), []);
+  f.mission.setAudible(true);
+  assert.deepEqual(loops(f), ['charge']);
+});
+
+test('NACRE waits for a player retry after two refused door commits', () => {
+  const f = fixture();
+  f.dock();
+  f.mission.activate();
+  f.advance(NACRE.chargeSeconds);
+  f.refuse(changesPhase('ready'), 2);
+  f.advance(NACRE.doorSeconds);
+  assert.equal(f.mission.needsRetry, false);
+  f.advance(.02);
+  assert.equal(f.mission.needsRetry, true);
+  f.advance(1);
+  assert.equal(f.mission.phase, 'opening');
+  assert.doesNotMatch(f.mission.notice, /Belvédère ouvert/);
+  assert.deepEqual(loops(f), ['reactor', 'door']);
+  assert.equal(f.mission.activate(), true);
+  assert.equal(f.mission.needsRetry, false);
+  assert.equal(f.mission.phase, 'ready');
+  assert.match(f.mission.notice, /Belvédère ouvert/);
+  assert.deepEqual(loops(f), ['reactor']);
+});
+
+test('NACRE drops a pending charge stage when restoring a saved world', () => {
+  const f = fixture();
+  f.dock();
+  f.mission.activate();
+  f.refuse(commands => commands.some(command => command.id === 'nacre-reactor-light'));
+  f.advance(.6);
+  f.refuse(changesPhase('docked'));
+  f.load();
+  assert.equal(f.mission.phase, 'charging');
+  f.advance(.02);
+  assert.equal(f.mission.phase, 'docked');
+  assert.equal(f.entities.get('nacre-reactor-light').intensity, 0);
+  assert.deepEqual(loops(f), []);
 });
 
 test('NACRE upgrades the first mission planet URL while preserving original and custom stations',()=>{

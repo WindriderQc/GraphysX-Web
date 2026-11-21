@@ -85,7 +85,31 @@ try {
   const socketScreen=await page.evaluate(()=>JSON.parse(window.render_game_to_text()).socket.screen);
   await page.mouse.click(socketScreen.x,socketScreen.y);await phase(page,'docked');
   assert.deepEqual(await page.evaluate(()=>window.__GRAPHYSX_QUEST3__.host.world.getEntityObject('nacre-cell').position.toArray()),[1,1.18,-8.15]);
-  await page.click('.nacre-primary');await phase(page,'charging');await advance(page,2400);
+  await page.click('.nacre-primary');await phase(page,'charging');
+  await page.evaluate(()=>{
+    const {host,mission}=window.__GRAPHYSX_QUEST3__,transaction=host.api.transaction;
+    const remaining={charge:1,opening:1,ready:2},refused=[];
+    host.api.transaction=commands=>{
+      const phaseTag=commands.find(command=>command.id==='nacre-mission')?.patch?.tags?.find(tag=>tag.startsWith('phase:'));
+      const intensity=commands.find(command=>command.id==='nacre-reactor-light')?.patch?.intensity;
+      const step=phaseTag?.slice(6) ?? (intensity>=1&&intensity<2?'charge':null);
+      if(step&&remaining[step]>0){
+        remaining[step]--;
+        refused.push({step,phase:mission.phase,notice:mission.notice});
+        return {ok:false,error:'Injected NACRE transaction refusal'};
+      }
+      return transaction(commands);
+    };
+    window.__nacreRecovery={refused,restore(){host.api.transaction=transaction;}};
+  });
+  await advance(page,1350);
+  const recoveredCharge=await page.evaluate(()=>({
+    refused:window.__nacreRecovery.refused.map(({step,phase})=>({step,phase})),
+    intensity:window.__GRAPHYSX__.query({ids:['nacre-reactor-light']})[0].intensity,
+  }));
+  assert.deepEqual(recoveredCharge.refused,[{step:'charge',phase:'charging'}]);
+  assert.ok(recoveredCharge.intensity>=1&&recoveredCharge.intensity<2,'the refused quarter-charge stage retries before half-charge');
+  await advance(page,1050);
   await page.waitForFunction(()=>window.__GRAPHYSX_QUEST3__.host.audio.playingCount>0);
   await page.screenshot({path:path.join(out,'nacre-reactor.png')});
   console.log('NACRE charge probe:',JSON.stringify(await page.evaluate(()=>{
@@ -108,7 +132,33 @@ try {
   assert.ok(particles.live>0&&particles.live<=64);assert.ok(particles.outside>0,'powered particles escape the opaque reactor core');
   receipt.particles=particles;
   await page.screenshot({path:path.join(out,'nacre-opening.png')});
-  await advance(page,1900);await phase(page,'ready');
+  await advance(page,1900);
+  const retryStep=page.getByRole('button',{name:'Réessayer l’étape'});
+  await retryStep.waitFor();
+  const refusedOpening=await page.evaluate(()=>({
+    refused:window.__nacreRecovery.refused,
+    phase:window.__GRAPHYSX_QUEST3__.mission.phase,
+    status:document.querySelector('.nacre-status [role=status]').textContent,
+  }));
+  assert.deepEqual(refusedOpening.refused.map(({step,phase})=>[step,phase]),[
+    ['charge','charging'],['opening','charging'],['ready','opening'],['ready','opening'],
+  ]);
+  assert.equal(refusedOpening.phase,'opening');
+  assert.doesNotMatch(refusedOpening.status,/Belvédère ouvert/);
+  assert.ok(refusedOpening.refused.every(({notice})=>!notice.includes('Belvédère ouvert')));
+  assert.equal(await page.locator('[data-view="2"]').isDisabled(),true);
+  const loopsPlaying=async()=> (await audioState(page)).sources.filter(source=>source.playing).map(source=>source.id).sort();
+  const blockedLoops=await loopsPlaying();
+  assert.deepEqual(blockedLoops,['nacre-door-sound','nacre-reactor-sound']);
+  await page.screenshot({path:path.join(out,'nacre-opening-refused.png')});
+  await retryStep.click();await phase(page,'ready');
+  await page.getByText('Belvédère ouvert. Approchez de la Terre.',{exact:true}).waitFor();
+  const openDoors=await page.evaluate(()=>JSON.parse(window.render_game_to_text()).doors);
+  assert.deepEqual(openDoors,[[-9.5,3,-21.5],[9.5,3,-21.5]]);
+  const readyLoops=await loopsPlaying();
+  assert.deepEqual(readyLoops,['nacre-reactor-sound']);
+  await page.evaluate(()=>window.__nacreRecovery.restore());
+  receipt.transactionRecovery={recoveredCharge,refusedOpening,blockedLoops,openDoors,readyLoops};
   // Sample actual native transforms at non-symmetric phases, not behavior metadata.
   const animation=await page.evaluate(async()=>{
     const {host}=window.__GRAPHYSX_QUEST3__,read=()=>['nacre-planet','nacre-clouds','nacre-reactor-core','nacre-gyro-0'].map(id=>{

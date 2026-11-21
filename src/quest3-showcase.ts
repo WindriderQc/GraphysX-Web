@@ -198,6 +198,7 @@ export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void
   }
   function primaryAction() {
     if(!visualReady)return;
+    if (mission.needsRetry) { mission.activate(); return; }
     const phase=mission.phase;
     if(!phase){host.api.create(createQuest3Scene());view(0);}
     else if(phase==="standby"){mission.begin();view(0);}
@@ -349,10 +350,11 @@ export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void
       : loadError === "render" ? "La préparation du rendu a échoué."
       : loadError === "context" ? "Le contexte graphique a été perdu."
       : loadError === "timeout" ? "La station met trop de temps à se préparer." : null;
+    const stepFailure = mission.needsRetry ? "La station n’a pas pu terminer cette étape. Réessayez." : null;
     const incompleteDecor = visualReady && models.some(entity => OPTIONAL_MODELS.has(entity.id) && entity.asset?.status === "error");
     if(mission.notice&&mission.notice!==lastMissionNotice){announce(mission.notice);lastMissionNotice=mission.notice;}
-    status.dataset.error=String(!!(failure || xrFailure));
-    const statusText=failure??xrFailure??(!visualReady?"Préparation de la station…":performance.now()<noticeUntil?notice:incompleteDecor?"Une partie du décor est indisponible.":phase?HELP[phase]:"Exploration libre");
+    status.dataset.error=String(!!(failure || xrFailure || stepFailure));
+    const statusText=failure??xrFailure??(!visualReady?"Préparation de la station…":stepFailure??(performance.now()<noticeUntil?notice:incompleteDecor?"Une partie du décor est indisponible.":phase?HELP[phase]:"Exploration libre"));
     if (status.textContent !== statusText) status.textContent = statusText;
     status.classList.toggle("nacre-loading",!visualReady&&!failure);
     retry.hidden = !failure;
@@ -360,19 +362,19 @@ export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void
     ui.dataset.phase=phase??"explore";
     objective.textContent=phase?HELP[phase]:"Votre station sauvegardée reste explorable.";
     headline.innerHTML=phase==="complete"?"Le signal<br>est revenu.":phase==="standby"?"Ramenez<br>la lumière.":"Rétablir<br>le signal.";
-    primary.disabled=!visualReady||phase==="charging"||phase==="opening"||(phase==="carrying"&&viewIndex===1&&movingView);
-    primary.textContent=failure?"Chargement interrompu":!visualReady?"Préparation…":phase==="standby"?"Commencer la mission":phase==="cell"?"Saisir la cellule":phase==="carrying"?(viewIndex===1?(movingView?"Approche du réacteur…":"Insérer la cellule"):"Aller au réacteur"):phase==="docked"?"Lancer le réacteur":phase==="charging"?"Recharge · "+Math.round(progress*100)+" %":phase==="opening"?"Ouverture · "+Math.round(progress*100)+" %":phase==="ready"?"Rejoindre le belvédère":phase==="complete"?"Rejouer la mission":"Nouvelle mission";
+    primary.disabled=!visualReady||(!stepFailure&&(phase==="charging"||phase==="opening"||(phase==="carrying"&&viewIndex===1&&movingView)));
+    primary.textContent=failure?"Chargement interrompu":!visualReady?"Préparation…":stepFailure?"Réessayer l’étape":phase==="standby"?"Commencer la mission":phase==="cell"?"Saisir la cellule":phase==="carrying"?(viewIndex===1?(movingView?"Approche du réacteur…":"Insérer la cellule"):"Aller au réacteur"):phase==="docked"?"Lancer le réacteur":phase==="charging"?"Recharge · "+Math.round(progress*100)+" %":phase==="opening"?"Ouverture · "+Math.round(progress*100)+" %":phase==="ready"?"Rejoindre le belvédère":phase==="complete"?"Rejouer la mission":"Nouvelle mission";
     const index=phase?["standby","cell","carrying","docked","charging","opening","ready","complete"].indexOf(phase):0;
     ui.querySelectorAll<HTMLElement>(".nacre-steps li").forEach((li,i)=>li.dataset.done=String(index>=[3,5,7][i]));
     charge.hidden=phase!=="charging"&&phase!=="opening";charge.value=progress;
     const viewButton=ui.querySelector<HTMLButtonElement>('[data-view="2"]')!;viewButton.disabled=!!phase&&!["ready","complete"].includes(phase);
     soundButton.setAttribute("aria-pressed",String(mission.muted));soundButton.textContent=mission.muted?"Son coupé":"Son activé";
-    const nextLabel=(phase==="complete"?"REJOUER":"CELLULE")+":"+mission.muted;
-    if(nextLabel!==buttonLabel){drawPanel(buttons[0].mesh,phase==="complete"?"REJOUER":"CELLULE");drawPanel(buttons[4].mesh,mission.muted?"MUET":"SON");buttonLabel=nextLabel;}
+    const nextLabel=(phase==="complete"?"REJOUER":"CELLULE")+":"+mission.muted+":"+mission.needsRetry;
+    if(nextLabel!==buttonLabel){drawPanel(buttons[0].mesh,phase==="complete"?"REJOUER":"CELLULE");drawPanel(buttons[2].mesh,stepFailure?"RÉESSAYER":"ALLUMER");drawPanel(buttons[4].mesh,mission.muted?"MUET":"SON");buttonLabel=nextLabel;}
     enter.disabled=(!visualReady&&!vr.session.session&&xrPhase!=="starting")||["checking","unsupported","stopping","disposed"].includes(xrPhase);
     enter.textContent=xrPhase==="starting"?"Annuler":vr.session.session?"Quitter la VR":xrFailure?"Réessayer la VR":"Entrer en VR";
     stats.textContent=diagnostic.scope+" · "+(diagnostic.observedHz??"—")+" Hz observés\nTrame p95 "+(diagnostic.intervalMs.p95??"—")+" ms · CPU p95 "+(diagnostic.cpuSubmissionMs.p95??"—")+" ms\n"+diagnostic.calls+" appels · "+diagnostic.triangles.toLocaleString("fr-CA")+" triangles\nGPU non mesuré";
-    const text=(phase?HELP[phase]:"EXPLORATION LIBRE")+"\n"+(phase==="cell"?"POIGNÉE / PINCEMENT POUR SAISIR":phase==="carrying"?"RELÂCHEZ DANS LE SOCLE":phase==="docked"?"POINTEZ ALLUMER":phase==="charging"||phase==="opening"?Math.round(progress*100)+" %":"NACRE / ORBITAL OBSERVATORY");
+    const text=stepFailure?"ÉTAPE INTERROMPUE\nPOINTEZ RÉESSAYER":(phase?HELP[phase]:"EXPLORATION LIBRE")+"\n"+(phase==="cell"?"POIGNÉE / PINCEMENT POUR SAISIR":phase==="carrying"?"RELÂCHEZ DANS LE SOCLE":phase==="docked"?"POINTEZ ALLUMER":phase==="charging"||phase==="opening"?Math.round(progress*100)+" %":"NACRE / ORBITAL OBSERVATORY");
     if(text!==drawnPanel){drawPanel(metric,text);drawnPanel=text;}
   });
 
