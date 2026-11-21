@@ -111,3 +111,15 @@ npm run verify -- --wait
 Run heavy checks under the machine-wide lock. Inspect the PNGs in `output/verify/` and
 `cubx-atmel-result.json`; hosted CI only qualifies Node/static contracts. Local build,
 public revision, deployed asset checks and public browser reception remain distinct proofs.
+
+Local continuation qualification (2026-11-21) covers all 137 default checks across the full
+907fd7e run and bounded follow-ups. The original batch retains its exit 1: 135 passes and
+two failures. BallZ's census now selects its original 36-character family while allowing
+the ten additional Atmel digits. A no-mission reload probe reproduced 28→29→29→29 GPU
+textures, so lifecycle snapshots now wait for two stable completed-frame samples; exact
+resource, history and document comparisons remain unchanged. The native/BallZ eight-check
+gate passes on 19738cb, and the canonical shared-session gate passes all four checks,
+including its 133 browser assertions, on e56fb89. The three optional GPU receptions remain
+unrun. This is composite per-revision coverage, not a claim that the original full batch
+was green. Local receipts and the complete build comparison are retained under
+`output/archive-continuation/`; final CI and public reception are separate delivery proof.
