@@ -75,7 +75,11 @@ try {
       ringCount: ids.filter((id) => id.startsWith("ballz-ring-")).length,
       hasStartPad: ids.includes("ballz-start-pad"),
       countdownStages: api.query({ tag: "ballz-countdown-stage" }).length,
-      recoveredGlyphAssets: assets.filter((asset) => asset.category === "glyph").length,
+      // BallZ uses this original alphanumeric family. Other source alphabets, including
+      // Atmel's ten numeric meshes, can coexist without changing the required 36 glyphs.
+      recoveredGlyphAssets: assets.filter(
+        (asset) => asset.category === "glyph" && asset.id.startsWith("archive-glyph-"),
+      ).length,
       // Keep this census about the original TVM recovery. Suzanne's recovered .x
       // props share archive-prop, but are a different source family.
       recoveredTvmAssets: assets.filter(
