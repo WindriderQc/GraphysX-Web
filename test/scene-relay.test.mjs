@@ -191,6 +191,9 @@ describe("scene relay subscriber admission", () => {
       clearStreamInterval: timerHarness.clearStreamInterval,
     });
     t.after(async () => {
+      // These stores create their directories eagerly, outside the scene read.
+      // Await readiness before removal so a late mkdir cannot recreate the fixture.
+      await Promise.all([engine.assets.count(), engine.results.count()]);
       await engine.sessions.closeAll();
       await rm(dir, { recursive: true, force: true });
     });
@@ -241,6 +244,7 @@ describe("scene relay subscriber admission", () => {
       clearStreamInterval: timerHarness.clearStreamInterval,
     });
     t.after(async () => {
+      await Promise.all([engine.assets.count(), engine.results.count()]);
       await engine.sessions.closeAll();
       await rm(dir, { recursive: true, force: true });
     });
