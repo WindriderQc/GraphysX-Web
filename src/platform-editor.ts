@@ -687,8 +687,14 @@ export class PlatformEditor {
     this.focusBounds(new Box3().setFromObject(object));
   }
 
-  /** Fit a loaded scene using the same protected viewport as ordinary object framing. */
-  frameVisibleWorld(): void { this.focusBounds(visibleSceneBounds(this.deps.world.group)); }
+  /** Frame authored subjects, retaining the environment as an unchanged backdrop. */
+  frameVisibleWorld(): void {
+    const roots = (this.deps.api.state()?.entities ?? []).filter(entity => !entity.parentId).flatMap(entity => {
+      const object = this.deps.world.getEntityObject(entity.id);
+      return object ? [object] : [];
+    });
+    this.focusBounds(visibleSceneBounds(roots));
+  }
 
   private focusBounds(bounds: Box3): void {
     if (bounds.isEmpty()) return;

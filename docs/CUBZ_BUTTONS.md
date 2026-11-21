@@ -80,6 +80,11 @@ player's exact playback tracks are removed. These keys have application actions
 inside CubZ; in a saved Studio copy they are editable scene objects. No external
 navigation callback is serialized into a user's document.
 
+Reopening a saved pose in Studio frames the visible authored entities, including
+their keys. The environment ground remains an unchanged backdrop; its 50-unit size
+does not shrink CubZ's framing. Authored floors and terrain remain subjects. The
+existing native-model loading and camera-ownership fences still apply.
+
 ## Validation
 
 `test/cubz-buttons.test.mjs` checks disjoint numbering/groups, model bounds and
@@ -96,3 +101,9 @@ all eight menus with the common 3D exit. `scripts/smoke-cubz-menu.mjs` additiona
 covers keyboard/touch, reduced motion, 320/390-pixel layouts, hidden-ancestor
 picking and ordinary Studio save/export/reload. Inspect screenshots as well as
 receipts. Browser viewport emulation does not certify physical phones or hardware.
+
+`scripts/smoke-cubz-studio-framing.mjs` measures the actual rendered closed,
+partly opened and opened poses at four viewports, after both library opening and
+cold reload. It checks clear Studio margins, useful subject size, exact saved bytes
+and document preservation, plus an explicitly authored floor. Cases use separate
+browser contexts because several inline native copies can exhaust localStorage.

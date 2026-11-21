@@ -52,7 +52,7 @@ const RULES = [
   { match: /^src\/island[-.]/, checks: family("island"), label: "Clawblox island viewer", deploy: true },
   // CubZ owns only its authored document and application surface. Its ordinary v2
   // runtime, host and motion sampler retain the full-suite fallback below.
-  { match: /^src\/cubz-menu(?:-(?:app|scene|buttons))?\.(?:ts|css)$/, checks: ["cubz-menu", "cubz-buttons", "cubx-atmel", "studio-simple", "my-creations", "roundtrip"], label: "CubZ authored mechanical menu and Studio handoff", deploy: true },
+  { match: /^src\/cubz-menu(?:-(?:app|scene|buttons))?\.(?:ts|css)$/, checks: ["cubz-menu", "cubz-buttons", "cubz-studio-framing", "cubx-atmel", "studio-simple", "my-creations", "roundtrip"], label: "CubZ authored mechanical menu and Studio handoff", deploy: true },
   { match: /^scripts\/audit-cubz-buttons\.mjs$/, checks: [], label: "read-only CubZ archive audit", deploy: false },
   { match: /^src\/(?:ballz-|archive-ballz-levels\.ts)/, checks: GAMES, label: "BallZ games", deploy: true },
   { match: /^(?:src\/results-client\.ts|server\/results-store\.mjs)$/, checks: ["results", "results-browser"], label: "results", deploy: true },
