@@ -5729,3 +5729,7 @@ Request: "tu me refait un passage pour améliorer encore nos capacités GraphysX
 ## NACRE — VR entry, reduced motion and selection
 
 - Reproduced issues 9–11 on 6e9f194: a rejected WebXR request started the mission, reduced motion still interpolated the observation camera, and an opaque partition let touch and controller input grab the cell. The browser regression now checks denial and retry, immediate framing, hidden and transparent surfaces, and console selection while holding the cell. The full desktop, touch and synthetic XR mission and the unchanged visual client passed on hardware WebGL. Physical Quest 3 comfort and input still need a headset pass.
+
+## NACRE — recover a refused mission step
+
+- Issue 13 reproduced on 9c792e7: a rejected quarter-charge update was skipped, a refused audio update was cached, and a refused door commit still announced the belvedere open. NACRE retries the exact failed step once and offers a player retry if it fails again. Charge and door phase changes commit their positional loops together with the scene. The browser smoke refused one charge stage, one opening start and two final door commits, then checked the visible retry, both native door positions, the success announcement and the active Web Audio sources. The full mission and the unchanged visual client passed on hardware WebGL.
