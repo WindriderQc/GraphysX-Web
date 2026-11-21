@@ -31,6 +31,6 @@ USER node
 VOLUME /data
 EXPOSE 18120
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:' + (process.env.WORLD_PORT || 18120) + '/healthz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+  CMD node -e "fetch('http://127.0.0.1:' + (process.env.WORLD_PORT || 18120) + '/readyz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
 # The root is stable across restarts; each world instance owns its opaque subdirectory.
 CMD ["sh", "-c", "exec node world-service/main.mjs --record-dir \"${WORLD_RECORD_DIR:-/data/recordings}\""]

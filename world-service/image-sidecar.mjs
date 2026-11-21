@@ -23,6 +23,7 @@
 
 import { existsSync } from "node:fs";
 import { createServer } from "node:http";
+import { once } from "node:events";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -228,7 +229,13 @@ export async function startImageSidecar(options) {
       return reply(503, { error: String(error?.message ?? error) });
     }
   });
-  await new Promise((done) => server.listen(options.port ?? 0, options.host ?? "127.0.0.1", done));
+  try {
+    await once(server.listen(options.port ?? 0, options.host ?? "127.0.0.1"), "listening");
+  } catch (error) {
+    // The built-in viewer has its own listener, even before a renderer is used.
+    await staticServer?.close();
+    throw error;
+  }
   const address = server.address();
   const port = typeof address === "object" && address ? address.port : options.port;
   return {
