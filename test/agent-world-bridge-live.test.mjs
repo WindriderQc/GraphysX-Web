@@ -100,6 +100,43 @@ const snapshot = w => ({ ...records(w), state: w.api.state(), document: w.api.ex
 const request = (method, args) => ({ schema: requestSchema, id: "live-test", method, args });
 const accepted = result => { assert.equal(result.ok, true, result.error); return result.value; };
 
+test("the runtime rejects intensity modulation on boxes without applying any part of a batch", t => {
+  const w = world(t);
+  const invalid = { id: "fade", type: "modulate", property: "intensity" };
+  const error = /modulate.*intensity.*light entity.*plain.*box/i;
+  const before = snapshot(w);
+  const object = w.runtime.getEntityObject("plain");
+  const failed = w.api.transaction([
+    { op: "update", id: "plain", patch: { transform: { position: [1, 2, 3] } } },
+    { op: "attach-behavior", id: "plain", behavior: invalid },
+  ]);
+  assert.equal(failed.ok, false);
+  assert.match(failed.error, error);
+  assert.equal(w.api.spawn({ id: "another-box", type: "box", behaviors: [invalid] }).ok, false);
+  const document = w.api.exportDocument();
+  document.entities.find(entity => entity.id === "plain").behaviors = [invalid];
+  const rejectedCreate = w.api.create(document);
+  assert.equal(rejectedCreate.ok, false);
+  assert.match(rejectedCreate.error, error);
+  assert.deepEqual(w.api.exportDocument(), before.document);
+  assert.equal(w.api.state().revision, before.revision);
+  assert.deepEqual(w.runtime.history, before.history);
+  assert.equal(w.runtime.getEntityObject("plain"), object);
+});
+
+test("the runtime opens old documents with an explicit warning and can remove the ignored modulation", t => {
+  const { api } = world(t);
+  const legacy = scene();
+  const invalid = { id: "fade", type: "modulate", property: "intensity" };
+  legacy.entities.find(entity => entity.id === "plain").behaviors = [invalid];
+  const loaded = accepted(api.load(legacy));
+  assert.ok(loaded.recentEvents.some(event => event.type === "behavior.ignored" && /intensity.*plain.*box/.test(event.message)));
+  assert.deepEqual(api.exportDocument().entities.find(entity => entity.id === "plain").behaviors, [invalid]);
+  accepted(api.update("plain", { label: "Existing box" }));
+  accepted(api.detachBehavior("plain", "fade"));
+  accepted(api.create(api.exportDocument()));
+});
+
 test("FlightX modern courses use real kinematic crossings and ordered shared rules for all four modes", t => {
   for (const mode of ["free", "gates", "time", "laps"]) {
     const definition = flightxCourses.buildFlightxCourse(mode);

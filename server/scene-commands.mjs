@@ -10,7 +10,7 @@ import { resolveModelPresentation } from "./model-presentation.mjs";
 import { materializeMeshCommand } from "./mesh-authoring.mjs";
 import { entitySubtreeIds } from "./entity-subtree.mjs";
 import { MOTION_FIELDS, validateMotionBehavior } from "./motion-behaviors.mjs";
-import { ENERGY_FIELDS, MODULATE_FIELDS, VISUAL_LIMITS, validateEnergyShader, validateModulateBehavior } from "./visual-effects.mjs";
+import { ENERGY_FIELDS, MODULATE_FIELDS, VISUAL_LIMITS, findModulateTargetError, modulateTargetError, validateEnergyShader, validateModulateBehavior } from "./visual-effects.mjs";
 import { assertInlineMesh, assertInlinePixels, assertMeshSceneBudget, assertMeshTextureCoordinates, MESH_FIELDS, MESH_GROUP_FIELDS, MESH_LIMITS, PIXEL_FIELDS, PIXEL_LIMITS } from "./inline-mesh.mjs";
 import {
   assertAuthoredSceneCommandNamespaces,
@@ -807,7 +807,7 @@ function validateTypedConfig(entity, key, value, label, { merged = false } = {})
   else if (key === "forceField") validateForceField(value, label);
 }
 
-function validateEntityFields(entity, label, allowImportedMedia = false) {
+function validateEntityFields(entity, label, allowImportedMedia = false, previousEntity) {
   allowedKeys(entity, ENTITY_KEYS, label);
   validateAppearance(entity.appearance, entity.type);
   requireStableId(entity.id, `${label}.id`);
@@ -849,6 +849,8 @@ function validateEntityFields(entity, label, allowImportedMedia = false) {
   if (entity.ephemeral === true) reject("Cannot store a session-only entity: the scene store holds authored content, not session state");
   if (entity.tags !== undefined) requireStringArray(entity.tags, `${label}.tags`, 128);
   if (entity.behaviors !== undefined) validateBehaviors(entity.behaviors, `${label}.behaviors`);
+  const modulationError = findModulateTargetError(entity, previousEntity);
+  if (modulationError) reject(modulationError);
   if (entity.interactions !== undefined) validateInteractions(entity.interactions, `${label}.interactions`);
   if (entity.physics && !["kinematic", "trigger"].includes(entity.physics.mode) && (entity.behaviors ?? []).some((behavior) => MOTION_BEHAVIORS.has(behavior.type))) {
     reject("Transform behaviors require kinematic physics");
@@ -1202,6 +1204,8 @@ function applyCommand(definition, command) {
     entity.behaviors ??= [];
     if (command.op === "attach-behavior") {
       validateBehaviors([command.behavior], "behavior");
+      const modulationError = modulateTargetError(command.behavior, entity);
+      if (modulationError) reject(modulationError);
       if (entity.behaviors.some(entry => entry.id === command.behavior.id)) reject(`Duplicate behavior: ${command.behavior.id}`);
       entity.behaviors.push(structuredClone(command.behavior));
     } else {
@@ -1236,13 +1240,14 @@ function applyCommand(definition, command) {
 }
 
 /** Full writes use the same authored-field and graph checks as incremental writes. */
-export function validateStoredSceneDefinition(definition) {
+export function validateStoredSceneDefinition(definition, previousDefinition) {
   assertWorldDefinition(definition);
   validateJsonValue(definition, "scene");
   // A complete authored document may refer to imported media registered by its store. The
   // browser resolves those resources; the curated-only live-command policy stays separate.
   if (definition.environment !== undefined) validateEnvironmentBlock(definition.environment, "scene.environment", true);
-  for (const entity of definition.entities) validateEntityFields(entity, `entity ${entity.id}`, true);
+  const previous = new Map((previousDefinition?.entities ?? []).map(entity => [entity.id, entity]));
+  for (const entity of definition.entities) validateEntityFields(entity, `entity ${entity.id}`, true, previous.get(entity.id));
   assertMeshSceneBudget(definition.entities);
   validateGraph(definition);
 }

@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createSceneStore } from "../server/scene-store.mjs";
+import { createSceneStore, SCENE_STORE_SCHEMA } from "../server/scene-store.mjs";
+import { encodeStoreName } from "../server/store-paths.mjs";
 import { applyCommands, validateStoredSceneDefinition } from "../server/scene-commands.mjs";
 import { assertWorldDefinition } from "../server/scene-document.mjs";
 
@@ -34,6 +35,32 @@ it("rejects invalid whole writes without replacing an accepted revision", async 
       assert.equal(retained.revision, 1);
       assert.deepEqual(retained.definition, scene());
     }
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+it("allows old inert modulation to be retained or removed but refuses new writes of it", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "graphysx-document-"));
+  try {
+    const store = createSceneStore({ dir });
+    const name = "legacy";
+    const definition = scene();
+    definition.entities[0].behaviors = [{ id: "fade", type: "modulate", property: "intensity" }];
+    const mismatch = /modulate.*intensity.*light entity.*box/;
+    await assert.rejects(store.put(name, definition, 0), mismatch);
+    await writeFile(join(dir, `${encodeStoreName(name)}.json`), JSON.stringify({ schema: SCENE_STORE_SCHEMA, name, revision: 1, definition }));
+    const { definition: stored } = await store.get(name);
+    assert.deepEqual(stored, definition);
+
+    const updated = applyCommands(stored, [{ op: "update", id: "gate", patch: { label: "Unrelated edit" } }]).definition;
+    assert.equal((await store.put(name, updated, 1)).revision, 2);
+    const invalid = structuredClone(updated);
+    invalid.entities[0].behaviors[0].frequencyHz = 2;
+    await assert.rejects(store.put(name, invalid, 2), mismatch);
+    assert.equal((await store.get(name)).revision, 2);
+
+    const repaired = applyCommands(updated, [{ op: "detach-behavior", id: "box", behaviorId: "fade" }]).definition;
+    assert.equal((await store.put(name, repaired, 2)).revision, 3);
+    await assert.rejects(store.put(name, updated, 3), mismatch);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
