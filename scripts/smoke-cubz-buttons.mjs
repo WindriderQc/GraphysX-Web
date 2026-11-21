@@ -14,6 +14,31 @@ page.on("console", message => { if (message.type() === "error") errors.push(mess
 page.on("response", response => { if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`); });
 const read = () => page.evaluate(() => JSON.parse(window.render_game_to_text()).application);
 const draw = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+async function assertPanelContact() {
+  const measurements = await page.evaluate(() => {
+    const api = window.__GRAPHYSX__, host = window.__GRAPHYSX_HOST__, document = api.exportDocument();
+    const visible = object => { for (; object; object = object.parent) if (!object.visible) return false; return true; };
+    return document.entities.filter(entity => (entity.tags?.includes("reconstructed-button-model") && entity.type === "mesh") || entity.id === "cubz-exit-face")
+      .filter(entity => visible(host.world.getEntityObject(entity.id))).map(entity => {
+        const mount = document.entities.find(parent => parent.id === entity.parentId), node = Number(mount.parentId?.replace("cubz-open-n", ""));
+        if (![35,37,39].includes(node)) return { id: entity.id, node, gap: null, facing: null };
+        const panel = host.world.getEntityObject(`cubz-open-m${node}`), key = host.world.getEntityObject(entity.id), axis = node === 35 ? 0 : node === 37 ? 1 : 2;
+        panel.updateWorldMatrix(true, false); key.updateWorldMatrix(true, false); panel.geometry.computeBoundingBox();
+        const face = panel.geometry.boundingBox.getCenter(panel.position.clone()); face.setComponent(axis,panel.geometry.boundingBox.min.getComponent(axis));
+        const normal = panel.position.clone().set(0,0,0).setComponent(axis,-1).transformDirection(panel.matrixWorld);
+        const back = key.localToWorld(key.position.clone().set(0,0,-.015));
+        const facing = key.position.clone().set(0,0,1).transformDirection(key.matrixWorld).dot(normal);
+        return { id: entity.id, node, gap: back.sub(panel.localToWorld(face)).dot(normal), facing };
+      });
+  });
+  assert.equal(measurements.length,5,"four panel keys and the shared top-panel return are rendered");
+  for (const measurement of measurements) {
+    assert.ok([35,37,39].includes(measurement.node),`${measurement.id} is a child of a real source panel`);
+    assert.ok(Math.abs(measurement.gap-.001)<1e-6,`${measurement.id} is flush against its inner panel: ${JSON.stringify(measurement)}`);
+    assert.ok(measurement.facing>.999999,`${measurement.id} faces out of the inner panel surface`);
+  }
+  return measurements;
+}
 async function open(choice) {
   await page.goto(new URL("?app=cubx&intro=0", base).href, { waitUntil: "domcontentloaded" });
   await page.locator('[data-cubz-choice="0"]').waitFor();
@@ -27,6 +52,7 @@ async function open(choice) {
       exit: visible(world.getEntityObject("cubz-exit")) };
   });
   assert.deepEqual(visible, { keys: 4, exit: true });
+  await assertPanelContact();
 }
 async function clickMesh(id) {
   const point = await page.evaluate(id => {
@@ -104,7 +130,7 @@ try {
     await page.evaluate(() => { window.__GRAPHYSX__.pause(true); window.__GRAPHYSX__.step(3); }); await draw();
     assert.equal((await read()).phase, "idle"); assert.equal((await read()).sharedExit, false);
     assert.equal(await page.evaluate(() => window.__GRAPHYSX_HOST__.world.getEntityObject("cubz-exit").visible), false);
-    console.log(`PASS CubZ menu ${choice + 1}: four real 3D keys and shared return.`);
+    console.log(`PASS CubZ menu ${choice + 1}: four real panel-mounted 3D keys, measured surface contact and top-panel return.`);
   }
   assert.equal(new Set(receipts.map(receipt => receipt.number)).size, 32);
   assert.deepEqual(errors, []);

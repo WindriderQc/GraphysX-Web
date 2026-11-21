@@ -2,7 +2,8 @@
 
 Open `?app=cubx`. Eight source-numbered menus now contain four individually
 identified, bevelled 3D keys each. Their face markings 1–4 match the accessible
-buttons in the control card. The light key beneath them closes the petals and
+buttons in the control card. Two keys sit flush on each lateral petal's inner face.
+The light return key on the upper petal closes the petals and
 returns along the same rotation. It is hidden in menu 0, during movement and in
 the waiting animation; only the active menu's four keys can be picked.
 
@@ -66,6 +67,13 @@ Local actions are ordinary API selections/material commands or the shared camera
 The 32 keys and common exit are ordinary v2 entities; all retain explicit
 `reconstructed-button-model` provenance. Existing native actor payloads are unchanged.
 
+Each lateral menu group is parented to the actual source `Left08`/`Right08`
+panel mesh node. The return key is a child of `Top08`. Mount positions come from
+the reflected MAMD inner-face bounds, with inverse display scale and 1 mm of
+back-face clearance. They inherit the source hinges through ordinary hierarchy,
+including in frozen/exported Studio copies. No world-space grid or duplicate
+animation follows the panels. The control card mirrors the two columns.
+
 Studio handoff and JSON export freeze the visible pose through the existing helper,
 including all keys, hidden menus, user edits and foreign behaviors. Only this
 player's exact playback tracks are removed. These keys have application actions
@@ -76,6 +84,9 @@ navigation callback is serialized into a user's document.
 
 `test/cubz-buttons.test.mjs` checks disjoint numbering/groups, model bounds and
 indices, shared-exit visibility, frozen-pose persistence and safe destination URLs.
+`test/cubz-button-mounts.test.mjs` checks contact, inner-face orientation and panel
+edges for all 33 keys at every opening/closing frame. The real browser measures
+the same panel contact for each menu before clicking its keys.
 The existing mechanics tests still compare all rotation frames with the native
 bind matrices, rigid connectors and outward opening petals.
 
