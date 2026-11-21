@@ -16,6 +16,7 @@
 //   node world-service/replay.mjs <recording dir or .ndjson> --port 18131 [--host 127.0.0.1] [--play]
 
 import { existsSync, readFileSync, statSync } from "node:fs";
+import { once } from "node:events";
 import { createServer } from "node:http";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -115,19 +116,6 @@ export async function startReplayServer(options) {
     flush();
   };
 
-  let timer = null;
-  let heartbeat = null;
-  if (options.realtime !== false) {
-    let last = performance.now();
-    timer = setInterval(() => {
-      const now = performance.now();
-      advance((now - last) / 1000);
-      last = now;
-    }, LOOP_MS);
-    heartbeat = setInterval(() => broadcast(": ping\n\n"), HEARTBEAT_MS);
-    heartbeat.unref?.();
-  }
-
   const info = () => ({
     current_tick: Math.floor(clock.tick), total_ticks: lastTick, first_tick: firstTick, tick_rate: tickHz,
     speed: clock.speed, paused: clock.paused, skip_idle: clock.skipIdle,
@@ -182,7 +170,19 @@ export async function startReplayServer(options) {
     }
   });
 
-  await new Promise((done) => server.listen(options.port ?? 0, options.host ?? "127.0.0.1", done));
+  await once(server.listen(options.port ?? 0, options.host ?? "127.0.0.1"), "listening");
+  let timer = null;
+  let heartbeat = null;
+  if (options.realtime !== false) {
+    let last = performance.now();
+    timer = setInterval(() => {
+      const now = performance.now();
+      advance((now - last) / 1000);
+      last = now;
+    }, LOOP_MS);
+    heartbeat = setInterval(() => broadcast(": ping\n\n"), HEARTBEAT_MS);
+    heartbeat.unref?.();
+  }
   const address = server.address();
   const port = typeof address === "object" && address ? address.port : options.port;
   return {

@@ -47,6 +47,10 @@ or the replay server, for example `http://localhost:5173/?app=island&source=http
   Optional `runId` binds the preparation to one request: repeating it on the current world
   returns the existing identity. Operator callers reconcile lost replies by that identity.
 
+- `GET /readyz` is the Docker and monitoring probe. It returns the same status document as
+  `/healthz`, with HTTP 503 when checkpointing or recording is impaired and HTTP 200 after
+  recovery. Viewers use `/healthz` and `/spectate` to stay live during a persistence failure.
+
 - `GET /snapshot` with `X-Operator-Token: $WORLD_OPERATOR_TOKEN`: the whole state, including
   Rapier's serialised solver. `--resume <file>` (or `WORLD_RESUME_PATH`) continues it bit for
   bit; the same `X-Session` tokens keep working. A snapshot of another world or rules version

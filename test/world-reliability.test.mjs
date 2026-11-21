@@ -1,10 +1,12 @@
 // Reliability contracts against disposable CPU worlds: no browser, model or live service.
 import assert from "node:assert/strict";
 import { before, after, it } from "node:test";
-import { mkdtempSync, readFileSync, rmSync, mkdirSync, writeFileSync, appendFileSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, mkdirSync, rmdirSync, writeFileSync, appendFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 import { build } from "vite";
 import { startWorldServer } from "../world-service/server.mjs";
 import { Archive, atomicSnapshot, verifyCheckpoint } from "../world-service/archive.mjs";
@@ -272,12 +274,58 @@ it("keeps spectators and ticks available at the total archive quota while strict
     const health = (await json(`${running.url}/healthz`)).body;
     assert.equal(health.ok, false); assert.equal(health.live.available, true);
     assert.match(health.recording.error, /quota/);
+    const readiness = await json(`${running.url}/readyz`);
+    assert.equal(readiness.status, 503);
+    assert.deepEqual(readiness.body, health);
     assert.equal(health.tick, 1);
     const stream = await opening(`${running.url}/spectate`);
     assert.equal(stream[0].data.instanceId, running.world.instanceId);
     assert.ok(stream.some(entry => entry.event === "frame"));
   } finally { await running.close(); }
 });
+
+it("reports checkpoint failure through readiness and recovers while spectators stay live", async () => {
+  const snapshotPath = join(temporary, "readiness.json");
+  const running = await start({ snapshotPath });
+  try {
+    const beforeFailure = await json(`${running.url}/healthz`);
+    assert.equal(beforeFailure.status, 200);
+    assert.equal(beforeFailure.body.ok, true);
+    const previousCheckpoint = readFileSync(snapshotPath, "utf8");
+    // Prevent opening the temporary file while leaving the last good checkpoint intact.
+    const blocked = `${snapshotPath}.tmp`;
+    mkdirSync(blocked);
+    running.tick();
+    await running.checkpoint();
+    const health = await json(`${running.url}/healthz`);
+    assert.equal(health.status, 200);
+    assert.equal(health.body.ok, false);
+    assert.equal(health.body.live.available, true);
+    assert.ok(health.body.checkpoint.error);
+    assert.deepEqual(health.body.checkpoint.lastSaved, beforeFailure.body.checkpoint.lastSaved);
+    assert.equal(readFileSync(snapshotPath, "utf8"), previousCheckpoint);
+    assert.equal((await opening(`${running.url}/spectate`))[0].data.tick, 1);
+
+    const degraded = await json(`${running.url}/readyz`);
+    assert.equal(degraded.status, 503);
+    assert.deepEqual(degraded.body, health.body);
+    rmdirSync(blocked);
+    await running.checkpoint();
+    const recovered = await json(`${running.url}/readyz`);
+    assert.equal(recovered.status, 200);
+    assert.equal(recovered.body.ok, true);
+    assert.equal(recovered.body.checkpoint.error, null);
+    assert.equal(recovered.body.checkpoint.lastSaved.tick, 1);
+  } finally { await running.close(); }
+});
+
+for (const service of ["replay", "world", "images"]) {
+  it(`${service} rejects an occupied port and leaves no startup handles`, async () => {
+    const fixture = fileURLToPath(new URL("./support/world-bind-fixture.mjs", import.meta.url));
+    const { stdout } = await promisify(execFile)(process.execPath, [fixture, service, temporary], { timeout: 6000 });
+    assert.match(stdout, /EADDRINUSE rejected; restart healthy/);
+  });
+}
 
 it("serves a live world with failed strict health when persistence paths are unwritable", async () => {
   const blocked = join(temporary, "not-a-directory");

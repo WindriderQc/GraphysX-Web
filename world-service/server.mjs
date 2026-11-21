@@ -6,6 +6,7 @@
 //   GET /observe/image?width&height -> PNG of the agent's first-person view (X-Session)
 //   GET /spectate  SSE: hello (v2 document), frame (poses), entities (added/removed), action
 //   GET /healthz -> {ok, tick, world}                 POST /world {world, force?} (X-Operator-Token)
+//   GET /readyz -> same health body; HTTP 503 when persistence is degraded
 //
 // POST /world is the world selector: it replaces the running island with a fresh one of the
 // named world (`mesa-island`, `living-island`) in the same process. It refuses while agents are
@@ -22,6 +23,7 @@
 // The world itself (TypeScript, bundled by Vite) is passed in, so tests can build it anywhere.
 
 import { randomUUID } from "node:crypto";
+import { once } from "node:events";
 import { createServer } from "node:http";
 import { atomicSnapshot, replayArchives, UUID, sealCheckpoint, verifyCheckpoint } from "./archive.mjs";
 import { SegmentedArchive } from "./segments.mjs";
@@ -143,6 +145,7 @@ export async function startWorldServer(options) {
   const tickTimes = { count: 0, total: 0, max: 0 };
   let recordedActions = world.actions.length;
   let closing = false;
+  let starting = true;
   let shutdown = null;
   const apiMarkdown = () => (typeof options.apiMarkdown === "function" ? options.apiMarkdown(world.worldId) : options.apiMarkdown);
 
@@ -179,11 +182,6 @@ export async function startWorldServer(options) {
       .finally(() => { checkpointPending -= 1; });
     return checkpointTail;
   };
-  await archive.start(world.instanceId);
-  await checkpoint();
-  // Persistence failure keeps strict health false; a valid loaded world remains watchable.
-  record({ kind: "hello", ...hello(), resumedFromTick: inherited ? world.tick : null });
-
   const write = (response, frame) => {
     // A slow viewer is dropped rather than buffered without bound.
     if (response.writableLength > SPECTATOR_BUFFER_LIMIT) { response.end(); spectators.delete(response); return; }
@@ -237,27 +235,10 @@ export async function startWorldServer(options) {
     }
   };
 
-  // Fixed tick against the wall clock; at most 4 catch-up ticks per wake.
-  let timer = null;
-  let heartbeat = null;
-  if (options.realtime !== false) {
-    let last = performance.now();
-    let accumulator = 0;
-    timer = setInterval(() => {
-      const now = performance.now();
-      accumulator = Math.min(accumulator + (now - last) / 1000, 4 / TICK_HZ);
-      last = now;
-      while (accumulator >= 1 / TICK_HZ) { tickOnce(); accumulator -= 1 / TICK_HZ; }
-    }, 1000 / TICK_HZ / 2);
-    heartbeat = setInterval(() => { for (const response of spectators) write(response, ": ping\n\n"); }, HEARTBEAT_MS);
-    heartbeat.unref?.();
-  }
-
-  const checkpointTimer = options.snapshotPath ? setInterval(() => { if (!checkpointPending && !switching && !closing) checkpoint(); }, Math.max(10, options.snapshotEveryMs ?? 60_000)) : null;
-  checkpointTimer?.unref();
   const server = createServer(async (request, response) => {
     response.once("finish", () => { if (closing) server.closeIdleConnections(); });
     try {
+      if (starting) return send(response, 503, { error: "World is starting" }, READ_ONLY_CORS);
       if (closing) return send(response, 503, { error: "World is stopping" });
       const url = new URL(request.url ?? "/", "http://world.local");
       if (await replays.handle(request, response, url)) return;
@@ -277,7 +258,17 @@ export async function startWorldServer(options) {
         return false;
       };
       switch (route) {
-        case "GET /healthz": return send(response, 200, { ok: !checkpointError && !archive.error, live: { available: !closing && !switching }, tick: world.tick, world: world.worldId, ...identity(), forkedFrom: world.forkedFrom, recording: archive.status(), replay: replays.status(), checkpoint: { enabled: Boolean(options.snapshotPath), error: checkpointError, lastSaved: checkpointReceipt } }, READ_ONLY_CORS);
+        case "GET /healthz":
+        case "GET /readyz": {
+          const status = {
+            ok: !checkpointError && !archive.error,
+            live: { available: !closing && !switching },
+            tick: world.tick, world: world.worldId, ...identity(), forkedFrom: world.forkedFrom,
+            recording: archive.status(), replay: replays.status(),
+            checkpoint: { enabled: Boolean(options.snapshotPath), error: checkpointError, lastSaved: checkpointReceipt },
+          };
+          return send(response, route === "GET /readyz" && !status.ok ? 503 : 200, status, READ_ONLY_CORS);
+        }
         case "GET /api.md": return send(response, 200, apiMarkdown());
         case "POST /world": {
           if (!options.operatorToken || request.headers["x-operator-token"] !== options.operatorToken) return send(response, 403, { error: "Operator token required" });
@@ -396,7 +387,37 @@ export async function startWorldServer(options) {
     }
   });
 
-  await new Promise((resolve) => server.listen(options.port ?? 0, options.host ?? "127.0.0.1", resolve));
+  try {
+    // Claim the address before touching the checkpoint or the recording directory.
+    await once(server.listen(options.port ?? 0, options.host ?? "127.0.0.1"), "listening");
+    await archive.start(world.instanceId);
+    await checkpoint();
+    // Persistence failure keeps readiness false; a valid loaded world remains watchable.
+    record({ kind: "hello", ...hello(), resumedFromTick: inherited ? world.tick : null });
+  } catch (error) {
+    const closed = server.listening ? new Promise(resolve => server.close(resolve)) : null;
+    await Promise.all([closed, replays.close(), archive.close()]);
+    throw error;
+  }
+  starting = false;
+
+  // Fixed tick against the wall clock; at most 4 catch-up ticks per wake.
+  let timer = null;
+  let heartbeat = null;
+  if (options.realtime !== false) {
+    let last = performance.now();
+    let accumulator = 0;
+    timer = setInterval(() => {
+      const now = performance.now();
+      accumulator = Math.min(accumulator + (now - last) / 1000, 4 / TICK_HZ);
+      last = now;
+      while (accumulator >= 1 / TICK_HZ) { tickOnce(); accumulator -= 1 / TICK_HZ; }
+    }, 1000 / TICK_HZ / 2);
+    heartbeat = setInterval(() => { for (const response of spectators) write(response, ": ping\n\n"); }, HEARTBEAT_MS);
+    heartbeat.unref?.();
+  }
+  const checkpointTimer = options.snapshotPath ? setInterval(() => { if (!checkpointPending && !switching && !closing) checkpoint(); }, Math.max(10, options.snapshotEveryMs ?? 60_000)) : null;
+  checkpointTimer?.unref();
   const address = server.address();
   const port = typeof address === "object" && address ? address.port : options.port;
   return {
