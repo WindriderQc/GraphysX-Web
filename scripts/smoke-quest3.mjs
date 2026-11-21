@@ -405,12 +405,12 @@ try {
       const slot=vr.input.slots[index];slot.grip.position.fromArray(world);vr.rig.worldToLocal(slot.grip.position);
       slot.grip.quaternion.identity();slot.grip.updateMatrix();vr.input.update(1/60);host.scene.updateMatrixWorld(true);
     };
-    window.__questSelect=name=>{
+    window.__questSelect=(name,controllerX=0)=>{
       const slot=vr.input.slots[0],target=host.scene.getObjectByName(name)||host.world.getEntityObject(name);
       if(!target)throw Error('Missing in-world target: '+name);
       host.scene.updateMatrixWorld(true);
       if(window.__GRAPHYSX_QUEST3__.holding)slot.ray.position.copy(slot.grip.position);
-      else slot.ray.position.set(0,1.4,-.1);
+      else slot.ray.position.set(controllerX,1.4,-.1);
       slot.ray.updateMatrix();slot.ray.updateMatrixWorld(true);
       const origin=slot.ray.getWorldPosition(slot.ray.position.clone()),direction=target.getWorldPosition(origin.clone()).sub(origin).normalize();
       slot.ray.quaternion.setFromUnitVectors(direction.clone().set(0,0,-1),direction);
@@ -437,7 +437,8 @@ try {
   await xr.evaluate(()=>{window.__questSession.visibilityState='visible';window.__questSession.dispatchEvent(new Event('visibilitychange'));});
   await advance(xr,0);
   assert.equal((await audioState(xr)).playing,1);
-  await xr.evaluate(()=>window.__questSelect('nacre-ui:BELVÉDÈRE'));await phase(xr,'complete');
+  // Aim from the right hand, clear of the docked cell in the center of the rig's view.
+  await xr.evaluate(()=>window.__questSelect('nacre-ui:BELVÉDÈRE',.25));await phase(xr,'complete');
   await xr.waitForFunction(()=>window.__GRAPHYSX_QUEST3__.host.world.getEntityObject('nacre-equipment').children[0].levels[1].object.visible);
   receipt.syntheticXrLod=true;
   // Replay, reject another controller stealing/releasing the cell, then cancel

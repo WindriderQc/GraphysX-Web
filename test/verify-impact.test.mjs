@@ -27,7 +27,7 @@ describe("verification by changed area", () => {
       const plan = selectVerification([file]);
       assert.equal(plan.mode, "targeted", file);
       assert.equal(plan.deploy, true, file);
-      assert.deepEqual(names(plan), ["quest3", "standalone", "product-assets", "asset-guard"], file);
+      assert.deepEqual(names(plan), ["quest3", "quest3-controls", "standalone", "product-assets", "asset-guard"], file);
     }
     for (const file of ["scripts/build-quest3-assets.mjs", "scripts/build-nacre-audio.mjs"]) {
       const plan = selectVerification([file]);
