@@ -35,7 +35,7 @@ const RULES = [
   { match: /^(?:ballsy(?:-giant)?\.html|src\/ballsy-[\w-]+\.(?:ts|css)|src\/ballsy\.css)$/, checks: ["ballsy", "ballsy-volcano", "ballsy-giant", "ballsy-setup", "ballsy-entrypoints", "ballsy-camera-finish", "ballsy-contact-visual", "ballsy-shared-vr"], label: "Ballsy local two-player course", deploy: true },
   { match: /^scripts\/fixtures\/ballsy-race-pilot\.mjs$/, checks: ["ballsy-camera-finish"], label: "Ballsy physical race QA driver", deploy: false },
   { match: /^scripts\/(?:(?:package-cyber-race|extract-cyber-race-film|install-cyber-race-gamx)\.mjs|gamx\/[\w-]+\.ps1)$/, checks: [], label: "Cyber Race local packaging tools", deploy: false },
-  { match: /^(?:src\/(?:quest3-(?:showcase|scene)\.ts|quest3-showcase\.css|nacre-mission\.ts)|public\/assets\/quest3\/)/, checks: ["quest3"], label: "NACRE scene and mission", deploy: true },
+  { match: /^(?:src\/(?:quest3-(?:showcase|scene)\.ts|quest3-showcase\.css|nacre-mission\.ts)|public\/assets\/quest3\/)/, checks: family("quest3"), label: "NACRE scene and mission", deploy: true },
   { match: /^scripts\/(?:build-quest3-assets|build-nacre-audio)\.mjs$/, checks: ["quest3", "product-assets"], label: "NACRE offline asset generators", deploy: false },
   { match: /^scripts\/smoke-release-continuity\.mjs$/, checks: [], label: "manual two-build browser smoke", deploy: false },
   { match: /^(?:\.github\/workflows\/deploy\.yml|scripts\/(?:prepare-release-assets|write-release-metadata|smoke-live-release)\.mjs|ops\/)/, checks: BASELINE, label: "deployment configuration", deploy: true },

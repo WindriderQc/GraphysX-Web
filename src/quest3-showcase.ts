@@ -1,4 +1,4 @@
-import { CanvasTexture, Group, Mesh, MeshBasicMaterial, PlaneGeometry, Quaternion, Raycaster, SRGBColorSpace, Vector2, Vector3, type Object3D } from "three";
+import { CanvasTexture, Group, Mesh, MeshBasicMaterial, PlaneGeometry, Quaternion, Raycaster, SRGBColorSpace, Vector2, Vector3, type Intersection, type Object3D } from "three";
 import { PlatformHost } from "./platform-host";
 import { PlatformVr } from "./xr/platform-vr";
 import { QUEST_PROFILES, type QuestProfile } from "./xr/quest-profile";
@@ -40,6 +40,17 @@ function drawPanel(mesh: Mesh<PlaneGeometry,MeshBasicMaterial>, text: string) {
   ctx.textAlign="center";ctx.textBaseline="middle";ctx.font="500 "+Math.round(canvas.height*.3)+"px sans-serif";
   const lines=text.split("\n");lines.forEach((line,i)=>ctx.fillText(line,512,canvas.height*(i+.5)/lines.length,980));mesh.material.map!.needsUpdate=true;
 }
+function visibleInScene(object: Object3D): boolean {
+  for (let ancestor: Object3D | null = object; ancestor; ancestor = ancestor.parent) {
+    if (!ancestor.visible) return false;
+  }
+  return true;
+}
+function hitMaterial(hit: Intersection) {
+  const mesh = hit.object as Mesh;
+  if (!mesh.isMesh) return undefined;
+  return Array.isArray(mesh.material) ? mesh.material[hit.face?.materialIndex ?? 0] : mesh.material;
+}
 type Held = { source: XRInputSource; key: string; anchor: Object3D; offset: Vector3; rotation: Quaternion };
 
 export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void>} {
@@ -47,6 +58,7 @@ export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void
     framing:{position:[4.2,2.9,2.5],target:[0,2,-12]}});
   host.renderer.shadowMap.enabled=false;
   const mission=new NacreMission(host.world,host.api);
+  const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
   const value=new URLSearchParams(location.search).get("quality");
   const profile: QuestProfile=value&&Object.hasOwn(QUEST_PROFILES,value)?value as QuestProfile:"balanced";
   let disposed=false,viewIndex=0,previewView=0,held:Held|null=null,lastCancelled=false,visualReady=false,warming=false,loadVersion=0;
@@ -88,15 +100,29 @@ export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void
   const announce=(text:string)=>{notice=text;noticeUntil=performance.now()+2500;};
   const under=(object:Object3D|undefined,id:string)=>{const target=host.world.getEntityObject(id);while(object){if(object===target)return true;object=object.parent??undefined;}return false;};
   const pickTargets=()=>{
-    // Held cargo must not occlude its own controller ray or the socket click.
     const ids=[NACRE.socket,"nacre-control"];if(mission.phase==="cell")ids.push(NACRE.cell);
     return ids.map(id=>host.world.getEntityObject(id)).filter((o):o is Object3D=>!!o);
   };
+  function blockedBefore(distance: number, ignoreCell = mission.holding): boolean {
+    raycaster.far = Math.max(0, distance - .0001);
+    return raycaster.intersectObject(host.world.group, true).some(hit => {
+      if (!visibleInScene(hit.object) || (ignoreCell && under(hit.object, NACRE.cell))) return false;
+      const material = hitMaterial(hit);
+      return !!material?.visible && !material.transparent && !("wireframe" in material && material.wireframe);
+    });
+  }
+  function pick(includeConsole: boolean) {
+    const targets = pickTargets();
+    if (includeConsole) targets.push(...buttons.map(button => button.mesh));
+    const hit = raycaster.intersectObjects(targets, true)
+      .find(item => visibleInScene(item.object) && hitMaterial(item)?.visible !== false);
+    return hit && !blockedBefore(hit.distance) ? hit : undefined;
+  }
   const aim=(ray:Object3D)=>{
     if(!ray.visible)return undefined;
     raycaster.far=6;
     ray.updateWorldMatrix(true,false);ray.getWorldPosition(raycaster.ray.origin);direction.set(0,0,-1).transformDirection(ray.matrixWorld);raycaster.ray.direction.copy(direction);
-    return raycaster.intersectObjects([...buttons.map(b=>b.mesh),...pickTargets()],true)[0];
+    return pick(true);
   };
   function buzz(source:XRInputSource,value=.25) {
     const actuator=source.gamepad?.hapticActuators?.[0] as {pulse?:(value:number,duration:number)=>Promise<boolean>}|undefined;
@@ -115,7 +141,12 @@ export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void
     if(event.action==="grab"&&mission.phase==="cell"&&!held) {
       event.anchor.updateWorldMatrix(true,false);event.anchor.getWorldPosition(point);
       const cell=host.world.getEntityObject(NACRE.cell)!;cell.getWorldPosition(scratch);
-      const near=point.distanceTo(scratch)<.36;
+      const distance = point.distanceTo(scratch);
+      let near = distance < .36;
+      if (near && distance > 0) {
+        raycaster.ray.set(point, direction.subVectors(scratch, point).normalize());
+        near = !blockedBefore(distance, true);
+      }
       if(near||under(hit?.object,NACRE.cell)) {
         const key="xr:"+vr.input.slots.findIndex(slot=>slot.source===event.source);
         if(mission.take(key)){
@@ -148,7 +179,11 @@ export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void
       if(vr.referenceSpace==="local")vr.rig.position.y+=1.6;
       vr.rig.rotation.y=target.yaw;consoleGroup.position.copy(vr.floorPosition);consoleGroup.rotation.y=target.yaw;
       movingView=false;
-    }else{previewView=index;resizePreview();movingView=true;host.frameView([...target.position],[...target.target],.3);}
+    } else {
+      previewView=index;resizePreview();
+      movingView = !reducedMotion.matches;
+      host.frameView([...target.position], [...target.target], movingView ? .3 : 0);
+    }
     ui.querySelectorAll<HTMLButtonElement>("[data-view]").forEach((button,i)=>button.setAttribute("aria-pressed",String(i===index)));
     if(index===2){(vr.session.session?vr.camera:host.camera).getWorldPosition(point);mission.complete(point);}
   }
@@ -196,7 +231,10 @@ export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void
     announce(resumed?"Votre station est reprise.":"La reprise n’a pas abouti.");
   });
   quality.addEventListener("change",()=>{if(!Object.hasOwn(QUEST_PROFILES,quality.value))return;vrOptions.profile=quality.value as QuestProfile;const url=new URL(location.href);url.searchParams.set("quality",quality.value);history.replaceState(null,"",url);});
-  enter.addEventListener("click",()=>{if(vr.session.session||vr.session.snapshot.phase==="starting")void vr.session.exit();else{if(mission.phase==="standby")mission.begin();void vr.session.enter();}});
+  enter.addEventListener("click",()=>{
+    if(vr.session.session||vr.session.snapshot.phase==="starting")void vr.session.exit();
+    else void vr.session.enter();
+  });
   const keyboard=(event:KeyboardEvent)=>{
     if(event.repeat||vr.session.session||event.ctrlKey||event.metaKey||event.altKey)return;
     const target=event.target as HTMLElement|null;
@@ -211,7 +249,7 @@ export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void
     const rect=host.renderer.domElement.getBoundingClientRect();
     ndc.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);
     raycaster.setFromCamera(ndc,host.camera);raycaster.far=8;
-    const hit=raycaster.intersectObjects(pickTargets(),true)[0];
+    const hit=pick(false);
     if(under(hit?.object,NACRE.cell)&&mission.phase==="cell"){event.preventDefault();event.stopImmediatePropagation();mission.take("desktop");moveHeld();}
     else if(under(hit?.object,NACRE.socket)&&mission.holding){event.preventDefault();event.stopImmediatePropagation();mission.move("desktop",point.fromArray(NACRE.dock),rotation.identity());mission.release("desktop");}
     else if(under(hit?.object,"nacre-control")){event.preventDefault();event.stopImmediatePropagation();mission.activate();}
@@ -221,12 +259,17 @@ export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void
   document.addEventListener("visibilitychange",audible);
   const sessionOff=vr.session.subscribe(({phase})=>{
     ui.dataset.immersive=String(phase==="active");quality.disabled=phase==="active"||phase==="starting";consoleGroup.visible=phase==="active";
+    if (phase === "active" && mission.phase === "standby") mission.begin();
     if(vr.session.session!==lastSession){
       sessionVisibilityOff?.();sessionVisibilityOff=null;lastSession=vr.session.session;
       if(lastSession){const session=lastSession;session.addEventListener("visibilitychange",audible);sessionVisibilityOff=()=>session.removeEventListener("visibilitychange",audible);}
     }
     audible();if(phase==="ready")resizePreview();
   });
+  const motionChanged = () => {
+    if (reducedMotion.matches && movingView && !vr.session.session) view(viewIndex);
+  };
+  reducedMotion.addEventListener("change", motionChanged);
   function resizePreview(){
     if(vr.session.session)return;
     const compact=root.clientWidth<650,width=root.clientWidth,height=root.clientHeight;
@@ -298,14 +341,18 @@ export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void
     if(viewIndex===2&&mission.phase==="ready"){(vr.session.session?vr.camera:host.camera).getWorldPosition(point);mission.complete(point);}
     if(uiClock<.12)return;uiClock=0;
     const phase=mission.phase,progress=mission.progress,diagnostic=host.diagnostics.snapshot();
+    const xrPhase=vr.session.snapshot.phase;
+    const xrFailure = xrPhase === "error" ? (vr.session.session
+      ? "La sortie VR a échoué. Réessayez de quitter la VR."
+      : "L’entrée en VR a échoué. Vérifiez les autorisations du casque, puis réessayez.") : null;
     const failure = failedRequiredModel() ? "Un élément essentiel de la station n’a pas pu être chargé."
       : loadError === "render" ? "La préparation du rendu a échoué."
       : loadError === "context" ? "Le contexte graphique a été perdu."
       : loadError === "timeout" ? "La station met trop de temps à se préparer." : null;
     const incompleteDecor = visualReady && models.some(entity => OPTIONAL_MODELS.has(entity.id) && entity.asset?.status === "error");
     if(mission.notice&&mission.notice!==lastMissionNotice){announce(mission.notice);lastMissionNotice=mission.notice;}
-    status.dataset.error=String(!!failure);
-    const statusText=failure??(!visualReady?"Préparation de la station…":performance.now()<noticeUntil?notice:incompleteDecor?"Une partie du décor est indisponible.":phase?HELP[phase]:"Exploration libre");
+    status.dataset.error=String(!!(failure || xrFailure));
+    const statusText=failure??xrFailure??(!visualReady?"Préparation de la station…":performance.now()<noticeUntil?notice:incompleteDecor?"Une partie du décor est indisponible.":phase?HELP[phase]:"Exploration libre");
     if (status.textContent !== statusText) status.textContent = statusText;
     status.classList.toggle("nacre-loading",!visualReady&&!failure);
     retry.hidden = !failure;
@@ -322,9 +369,8 @@ export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void
     soundButton.setAttribute("aria-pressed",String(mission.muted));soundButton.textContent=mission.muted?"Son coupé":"Son activé";
     const nextLabel=(phase==="complete"?"REJOUER":"CELLULE")+":"+mission.muted;
     if(nextLabel!==buttonLabel){drawPanel(buttons[0].mesh,phase==="complete"?"REJOUER":"CELLULE");drawPanel(buttons[4].mesh,mission.muted?"MUET":"SON");buttonLabel=nextLabel;}
-    const xrPhase=vr.session.snapshot.phase;
     enter.disabled=(!visualReady&&!vr.session.session&&xrPhase!=="starting")||["checking","unsupported","stopping","disposed"].includes(xrPhase);
-    enter.textContent=xrPhase==="starting"?"Annuler":vr.session.session?"Quitter la VR":"Entrer en VR";
+    enter.textContent=xrPhase==="starting"?"Annuler":vr.session.session?"Quitter la VR":xrFailure?"Réessayer la VR":"Entrer en VR";
     stats.textContent=diagnostic.scope+" · "+(diagnostic.observedHz??"—")+" Hz observés\nTrame p95 "+(diagnostic.intervalMs.p95??"—")+" ms · CPU p95 "+(diagnostic.cpuSubmissionMs.p95??"—")+" ms\n"+diagnostic.calls+" appels · "+diagnostic.triangles.toLocaleString("fr-CA")+" triangles\nGPU non mesuré";
     const text=(phase?HELP[phase]:"EXPLORATION LIBRE")+"\n"+(phase==="cell"?"POIGNÉE / PINCEMENT POUR SAISIR":phase==="carrying"?"RELÂCHEZ DANS LE SOCLE":phase==="docked"?"POINTEZ ALLUMER":phase==="charging"||phase==="opening"?Math.round(progress*100)+" %":"NACRE / ORBITAL OBSERVATORY");
     if(text!==drawnPanel){drawPanel(metric,text);drawnPanel=text;}
@@ -368,6 +414,7 @@ export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void
     disposed=true;loadVersion++;readyOff?.();sessionVisibilityOff?.();frameOff();assetOff();sessionOff();mission.dispose();
     window.removeEventListener("resize",resizePreview);window.removeEventListener("keydown",keyboard);window.removeEventListener("pagehide",pageHide);
     window.removeEventListener("storage", storageChanged);
+    reducedMotion.removeEventListener("change", motionChanged);
     canvas.removeEventListener("webglcontextlost", contextLost);
     canvas.removeEventListener("webglcontextrestored", contextRestored);
     document.removeEventListener("visibilitychange",audible);host.renderer.domElement.removeEventListener("pointerdown",pointer,{capture:true});
