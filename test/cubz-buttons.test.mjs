@@ -14,7 +14,10 @@ test("reconstructed keys preserve native numbering and eight disjoint four-butto
     assert.equal(CUBZ_MENUS[menu].buttons.length, 4);
     for (let slot = 0; slot < 4; slot++) {
       const number = cubzButtonNumber(menu, slot), button = buttons.find(button => button.tags.includes(`cubz-button-${number}`));
-      assert.equal(button.parentId, `cubz-menu-${menu}`); assert.match(button.label, new RegExp(`^Btn${number} ·`));
+      assert.equal(button.parentId, `cubz-menu-${menu}${slot < 2 ? "" : "-right"}`); assert.match(button.label, new RegExp(`^Btn${number} ·`));
+      const mount = scene.entities.find(entity => entity.id === button.parentId);
+      assert.ok(mount.tags.includes(`cubz-panel-${slot < 2 ? "Left08" : "Right08"}`));
+      assert.equal(mount.parentId, `cubz-open-n${slot < 2 ? 39 : 35}`);
       assert.ok(button.mesh.positions.every(Number.isFinite));
       assert.ok(button.mesh.indices.every(index => index >= 0 && index < button.mesh.positions.length / 3));
       assert.equal(scene.entities.find(entity => entity.id === button.parentId).visible, false);

@@ -21,9 +21,31 @@ type VectorKey = [number, number, number, number];
 export const CUBZ_COLORS = ["#64d8cb", "#70a8e0", "#b6a2e8", "#df9ab2", "#e5ae6a", "#d3ca83", "#91b797", "#88b4c4"];
 const radiansToDegrees = 180 / Math.PI;
 const reflection = new Matrix4().makeScale(1, 1, -1);
+const nativeDisplayScale = 0.04;
 const nodeId = (actor: CubzActorId, id: number) => `cubz-${actor}-n${id}`;
 export const cubzRigId = (actor: CubzActorId) => `cubz-${actor}-rig`;
 const buttonRoot = (choice: number) => `cubz-menu-${choice}`;
+const buttonRoots = (choice: number) => [buttonRoot(choice), `${buttonRoot(choice)}-right`];
+
+/** Keys are real children of the source panels, never world-space overlays. */
+export function cubzPanelMount(data: CubzSource, panel: "Left08" | "Right08" | "Top08"): Pick<AgentWorldEntityDefinition, "parentId" | "transform"> {
+  const actor = data.actors.open, pivot = actor.nodes.find(node => node.name === panel);
+  const mesh = actor.meshes.find(mesh => actor.nodes[mesh.nodeId].parent === pivot?.id);
+  if (!mesh) throw new Error(`Missing CubZ panel: ${panel}`);
+  const minimum = [Infinity, Infinity, Infinity], maximum = [-Infinity, -Infinity, -Infinity];
+  mesh.positions.forEach((value, index) => {
+    const axis = index % 3, reflected = axis === 2 ? -value : value;
+    minimum[axis] = Math.min(minimum[axis], reflected); maximum[axis] = Math.max(maximum[axis], reflected);
+  });
+  const axis = panel === "Left08" ? 2 : panel === "Right08" ? 0 : 1;
+  const position = minimum.map((value, index) => (value + maximum[index]) / 2) as Tuple3;
+  // All three inner faces point toward the closed core along their negative local
+  // thin axis. The mesh's back bevel is -.015; leave just 1 mm above the panel.
+  position[axis] = minimum[axis] - (0.015 + 0.001) / nativeDisplayScale;
+  return { parentId: nodeId("open", mesh.nodeId), transform: { position,
+    rotationDegrees: panel === "Left08" ? [0, 180, 0] : panel === "Right08" ? [0, -90, 0] : [90, 0, 0],
+    scale: [1 / nativeDisplayScale, 1 / nativeDisplayScale, 1 / nativeDisplayScale] } };
+}
 
 /** Rebuilt tactile key, explicitly separate from every pinned native actor mesh. */
 function buttonMesh(): NonNullable<AgentWorldEntityDefinition["mesh"]> {
@@ -100,7 +122,7 @@ export function buildCubzMenu(data: CubzSource): AgentWorldDefinition {
   for (const id of CUBZ_ACTORS) {
     const actor = data.actors[id];
     entities.push({ id: cubzRigId(id), type: "group", label: `${id} · complete source TVA actor`, visible: id === "rotation",
-      transform: { position: [1.9, 4.6, 2], scale: [0.04, 0.04, 0.04] }, tags: ["cubz-source-rig", "archive", "adapted-display-scale"] });
+      transform: { position: [1.9, 4.6, 2], scale: [nativeDisplayScale, nativeDisplayScale, nativeDisplayScale] }, tags: ["cubz-source-rig", "archive", "adapted-display-scale"] });
     if (id === "screensaver") {
       const centre = data.actors.rotation.nodes.find(node => node.name === "GlobalCube")!.worldMatrix.slice(12, 15) as Tuple3;
       centre[2] *= -1;
@@ -120,12 +142,13 @@ export function buildCubzMenu(data: CubzSource): AgentWorldDefinition {
   }
   const keyMesh = buttonMesh();
   for (let choice = 0; choice < 8; choice++) {
-    entities.push({ id: buttonRoot(choice), type: "group", label: `Menu ${choice + 1} · ${CUBZ_MENUS[choice].label} · rebuilt`, visible: false,
-      transform: { position: [1.9, 5.6, 3.08] }, tags: ["cubz-adapted-buttons", "missing-source-button-geometry"] });
+    for (const [side, panel] of (["Left08", "Right08"] as const).entries()) entities.push({
+      id: buttonRoots(choice)[side], type: "group", label: `Menu ${choice + 1} · ${side === 0 ? "Panneau gauche" : "Panneau droit"}`, visible: false,
+      ...cubzPanelMount(data, panel), tags: ["cubz-adapted-buttons", "missing-source-button-geometry", "cubz-panel-mount", `cubz-panel-${panel}`] });
     CUBZ_MENUS[choice].buttons.forEach(({ action, label }, index) => {
-      entities.push({ id: cubzButtonId(choice, action), type: "mesh", parentId: buttonRoot(choice),
+      entities.push({ id: cubzButtonId(choice, action), type: "mesh", parentId: buttonRoots(choice)[index < 2 ? 0 : 1],
       label: `Btn${cubzButtonNumber(choice, index)} · ${label} · reconstructed model / current action`,
-      mesh: keyMesh, transform: { position: [index % 2 ? 0.4 : -0.4, index < 2 ? 0.25 : -0.25, 0] },
+      mesh: keyMesh, transform: { position: [0, index % 2 ? -0.36 : 0.36, 0] },
       material: { color: CUBZ_COLORS[choice], emissive: CUBZ_COLORS[choice], emissiveIntensity: 0.15, metalness: 0.25, roughness: 0.4 },
       tags: [`cubz-action-${action}`, `cubz-button-${cubzButtonNumber(choice, index)}`, "adapted-menu-action", "reconstructed-button-model"] });
       entities.push({ id: `cubz-slot-${choice}-${index}`, type: "mesh", parentId: cubzButtonId(choice, action), label: `Slot ${index + 1} · current marking`, mesh: slotGlyph(index),
@@ -133,7 +156,7 @@ export function buildCubzMenu(data: CubzSource): AgentWorldDefinition {
     });
   }
   entities.push({ id: "cubz-exit", type: "group", label: "BtnExit · reconstructed shared return key", visible: false,
-    transform: { position: [1.9, 4.93, 3.08] }, tags: ["reconstructed-button-model", "cubz-shared-exit"] });
+    ...cubzPanelMount(data, "Top08"), tags: ["reconstructed-button-model", "cubz-shared-exit", "cubz-panel-mount", "cubz-panel-Top08"] });
   entities.push({ id: "cubz-exit-face", type: "mesh", parentId: "cubz-exit", label: "Refermer et revenir aux huit cubes", mesh: keyMesh,
     transform: { scale: [2.25, .7, 1] }, material: { color: "#d7e9e3", metalness: .35, roughness: .32 }, tags: ["cubz-action-close"] });
   entities.push({ id: "cubz-exit-arrow", type: "mesh", parentId: "cubz-exit", label: "Return arrow · reconstructed marking",
@@ -179,7 +202,7 @@ export function cubzSourceTrack(actor: CubzActor, track: SourceTrack, rangeId: n
 
 export type CubzMenuState = { phase: "idle" | "rotating" | "opening" | "opened" | "closing" | "returning" | "screensaver" | "unavailable"; choice: number | null; progress: number };
 const ownsPlayback = (entity: AgentWorldEntityDefinition, behavior: { id?: string }): boolean =>
-  /^cubz-(?:(?:rotation|open|screensaver)-(?:n\d+|rig)|screensaver-pivot|menu-[0-7]|exit)$/.test(entity.id ?? "") &&
+  /^cubz-(?:(?:rotation|open|screensaver)-(?:n\d+|rig)|screensaver-pivot|menu-[0-7](?:-right)?|exit)$/.test(entity.id ?? "") &&
   (behavior.id === "cubz-source" || behavior.id === "cubz-visibility" || /^cubz-program-(?:open|return|saver)-[0-7]$/.test(behavior.id ?? ""));
 export function cubzMenuState(document: AgentWorldDefinition | null, elapsed: number): CubzMenuState {
   const root = document?.entities.find(entity => entity.id === cubzRigId("rotation"));
@@ -205,7 +228,7 @@ export function cubzResetCommands(document: AgentWorldDefinition): AgentWorldCom
     if (owned.length && entity.tags?.some(tag => tag === "cubz-source-node" || tag === "cubz-rigid-pivot")) commands.push({ op: "update", id: entity.id!, patch: { transform: entity.transform } });
   }
   for (const actor of CUBZ_ACTORS) commands.push({ op: "update", id: cubzRigId(actor), patch: { visible: actor === "rotation" } });
-  for (let choice = 0; choice < 8; choice++) commands.push({ op: "update", id: buttonRoot(choice), patch: { visible: false } });
+  for (let choice = 0; choice < 8; choice++) for (const id of buttonRoots(choice)) if (document.entities.some(entity => entity.id === id)) commands.push({ op: "update", id, patch: { visible: false } });
   if (document.entities.some(entity => entity.id === "cubz-exit")) commands.push({ op: "update", id: "cubz-exit", patch: { visible: false } });
   return commands;
 }
@@ -230,7 +253,7 @@ export function cubzSequenceCommands(data: CubzSource, document: AgentWorldDefin
     visibility(cubzRigId("rotation"), mode === "open" ? (rotationTime ? [[0, true], [rotationTime, false]] : [[0, false]]) : [[0, false], [openTime, true]], true);
     visibility(cubzRigId("open"), mode === "open" ? (rotationTime ? [[0, false], [rotationTime, true]] : [[0, true]]) : [[0, true], [openTime, false]]);
     visibility(cubzRigId("screensaver"), [[0, false]]);
-    for (let i = 0; i < 8; i++) visibility(buttonRoot(i), mode === "open" && i === choice ? [[0, false], [duration, true]] : [[0, false]]);
+    for (let i = 0; i < 8; i++) for (const id of buttonRoots(i)) if (document.entities.some(entity => entity.id === id)) visibility(id, mode === "open" && i === choice ? [[0, false], [duration, true]] : [[0, false]]);
     if (document.entities.some(entity => entity.id === "cubz-exit")) visibility("cubz-exit", mode === "open" ? [[0, false], [duration, true]] : [[0, false]]);
   }
   const actors: CubzActorId[] = rotationTime ? ["rotation", "open"] : ["open"];
