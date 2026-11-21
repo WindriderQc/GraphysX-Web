@@ -359,19 +359,33 @@ const primeRendererResources = (page, label, timeout = SMOKE_TIMEOUT) => page.ev
   });
   const startFrame = host.frameCount;
   try {
-    await new Promise((resolve, reject) => {
+    const resources = await new Promise((resolve, reject) => {
       const startedAt = performance.now();
+      let lastFrame = startFrame;
+      let previousResources = null;
       const poll = () => {
-        if (host.frameCount > startFrame) resolve();
-        else if (performance.now() - startedAt >= timeoutMs) reject(new Error(`${sampleLabel}: host frame did not advance`));
-        else window.setTimeout(poll, 50);
+        if (host.frameCount > lastFrame) {
+          const current = {
+            geometries: host.renderer.info.memory.geometries,
+            textures: host.renderer.info.memory.textures,
+          };
+          // A plain world reload reproduced 28 -> 29 -> 29 textures over its first
+          // completed frames, without a mission. Prime shared GPU allocations before
+          // taking the baseline; the lifecycle comparisons below remain exact.
+          if (previousResources && current.geometries === previousResources.geometries
+            && current.textures === previousResources.textures) { resolve(current); return; }
+          lastFrame = host.frameCount;
+          previousResources = current;
+        }
+        if (performance.now() - startedAt >= timeoutMs) {
+          reject(new Error(`${sampleLabel}: renderer resources did not settle across completed frames`)); return;
+        }
+        host.requestRender();
+        window.setTimeout(poll, 50);
       };
       poll();
     });
-    return {
-      geometries: host.renderer.info.memory.geometries,
-      textures: host.renderer.info.memory.textures,
-    };
+    return resources;
   } finally {
     for (const [object, frustumCulled] of previous) object.frustumCulled = frustumCulled;
   }
