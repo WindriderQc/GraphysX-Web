@@ -1,0 +1,19 @@
+.gx-atmel .gx-cubz-caption b { max-width: 430px; }
+.gx-atmel-views { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; position: sticky; top: -16px; z-index: 2; padding: 6px 0; background: #12303b; }
+.gx-atmel-views button { flex: 1 1 100px; min-height: 44px; padding: 8px; font-size: 11px; }
+.gx-atmel-views button[aria-pressed="true"] { color: #102a2e; background: var(--cubz-accent); border-color: var(--cubz-accent); }
+.gx-atmel .gx-atmel-views button[aria-pressed="true"]:hover { color: #102a2e; background: #b3f3d8; }
+.gx-atmel[data-view="panel"] .gx-cubz-choices, .gx-atmel[data-view="panel"] .gx-cubz-status, .gx-atmel[data-view="panel"] .gx-cubz-controls, .gx-atmel[data-view="panel"] .gx-cubz-secondary { display: none; }
+.gx-atmel .gx-cubz-inside a { display: flex; align-items: center; min-height: 44px; border: 1px solid #83b7bd38; border-radius: 8px; color: var(--cubz-ink); font-size: 11px; text-decoration: none; padding: 8px 10px; box-sizing: border-box; }
+.gx-atmel .gx-cubz-inside a:hover { border-color: var(--cubz-accent); }
+.gx-atmel-panel { border-top: 1px solid #8cbbba33; margin: 16px 0; padding-top: 14px; }
+.gx-atmel-panel h2 { font-size: 15px; }
+.gx-atmel-panel p { color: var(--cubz-muted); font-size: 11px; line-height: 1.6; }
+.gx-atmel-panel > div:not(.gx-atmel-indicators) { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.gx-atmel-panel label { display: grid; gap: 7px; font-size: 10px; color: var(--cubz-muted); }
+.gx-atmel-panel input { min-width: 0; min-height: 44px; width: 100%; box-sizing: border-box; border: 1px solid #83b7bd55; background: #0d2832; border-radius: 8px; padding: 6px 8px; color: var(--cubz-ink); font: inherit; font-size: 16px; color-scheme: dark; }
+.gx-atmel-panel input { scroll-margin-top: 110px; }
+.gx-atmel-indicators { display: flex; gap: 8px; margin-top: 10px; }
+.gx-atmel-indicators button { min-height: 44px; flex: 1; font-size: 11px; }
+.gx-atmel-clock-refresh { width: 100%; margin-top: 9px; min-height: 44px; font-size: 11px; }
+.gx-atmel a:focus-visible, .gx-atmel input:focus-visible { outline: 2px solid var(--cubz-accent); outline-offset: 3px; }

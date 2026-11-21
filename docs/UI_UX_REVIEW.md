@@ -142,6 +142,13 @@ publique et les contrôles après activation sont enregistrés dans
 
 ## Ce qui reste à améliorer, dans l'ordre
 
+La reprise CubX/Atmel ajoute une autre composition source au même point d’entrée CubZ,
+recherchable par « Atmel », avec trois vues et une copie modifiable dans le Studio.
+Les 32 boutons internes CubZ restent une famille distincte, encore non retrouvée.
+Le rechargement des scènes personnelles cadre désormais la géométrie visible après le
+chargement des modèles, dans l’espace dégagé du Studio. Ce cadrage s’annule si une autre
+scène ou un geste de caméra prend la main. Voir [CUBX_ATMEL.md](CUBX_ATMEL.md).
+
 1. **Studio abordable par tâche : implémenté dans ce lot.** Sélection, transformations,
    couleur par pièce native, simulation, annulation et sauvegarde utilisent le même éditeur.
    Le cadrage évite les panneaux ; sur téléphone il replie l’inspecteur. Mode complet garde

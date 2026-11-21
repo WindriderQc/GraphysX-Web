@@ -1,5 +1,6 @@
 import { Box3, MathUtils, Object3D, Raycaster, Vector2, Vector3, type PerspectiveCamera, type Scene, type WebGLRenderer } from "three";
 import { LOCAL_SCENE_PREFIX } from "./local-scenes";
+import { visibleSceneBounds } from "./visible-scene-bounds";
 import { LEGACY_EDITOR_DRAFT_KEY, EDITOR_DRAFT_PREFIX, EDITOR_SLOT_INDEX_KEY, readEditorDraft, browserSceneStorage, readPersonalScene, savePersonalScene, datePersonalScene, type EditorDraft, type PersonalSceneEntry } from "./personal-scenes";
 import { mountSceneSaveDialog } from "./personal-scenes-view";
 import { mountSimpleStudio, type SimpleStudio, type StudioAction } from "./studio-simple";
@@ -683,7 +684,13 @@ export class PlatformEditor {
   private focusSelection(): void {
     const object = this.selectedObject;
     if (!object) return;
-    const bounds = new Box3().setFromObject(object);
+    this.focusBounds(new Box3().setFromObject(object));
+  }
+
+  /** Fit a loaded scene using the same protected viewport as ordinary object framing. */
+  frameVisibleWorld(): void { this.focusBounds(visibleSceneBounds(this.deps.world.group)); }
+
+  private focusBounds(bounds: Box3): void {
     if (bounds.isEmpty()) return;
     const center = bounds.getCenter(new Vector3());
     const radius = Math.max(bounds.getSize(new Vector3()).length() / 2, 0.5);

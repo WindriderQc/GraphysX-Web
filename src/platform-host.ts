@@ -292,6 +292,7 @@ export class PlatformHost {
   private postOverride: AgentWorldPost | null = null;
   private frame = 0;
   private disposed = false;
+  private cancelLoadedStudioFrame: (() => void) | null = null;
   private framesSuspended = false;
   private rendersOnDemand = false;
   private renderRequested = false;
@@ -820,6 +821,29 @@ export class PlatformHost {
       duration,
     );
     return true;
+  }
+
+  /** Fit a personal scene after native model bounds arrive, without stealing a later edit. */
+  frameLoadedStudio(): void {
+    this.cancelLoadedStudioFrame?.();
+    const initial = this.api.state();
+    if (!initial || this.mode !== "editor" || !this.editor) return;
+    const canvas = this.renderer.domElement;
+    let unsubscribe = () => {}, cancelled = false;
+    const cancel = () => {
+      if (cancelled) return; cancelled = true; unsubscribe();
+      canvas.removeEventListener("pointerdown", cancel, true); canvas.removeEventListener("wheel", cancel, true);
+      if (this.cancelLoadedStudioFrame === cancel) this.cancelLoadedStudioFrame = null;
+    };
+    const fit = () => {
+      const current = this.api.state();
+      if (this.disposed || this.mode !== "editor" || !current || current.world.id !== initial.world.id || current.revision !== initial.revision) { cancel(); return; }
+      if (current.entities.some(entity => entity.type === "model" && entity.asset?.status === "loading")) return;
+      cancel(); this.cancelCameraMove(); this.editor?.frameVisibleWorld();
+    };
+    this.cancelLoadedStudioFrame = cancel;
+    canvas.addEventListener("pointerdown", cancel, true); canvas.addEventListener("wheel", cancel, { capture: true, passive: true });
+    unsubscribe = this.subscribeFrame(fit); fit();
   }
 
   /** True while the entry move is still playing. Goes false when it lands or is interrupted. */
@@ -1696,6 +1720,7 @@ export class PlatformHost {
   }
 
   dispose(): void {
+    this.cancelLoadedStudioFrame?.();
     if (this.disposed) return;
     this.disposed = true;
     delete document.documentElement.dataset.gxMode;

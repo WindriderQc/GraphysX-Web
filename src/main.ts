@@ -286,6 +286,15 @@ if (appParam === "quest3") {
         else host.editor?.showStudio();
       });
     };
+    const frameLoadedStudio = (): void => {
+      const initial = host.api.state();
+      if (!initial) return;
+      void host.editorReady().then(editor => {
+        const current = host.api.state();
+        if (!editor || host.mode !== "editor" || nestorBlockedByLiveSession() || current?.world.id !== initial.world.id || current.revision !== initial.revision) return;
+        editor.showViewport(); host.frameLoadedStudio();
+      });
+    };
     const personalSceneLocation = (name: string | null, draftKey: string | null = null): void => {
       if (nestorBlockedByLiveSession()) return;
       const target = new URL(import.meta.env.BASE_URL, window.location.href);
@@ -320,7 +329,7 @@ if (appParam === "quest3") {
             host.applyEnvironment(); restoreShowroomOnEditorExit = true;
             await host.enterEditor();
             if (host.mode !== "editor" || nestorBlockedByLiveSession()) return null;
-            editor.showStudio(); editor.showViewport(); host.frameWorld();
+            editor.showStudio(); editor.showViewport(); host.frameLoadedStudio();
             personalSceneLocation(entry.kind === "scene" ? entry.name : null, entry.kind === "draft" ? entry.key : null);
             requestShowroomInteraction(false);
             return null;
@@ -581,11 +590,13 @@ if (appParam === "quest3") {
       }
       if (id === "cubx") {
         showroomEnvironment?.(); showroomEnvironment = null;
-        void import("./cubz-menu-app").then(async ({ mountCubzMenu }) => {
-          appSurface = await mountCubzMenu(root, host, () => {
+        const sourceAtmel = new URLSearchParams(location.search).get("view") === "atmel";
+        const launchRevision = host.api.state()?.revision;
+        const exitCubx = () => {
             appSurface?.dispose(); appSurface = null;
             window.location.assign(import.meta.env.BASE_URL);
-          }, () => {
+        };
+        const studioCubx = () => {
             appSurface?.dispose(); appSurface = null; applicationOpen = false;
             returnFromApplicationStudio = true;
             const studioLocation = new URL(import.meta.env.BASE_URL, window.location.href);
@@ -595,8 +606,18 @@ if (appParam === "quest3") {
             sceneBrowser?.setEnabled(!nestorBlockedByLiveSession());
             host.applyEnvironment();
             enterBrowsedEditor();
-          });
-        }).catch((error: unknown) => showStartupError(root, error));
+            if (sourceAtmel && host.api.state()?.world.id === "archive-cubx-atmel-pose") frameLoadedStudio();
+        };
+        const mounted = sourceAtmel
+          ? import("./cubx-atmel-app").then(({ mountCubxAtmel }) => {
+              if (nestorBlockedByLiveSession() || !applicationOpen || host.api.state()?.revision !== launchRevision) throw new DOMException("World changed before archive loading", "AbortError");
+              return mountCubxAtmel(root, host, exitCubx, studioCubx, () => !nestorBlockedByLiveSession() && applicationOpen);
+            })
+          : import("./cubz-menu-app").then(({ mountCubzMenu }) => mountCubzMenu(root, host, exitCubx, studioCubx));
+        void mounted.then(surface => { appSurface = surface; }).catch((error: unknown) => {
+          if (error instanceof DOMException && error.name === "AbortError") { applicationOpen = false; syncFrontDoor(); return; }
+          showStartupError(root, error);
+        });
         return true;
       }
       if (id === "maison") {
@@ -1274,8 +1295,8 @@ if (appParam === "quest3") {
             {
               id: "archive-cubz-menu", label: "CubZ · le menu retrouvé",
               openLabel: "Ouvrir le menu 3D",
-              summary: "Choisis un des huit blocs : les acteurs complets pivotent, s’ouvrent, révèlent quatre actions et reviennent en place. Emporte une pose dans le Studio.",
-              meta: "3 acteurs TVA · 44 maillages chacun · géométrie et pivots sources · boutons internes adaptés",
+              summary: "Choisis un des huit blocs du menu CubZ, ou explore aussi l’accueil Atmel retrouvé : Terre, panneau et afficheurs. Emporte une scène dans le Studio.",
+              meta: "CubZ : 3 acteurs TVA · accueil CubX Atmel accessible depuis le menu · géométrie et pivots sources · navigation adaptée",
               open: () => {
                 window.location.assign(import.meta.env.BASE_URL + "?app=cubx");
                 return new Promise<void>(() => {});
@@ -1704,7 +1725,7 @@ if (appParam === "quest3") {
         const local = storage.browserSceneStorage(), entry = local ? storage.readPersonalScene(local, localDraft) : null;
         if (!entry || entry.kind !== "draft" || !editor) throw new Error("Ce brouillon n’est plus disponible. Retrouve tes autres scènes dans Mes créations.");
         const error = editor.openPersonalScene(entry); if (error) throw new Error(error);
-        editor.showStudio(); editor.showViewport(); host.frameWorld();
+        editor.showStudio(); editor.showViewport(); host.frameLoadedStudio();
       }).catch((error: unknown) => showStartupError(root, error));
     } else if (editorFirst && localScene && !liveSessionRequested && !storeScene) {
       personalWorld = true;
@@ -1712,7 +1733,7 @@ if (appParam === "quest3") {
       if (!opened.ok) throw new Error(opened.error ?? "Local scene could not be opened");
       document.title = localScene + " · GraphysX";
       if (params.get("paused") === "1") host.api.pause(true);
-      host.frameView([9, 6.8, 15], [0, 1.4, 0], 0);
+      frameLoadedStudio();
     } else if (directSceneApp) {
       openApplication(appParam);
     } else if (!editorFirst) {

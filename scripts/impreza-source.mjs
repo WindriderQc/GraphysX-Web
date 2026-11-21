@@ -10,7 +10,7 @@ export function meshBounds(positions) {
 }
 
 /** Counted TV3D mesh layout; do not scan arbitrary vertex bytes for chunk-like strings. */
-export function decodeImprezaTvm(bytes, source) {
+export function decodeTvmGeometry(bytes, source) {
   assert.ok(bytes.length >= 16, "Truncated TVM header");
   assert.equal(bytes.toString("latin1", 0, 3), "!Dd", "Unsupported TVM magic");
   assert.equal(bytes.readUInt32LE(12), 16, "Unsupported TVM chunk start");
@@ -52,13 +52,22 @@ export function decodeImprezaTvm(bytes, source) {
     return { materialIndex, firstVertex, vertexCount: vertices, firstFace, triangleCount: faces };
   });
   assert.equal(groups.reduce((sum, group) => sum + group.triangleCount, 0), triangleCount, "TVM groups do not cover every face");
-  const materialRecords = chunks.filter(chunk => /^MGR[34]$/.test(chunk.tag));
+  const materialRecords = chunks.filter(chunk => /^(MGR[34]|MGRP)$/.test(chunk.tag));
   assert.equal(materialRecords.length, 1, "Unsupported TVM material record version");
-  assert.equal(materialRecords[0].size, materialCount * (materialRecords[0].tag === "MGR3" ? 136 : 172));
+  // Earlier menu exports carry a counted 416-byte MGRP record. Keep it opaque:
+  // their host overrides the material, while the geometric groups remain exact.
+  assert.equal(materialRecords[0].size, materialCount * ({ MGR3: 136, MGR4: 172, MGRP: 416 }[materialRecords[0].tag]));
   return { source, sha256: sourceSha256(bytes), bytes: bytes.length, vertexCount, triangleCount, materialCount,
     positions, normals, uvs, indices, faceMaterials, groups, bounds: meshBounds(positions),
     materialRecordVersion: materialRecords[0].tag, materialRecordSha256: sourceSha256(bytes.subarray(materialRecords[0].start, materialRecords[0].start + materialRecords[0].size)),
     trailerBytes: bytes.length - offset, trailerSha256: sourceSha256(bytes.subarray(offset)) };
+}
+
+/** Vehicle callers retain their existing, narrower material-layout contract. */
+export function decodeImprezaTvm(bytes, source) {
+  const mesh = decodeTvmGeometry(bytes, source);
+  assert.match(mesh.materialRecordVersion, /^MGR[34]$/, "Unsupported vehicle material record version");
+  return mesh;
 }
 
 /** Explicit native left-handed -> Web right-handed boundary, preserving source normals/UVs. */
