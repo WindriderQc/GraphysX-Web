@@ -3,8 +3,8 @@
 //
 // Lines: {kind: "hello", format, tickHz, tick, document, ids, resumedFromTick}, {kind: "frame",
 // tick, t, poses}, {kind: "entities", tick, added?, removed?}, {kind: "action", tick, agent,
-// input, result}. A resumed world appends a new hello to the same file; its timeline replaces
-// whatever the old one recorded after the resumed tick, so the merged timeline stays monotonic.
+// input, result}. In a recording with several hellos, a resumed timeline replaces what the
+// old one recorded after the resumed tick.
 
 const STREAM_FORMAT = "graphysx-world-stream/v1";
 
@@ -32,7 +32,6 @@ export function parseRecording(text) {
   let changes = [];
   let actions = [];
   let skipped = 0;
-  const trim = (list, tick) => list.filter((entry) => entry.tick <= tick);
   for (const line of text.split("\n")) {
     if (!line.trim()) continue;
     let entry;
@@ -43,18 +42,29 @@ export function parseRecording(text) {
       if (rest.format !== STREAM_FORMAT || !rest.document || !Array.isArray(rest.document.entities)) { skipped += 1; continue; }
       while (hellos.length && hellos[hellos.length - 1].tick >= rest.tick) hellos.pop();
       hellos.push(rest);
-      // At the resume tick, the new hello replaces the old branch's pose too.
+      // The hello is authoritative at its tick. Changes and poses written before it
+      // at that tick belong to the old branch; lines written after it still apply.
       frames = frames.filter((frame) => frame.tick < rest.tick);
-      changes = trim(changes, rest.tick);
-      actions = trim(actions, rest.tick);
-    } else if (kind === "frame" && Array.isArray(rest.poses)) frames.push(rest);
-    else if (kind === "entities") changes.push(rest);
-    else if (kind === "action" && typeof rest.agent === "string") actions.push(rest);
-    else skipped += 1;
+      changes = changes.filter((change) => change.tick < rest.tick);
+      actions = actions.filter((action) => action.tick <= rest.tick);
+      continue;
+    }
+    let stream;
+    if (kind === "frame" && Array.isArray(rest.poses)) stream = frames;
+    else if (kind === "entities") stream = changes;
+    else if (kind === "action" && typeof rest.agent === "string") stream = actions;
+    // The writer can emit an action after the frame of the next tick. Only compare
+    // entries in the same stream; scene state must also be at or after its hello.
+    const sceneStart = kind === "action" ? -Infinity : (hellos.at(-1)?.tick ?? -Infinity);
+    if (!stream || rest.tick < Math.max(sceneStart, stream.at(-1)?.tick ?? -Infinity)) {
+      skipped += 1;
+      continue;
+    }
+    stream.push(rest);
   }
   if (!hellos.length) throw new Error("This recording has no hello line: it is not a GraphysX world recording");
   const firstTick = hellos[0].tick;
-  const lastTick = Math.max(firstTick, frames.at(-1)?.tick ?? firstTick, changes.at(-1)?.tick ?? firstTick, actions.at(-1)?.tick ?? firstTick);
+  const lastTick = Math.max(hellos.at(-1).tick, frames.at(-1)?.tick ?? firstTick, changes.at(-1)?.tick ?? firstTick, actions.at(-1)?.tick ?? firstTick);
   return { tickHz: finite(hellos[0].tickHz) ? hellos[0].tickHz : 60, firstTick, lastTick, hellos, frames, changes, actions, skipped };
 }
 
@@ -68,7 +78,7 @@ export function helloAt(recording, tick) {
   const entities = base.document.entities.map((entity) => ({ ...entity }));
   const ids = new Map(Object.entries(base.ids ?? {}).map(([numeric, id]) => [Number(numeric), id]));
   for (const change of recording.changes) {
-    if (change.tick <= base.tick) continue;
+    if (change.tick < base.tick) continue;
     if (change.tick > tick) break;
     const gone = new Set();
     for (const numeric of change.removed ?? []) {

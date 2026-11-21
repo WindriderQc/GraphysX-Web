@@ -131,6 +131,7 @@ export async function startReplayServer(options) {
   const info = () => ({
     current_tick: Math.floor(clock.tick), total_ticks: lastTick, first_tick: firstTick, tick_rate: tickHz,
     speed: clock.speed, paused: clock.paused, skip_idle: clock.skipIdle,
+    ...(recording.skipped > 0 ? { skipped_lines: recording.skipped } : {}),
   });
 
   const server = createServer((request, response) => {
@@ -149,7 +150,8 @@ export async function startReplayServer(options) {
         clock.paused = true;
         return send(response, 200, info());
       case "POST /replay/seek": {
-        const tick = Number(url.searchParams.get("tick"));
+        const rawTick = url.searchParams.get("tick");
+        const tick = rawTick?.trim() ? Number(rawTick) : NaN;
         if (!Number.isFinite(tick)) return send(response, 400, { error: "seek needs ?tick=<number>" });
         seek(tick);
         return send(response, 200, info());
@@ -210,6 +212,6 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   }
   const recording = loadRecording(positionals[0]);
   const running = await startReplayServer({ recording, host: values.host ?? "127.0.0.1", port: Number(values.port ?? 18131), play: values.play });
-  console.log(`graphysx world replay on ${running.url} (ticks ${recording.firstTick}–${recording.lastTick}, ${recording.frames.length} frames, ${recording.actions.length} actions${recording.skipped ? `, ${recording.skipped} unreadable lines skipped` : ""})`);
+  console.log(`graphysx world replay on ${running.url} (ticks ${recording.firstTick}–${recording.lastTick}, ${recording.frames.length} frames, ${recording.actions.length} actions${recording.skipped ? `, ${recording.skipped} invalid or out-of-order lines skipped` : ""})`);
   for (const signal of ["SIGINT", "SIGTERM"]) process.once(signal, async () => { await running.close(); process.exit(0); });
 }

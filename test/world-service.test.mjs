@@ -14,6 +14,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "vite";
 import { startWorldServer } from "../world-service/server.mjs";
 import { helloAt, parseRecording } from "../world-service/recording.mjs";
+import { startReplayServer } from "../world-service/replay.mjs";
+import { recordingParts } from "../world-service/segments.mjs";
+import { loadStartupSnapshot } from "../world-service/startup.mjs";
+import { importBrowserModule } from "./support/import-browser-module.mjs";
 
 const root = new URL("..", import.meta.url);
 const fixture = JSON.parse(readFileSync(new URL("fixtures/mesa-island-observe.json", import.meta.url), "utf8"));
@@ -596,34 +600,129 @@ describe("viewers and first-person images (phase 3)", () => {
   });
 });
 
-describe("recording rates (living island, stepped by hand)", () => {
+describe("world recordings (stepped by hand)", () => {
   /** A spectator stream: `until(done)` reads events until `done(events)` or the deadline. */
   async function spectate(url) {
     const controller = new AbortController();
     const response = await fetch(`${url}/spectate`, { signal: controller.signal });
+    assert.equal(response.status, 200);
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     const events = [];
     let buffer = "";
     const until = async (done, ms = 3000) => {
-      const deadline = Date.now() + ms;
-      while (!done(events) && Date.now() < deadline) {
-        const chunk = await reader.read();
-        if (chunk.done) break;
-        buffer += decoder.decode(chunk.value);
-        let cut;
-        while ((cut = buffer.indexOf("\n\n")) >= 0) {
-          const block = buffer.slice(0, cut);
-          buffer = buffer.slice(cut + 2);
-          const name = /^event: (.+)$/m.exec(block)?.[1];
-          const data = /^data: (.+)$/m.exec(block)?.[1];
-          if (name && data) events.push({ name, data: JSON.parse(data) });
+      const deadline = setTimeout(() => controller.abort(new Error("Timed out waiting for spectator events")), ms);
+      try {
+        while (!done(events)) {
+          const chunk = await reader.read();
+          assert.equal(chunk.done, false, "spectator closed before the expected event");
+          buffer += decoder.decode(chunk.value, { stream: true });
+          let cut;
+          while ((cut = buffer.indexOf("\n\n")) >= 0) {
+            const block = buffer.slice(0, cut);
+            buffer = buffer.slice(cut + 2);
+            const name = /^event: (.+)$/m.exec(block)?.[1];
+            const data = /^data: (.+)$/m.exec(block)?.[1];
+            if (name && data) events.push({ name, data: JSON.parse(data) });
+          }
         }
-      }
-      return events;
+        return events;
+      } finally { clearTimeout(deadline); }
     };
     return { until, close: () => controller.abort() };
   }
+
+  it("reconstructs the same scene in continuous replay and after seeking across a service restart", async () => {
+    const feed = await importBrowserModule(new URL("../src/island-world-feed.ts", import.meta.url));
+    const root = mkdtempSync(join(tmpdir(), "world-replay-restart-"));
+    const recordDir = join(root, "recordings");
+    const snapshotPath = join(root, "checkpoint.json");
+    const start = (snapshot) => startWorldServer({ module: m, apiMarkdown, realtime: false, recordDir, snapshotPath, snapshot });
+    const runUntil = (running, tick) => { while (running.world.tick < tick) running.tick(); };
+    let world, replay, viewer;
+    try {
+      world = await start();
+      const instanceId = world.world.instanceId;
+      const { session } = world.world.join("Before restart");
+      world.world.apply(session, { type: "MoveTo", data: { position: [3, 0.4, 3] } });
+      runUntil(world, 60);
+      await world.close(); // Drains both the recording and the verified checkpoint to disk.
+      const { snapshot } = loadStartupSnapshot({ startMode: "resume", snapshotPath });
+      assert.equal(snapshot.tick, 60);
+      world = await start(snapshot);
+      assert.equal(world.world.instanceId, instanceId);
+      assert.equal(world.world.tick, 60);
+      world.world.join("After restart");
+      runUntil(world, 120);
+      await world.close();
+
+      const parts = await recordingParts(recordDir, instanceId);
+      assert.deepEqual(parts.map(part => part.id), [0, 1]);
+      // The HTTP archive picker opens one part at a time. Feed both actual parts, in
+      // order, to the same multi-hello reader used for standalone recordings.
+      const text = await Promise.all(parts.map(part => readFile(join(recordDir, "instances", instanceId, part.name), "utf8")));
+      const recording = parseRecording(text.join(""));
+      assert.deepEqual(recording.hellos.map(hello => [hello.tick, hello.resumedFromTick, hello.instanceId]), [
+        [0, null, instanceId], [60, 60, instanceId],
+      ]);
+      assert.equal(recording.skipped, 0);
+      assert.equal(recording.lastTick, 120);
+
+      const sceneAt = (events, tick) => {
+        let document, scene, frame, inspection;
+        for (const { name, data } of events) {
+          if (name === "hello") {
+            document = data.document;
+            scene = feed.worldSceneFromHello(data);
+            inspection = data.inspection;
+            frame = null;
+          } else if (name === "entities") {
+            scene = feed.applyWorldEntities(scene, data);
+          } else if (name === "frame") {
+            frame = { tick: data.tick, poses: data.poses };
+            inspection = data.inspection ?? inspection;
+          }
+        }
+        assert.equal(frame?.tick ?? scene.tick, tick, "state must come from the requested tick");
+        return { document: { ...document, entities: scene.entities }, ids: scene.ids, frame, inspection, instanceId: scene.instanceId };
+      };
+      replay = await startReplayServer({ recording, realtime: false, play: true });
+      viewer = await spectate(replay.url);
+      await viewer.until(events => events.some(({ name }) => name === "hello"));
+      const targets = [54, 60, 66, 120];
+      const continuous = [];
+      let previousTick = 0;
+      for (const tick of targets) {
+        replay.advance((tick - previousTick) / recording.tickHz);
+        const mark = tick === 60 ? "hello" : "frame";
+        const events = await viewer.until(items => items.some(({ name, data }) => name === mark && data.tick === tick));
+        continuous.push(sceneAt(events, tick));
+        if (tick === 66) assert.ok(events.some(({ name, data }) => name === "entities" && data.tick === 61));
+        previousTick = tick;
+      }
+      assert.ok(continuous[1].document.entities.some(entity => entity.label === "Before restart"));
+      assert.ok(!continuous[1].document.entities.some(entity => entity.label === "After restart"));
+      assert.ok(continuous[2].document.entities.some(entity => entity.label === "After restart"));
+      assert.equal(replay.info().paused, true);
+
+      let cursor = (await viewer.until(() => true)).length;
+      for (const [index, tick] of targets.entries()) {
+        const response = await fetch(`${replay.url}/replay/seek?tick=${tick}`, { method: "POST" });
+        assert.equal(response.status, 200);
+        assert.equal((await response.json()).current_tick, tick);
+        const mark = tick === 60 ? "hello" : "frame";
+        const events = await viewer.until(items => items.slice(cursor).some(({ name, data }) => name === mark && data.tick === tick));
+        assert.equal(events[cursor].name, "hello");
+        assert.deepEqual(sceneAt(events.slice(cursor), tick), continuous[index], `same scene, IDs, poses and inspection at tick ${tick}`);
+        cursor = events.length;
+      }
+    } finally {
+      viewer?.close();
+      await replay?.close();
+      await world?.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 
   /** Runs a recorded living island for `ticks`, an invalid action at `actAt`; returns live frames and the recording. */
   async function run(options, ticks, actAt) {
