@@ -142,8 +142,10 @@ incorrect native reverse index are repaired. Passive TVA quaternion keys are con
 against the independent bind matrices so cylinders stay attached and petals open outward.
 Waiting uses the recovered actor's geometry with a disclosed rigid rotation around the
 original central pivot; the separate-piece source clip stays preserved. Exact visible-pose
-copy into Studio is reachable. The 32 internal button meshes, exit mesh and historical
-destinations remain absent: the four actions and plates are disclosed replacements.
+copy into Studio is reachable. The 32 internal keys and common exit are now reconstructed
+with eight distinct current menus. Their original topology/numbering is established;
+historical artwork and destinations remain unestablished. The broader archive audit,
+explicit reconstruction map and search limits are in [CUBZ_BUTTONS.md](CUBZ_BUTTONS.md).
 Materials, camera and Web interpolation are adapters. Full provenance and validation:
 [CUBZ_MENU.md](CUBZ_MENU.md).
 
@@ -174,7 +176,7 @@ It is a current creation experience, separate from the source-fidelity work belo
 
 | Historical evidence | Current limitation / next recovery |
 | --- | --- |
-| CubX/CubZ actors and native MenuManager | CubZ's three full actors remain in Archives and its old study in Lab. The distinct [CubX/Atmel welcome](CUBX_ATMEL.md) now restores Get2..8, opening, eight original outer selection meshes, Earth/grid, System/Tools, arrow, MenuDomo, source glyphs and sampled terrain. Its full cycles, local schedule edits and Studio handoff use the shared runtime. The separate 32 internal CubZ buttons/exit mesh are still not found; historical destinations, hardware transport and native rendering/solver parity remain unproven. |
+| CubX/CubZ actors and native MenuManager | CubZ's three full actors remain in Archives and its old study in Lab. The distinct [CubX/Atmel welcome](CUBX_ATMEL.md) restores Get2..8, opening, eight original outer selection meshes, Earth/grid, System/Tools, arrow, MenuDomo, source glyphs and sampled terrain. Its cycles, local schedule edits and Studio handoff use the shared runtime. CubZ's separate 32 internal keys and common exit are now [explicitly reconstructed](CUBZ_BUTTONS.md) with source numbering and current destinations. Their historical models/destinations, hardware transport and native rendering/solver parity remain unestablished. |
 | `FlightXScene.cpp`, pipe1, Airplane | Original TVMs, all 51 surface groups, six BMPs, native pipe placement and Atmel/2011 poses are recovered. SDK forward semantics replace the inferred X-coordinate mapping. Four modern training forms are playable using shared rules; native solver/timing/material parity and historical gate/lap layouts remain unproven. |
 | Maison, Kitchen, Unity Arena and Common Room | Complete recovered mesh geometry is reachable. Exact historical lighting/rendering and the absent external Kitchen photograph remain outside parity. |
 | `CarScene.cpp`, `Vehicule.cpp`, heightmaps and orphan car packs | Atmel and later RacinX are now distinct editable worlds with original TVM parts, source heightfields, 100 later rings and an explicitly adapted Rapier drive. See [IMPREZA_REVIVAL.md](IMPREZA_REVIVAL.md). Native tire/network/audio parity and bindings for orphan cars remain unproven. |

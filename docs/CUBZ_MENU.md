@@ -1,7 +1,7 @@
 # CubZ: complete source actors and a coupled menu
 
 Open `?app=cubx`, or **Archives → CubZ · le menu retrouvé**. Choose one of eight
-blocks, watch its rotation and opening, use the four replacement actions, close it,
+blocks, watch its rotation and opening, use its four numbered internal keys, close it,
 and return along the same rotation. The first choice opens directly. The waiting
 animation is an explicit action. **Emporter cette pose dans le Studio** freezes a
 copy at the current visible pose, ready for ordinary editing, local save and JSON export.
@@ -70,17 +70,19 @@ placement are current adapters. Root scale `0.04` displays native `fSize = 8` at
 Color coding is an optional inspection action, not a recovered native material scheme.
 
 The host references `Media/CubXBtn/Btn1.tvm` through `Btn32.tvm` and `BtnExit.tvm`.
-They were absent from the unpacked Media tree and from listings of both `CubXScene.rar`
-and `AtmelCubx63_2003.rar` inspected in this pass. Historical internal labels, categories
-and destinations are not established. The four plates and actions (select actor, color,
-reframe, Studio) are explicit modern replacements. The original oversized outer hit
-boxes are source evidence; Web picking uses the actual visible mesh surfaces.
+A broader read-only pass now covers the unpacked archive and compressed-container
+listings, including nested model packs and explicit corruption warnings. Historical
+geometry, labels and destinations remain unestablished. The 32 numbered keys and common
+exit are now explicitly reconstructed, with eight current themed menus, actual product
+destinations, part selection, cameras and pose export. See [CUBZ_BUTTONS.md](CUBZ_BUTTONS.md)
+for the per-button map, source hashes, search limits and reproducible audit. The original
+oversized outer hit boxes are source evidence; Web picking uses visible mesh surfaces.
 
 The distinct **CubXActor** family now has its own [Atmel welcome](CUBX_ATMEL.md), reachable
 from this menu or `?app=cubx&view=atmel`. Its seven Get actors, full opening, original
 outer click meshes and scene constellation are recovered independently. Geometry resolves
 the later host's shifted Get index and uninitialized eighth slot. Its eight outer hit
-volumes are a different family from the 32 CubZ internal buttons still not found.
+volumes are a different family from the 32 reconstructed CubZ internal buttons.
 
 ## One authored timeline, then an editable copy
 

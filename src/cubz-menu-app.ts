@@ -1,6 +1,7 @@
 import { Raycaster, Vector2, type Object3D } from "three";
 import type { PlatformHost } from "./platform-host";
 import { buildCubzMenu, cubzColorCommands, cubzMenuState, cubzResetCommands, cubzSequenceCommands, cubzStudioPose, loadCubzSource, type CubzAction } from "./cubz-menu-scene";
+import { CUBZ_MENUS, cubzButtonNumber, cubzDestination } from "./cubz-menu-buttons";
 import "./cubz-menu.css";
 
 export type CubzMenuApplication = { state: () => unknown; advanceTime: (milliseconds: number) => unknown; dispose: () => void };
@@ -23,6 +24,8 @@ export async function mountCubzMenu(root: HTMLElement, host: PlatformHost, onExi
   let notice = "";
   let lastStatus = "";
   let lastPhase = "";
+  let lastMenu = -1;
+  let lastAction: { button: number; action: CubzAction } | null = null;
   let disposed = false;
   const compact = matchMedia("(max-width: 740px)"), reduced = matchMedia("(prefers-reduced-motion: reduce)");
   const atmelLocation = new URL(import.meta.env.BASE_URL, location.href);
@@ -37,18 +40,15 @@ export async function mountCubzMenu(root: HTMLElement, host: PlatformHost, onExi
       <h1 id="gx-cubz-title">Un menu<br>qui s’ouvre.</h1>
       <p class="gx-cubz-intro">Choisis un des huit blocs. Il pivote, s’ouvre et révèle son menu.</p>
       <a class="gx-cubz-atmel-link" href="${atmelLocation.pathname + atmelLocation.search}">Explorer aussi l’accueil Atmel : Terre, panneau et afficheurs →</a>
-      <fieldset class="gx-cubz-choices"><legend>Quel bloc veux-tu ouvrir ?</legend><div>${Array.from({ length: 8 }, (_, index) => `<button type="button" data-cubz-choice="${index}" aria-label="Ouvrir le bloc ${index + 1}" aria-pressed="false"><small>BLOC</small><b>0${index + 1}</b></button>`).join("")}</div></fieldset>
+      <fieldset class="gx-cubz-choices"><legend>Huit blocs · quatre boutons chacun</legend><div>${CUBZ_MENUS.map((menu, index) => `<button type="button" data-cubz-choice="${index}" aria-label="Ouvrir le bloc ${index + 1} : ${menu.label}" aria-pressed="false"><b>0${index + 1}</b><small>${menu.short}</small></button>`).join("")}</div></fieldset>
       <div class="gx-cubz-status"><span data-cubz-status role="status">Choisis un bloc dans la vue ou ci-dessus.</span><div class="gx-cubz-progress" aria-hidden="true"><i></i></div></div>
-      <section class="gx-cubz-inside" data-cubz-inside hidden aria-labelledby="gx-cubz-menu-title"><h2 id="gx-cubz-menu-title">Le menu est ouvert.</h2><p>Quatre actions actuelles pour explorer cette reprise.</p><div>
-        <button type="button" data-cubz-action="inspect">01 <b>Repérer les pièces</b></button><button type="button" data-cubz-action="colors">02 <b>Colorer les blocs</b></button>
-        <button type="button" data-cubz-action="frame">03 <b>Recentrer la vue</b></button><button type="button" data-cubz-action="studio">04 <b>Créer dans le Studio ↗</b></button>
-      </div></section>
+      <section class="gx-cubz-inside" data-cubz-inside hidden aria-labelledby="gx-cubz-menu-title"><h2 id="gx-cubz-menu-title">Le menu est ouvert.</h2><p>Les touches 1–4 de la vue correspondent aux actions ci-dessous. Fonctions actuelles, modèles reconstruits.</p><div data-cubz-actions></div></section>
       <div class="gx-cubz-controls"><button type="button" data-cubz-close disabled>Refermer le menu</button><button type="button" data-cubz-pause disabled>Pause</button><button type="button" data-cubz-skip disabled title="Terminer le mouvement immédiatement">Aller au résultat</button></div>
       <div class="gx-cubz-secondary"><button type="button" data-cubz-saver>Animation d’attente</button><button type="button" data-cubz-reset>Revenir aux huit blocs</button></div>
       <button type="button" class="gx-cubz-studio" data-cubz-studio>Emporter cette pose dans le Studio ↗</button>
       <p class="gx-cubz-note" role="status" data-cubz-note></p>
-      <details class="gx-cubz-source"><summary>Retrouvé, adapté, encore absent</summary><p><b>Retrouvé :</b> les trois acteurs TVA complets, leurs 44 maillages chacun, les hiérarchies, pivots et pistes de transformation ; les huit choix du C++ et le cycle rotation → ouverture → fermeture → retour.</p><p><b>Adapté :</b> matériaux, éclairage, caméra, échelle et commandes tactiles. La rotation d’attente garde les pièces solidaires ; le clip original reste conservé dans les données. Le retour inverse la même rotation ; l’ancien décalage d’index est corrigé. La pose visible devient une copie modifiable dans le Studio.</p><p><b>Absent :</b> les fichiers des 32 boutons internes et du bouton de sortie, ainsi que leurs anciens libellés et destinations. Les quatre actions et leurs plaques sont des remplacements actuels.</p><p>L’autre famille CubXActor et ses exports distincts restent une piste de restauration séparée.</p></details>
-      <p class="gx-cubz-help">Glisse pour tourner autour · molette pour zoomer<br>Les numéros remplacent les anciens libellés inconnus.</p>
+      <details class="gx-cubz-source"><summary>Retrouvé et reconstruit : les preuves</summary><p><b>Retrouvé :</b> les trois acteurs TVA complets, leurs 44 maillages chacun, les pivots et pistes ; la numérotation des 32 boutons, leurs huit groupes et la sortie commune du C++.</p><p><b>Reconstruit :</b> les 32 touches biseautées, leurs numéros et le bouton de retour dans la vue. Les thèmes et destinations sont actuels. La sortie referme les pétales puis inverse la rotation choisie.</p><p><b>Non retrouvé dans les fichiers inspectés :</b> Btn1.tvm à Btn32.tvm et BtnExit.tvm. Le champ Action existe dans le gestionnaire, mais son affectation aux boutons internes n’est pas établie dans les sources retrouvées. Les huit CubXBtn sont des boutons extérieurs d’une autre variante.</p><p><b>Adapté :</b> matériaux, caméra, commandes tactiles et attente solidaire. Les cylindres restent avec les cubes ; aucun maillage natif ni pivot n’est modifié. Les fichiers d’archive restent intacts.</p></details>
+      <p class="gx-cubz-help">Glisse pour tourner autour · molette pour zoomer<br>La touche claire sous le menu referme le cube.</p>
     </section>`;
   const find = <T extends HTMLElement = HTMLElement>(selector: string): T => surface.querySelector<T>(selector)!;
   const state = (clock = api.state()) => cubzMenuState(documentSnapshot, clock?.elapsedSeconds ?? 0);
@@ -77,8 +77,13 @@ export async function mountCubzMenu(root: HTMLElement, host: PlatformHost, onExi
       button.setAttribute("aria-pressed", String(Number(button.dataset.cubzChoice) === current.choice));
     });
     find("[data-cubz-inside]").hidden = current.phase !== "opened";
-    const menuTitle = current.choice === null ? "Le menu est ouvert." : `Bloc ${current.choice + 1} · menu ouvert`;
+    const menuTitle = current.choice === null ? "Le menu est ouvert." : `${CUBZ_MENUS[current.choice].label} · bloc ${current.choice + 1}`;
     if (find("#gx-cubz-menu-title").textContent !== menuTitle) find("#gx-cubz-menu-title").textContent = menuTitle;
+    if (current.phase === "opened" && current.choice !== null && current.choice !== lastMenu) {
+      lastMenu = current.choice;
+      find("[data-cubz-actions]").innerHTML = CUBZ_MENUS[current.choice].buttons.map((button, slot) =>
+        `<button type="button" data-cubz-action="${button.action}" data-cubz-button="${cubzButtonNumber(current.choice!, slot)}"><span>${slot + 1} <small>BTN ${String(cubzButtonNumber(current.choice!, slot)).padStart(2, "0")}</small></span><b>${button.label}</b></button>`).join("");
+    }
     find<HTMLButtonElement>("[data-cubz-close]").disabled = current.phase !== "opened";
     find("[data-cubz-close]").hidden = current.phase !== "opened";
     find<HTMLButtonElement>("[data-cubz-pause]").disabled = !busy && current.phase !== "screensaver";
@@ -120,20 +125,48 @@ export async function mountCubzMenu(root: HTMLElement, host: PlatformHost, onExi
     }
     api.pause(true); onStudio();
   };
-  const action = (id: CubzAction) => {
+  const action = (id: CubzAction | "close") => {
     observeDocument();
-    if (state().phase !== "opened") return;
+    const current = state();
+    if (current.phase !== "opened" || current.choice === null) return;
+    if (id === "close") { play("return", current.choice); return; }
+    const menu = CUBZ_MENUS[current.choice], slot = menu.buttons.findIndex(button => button.action === id);
+    if (slot < 0) return;
+    lastAction = { button: cubzButtonNumber(current.choice, slot), action: id };
+    const destination = cubzDestination(id, new URL(import.meta.env.BASE_URL, location.href).href, explicitStore);
+    if (destination) { location.assign(destination.href); return; }
     if (id === "studio") { studio(); return; }
     if (id === "frame") frame();
+    if (id === "front") host.frameView([1.9, 5.6, 15], [1.9, 4.2, 0], 0);
+    if (id === "back") host.frameView([1.9, 7, -16], [1.9, 3.4, 0], 0);
+    if (id === "top") host.frameView([2, 20, 3], [1.9, 3.4, 0], 0);
     if (id === "inspect") {
       api.select(["cubz-open-rig"]);
       notice = "L’acteur ouvert est sélectionné. Ses 44 maillages restent accessibles dans le Studio.";
     }
     if (id === "colors") { diagnostic = !diagnostic; apply(cubzColorCommands(documentSnapshot, diagnostic)); }
+    if (id === "cores" || id === "cylinders" || id === "petals") {
+      const actor = data.actors.open;
+      const ids = actor.meshes.filter(mesh => {
+        const name = actor.nodes[mesh.nodeId].name;
+        return id === "cores" ? /^Box0[1-8]$/.test(name) : id === "cylinders" ? /^Cylindre/.test(name) : name === "";
+      }).map(mesh => `cubz-open-m${mesh.nodeId}`);
+      api.select(ids); notice = `${ids.length} pièces sélectionnées. Emporte cette pose dans le Studio pour les modifier.`;
+    }
+    if (id === "provenance") { find<HTMLDetailsElement>(".gx-cubz-source").open = true; find(".gx-cubz-source").scrollIntoView({ block: "start" }); }
+    if (id === "export") {
+      const pose = cubzStudioPose(documentSnapshot, api.state()?.elapsedSeconds ?? 0);
+      const url = URL.createObjectURL(new Blob([JSON.stringify(pose, null, 2)], { type: "application/json" }));
+      const link = document.createElement("a"); link.href = url; link.download = "cubz-pose.graphysx.json"; link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 0); notice = "Pose exportée : maillages, boutons et modifications sont conservés dans le JSON.";
+    }
     refresh();
   };
   surface.querySelectorAll<HTMLButtonElement>("[data-cubz-choice]").forEach(button => button.addEventListener("click", () => { if (state().phase === "idle") play("open", Number(button.dataset.cubzChoice)); }));
-  surface.querySelectorAll<HTMLButtonElement>("[data-cubz-action]").forEach(button => button.addEventListener("click", () => action(button.dataset.cubzAction as CubzAction)));
+  find("[data-cubz-actions]").addEventListener("click", event => {
+    const button = (event.target as Element).closest<HTMLButtonElement>("[data-cubz-action]");
+    if (button) action(button.dataset.cubzAction as CubzAction);
+  });
   find("[data-cubz-exit]").addEventListener("click", onExit);
   find("[data-cubz-studio]").addEventListener("click", studio);
   find<HTMLAnchorElement>(".gx-cubz-atmel-link").addEventListener("click", event => {
@@ -190,14 +223,16 @@ export async function mountCubzMenu(root: HTMLElement, host: PlatformHost, onExi
     const choice = tags?.find(tag => tag.startsWith("cubz-choice-"));
     const selectedAction = tags?.find(tag => tag.startsWith("cubz-action-"));
     if (choice && current.phase === "idle") play("open", Number(choice.slice(12)));
-    else if (selectedAction && current.phase === "opened") action(selectedAction.slice(12) as CubzAction);
+    else if (selectedAction && current.phase === "opened") action(selectedAction.slice(12) as CubzAction | "close");
   };
   canvas.addEventListener("pointerdown", pointerDown); canvas.addEventListener("pointerup", pointerUp); canvas.addEventListener("pointercancel", pointerCancel);
   window.addEventListener("blur", pointerCancel);
   const unsubscribe = host.subscribeFrame(() => { if (!disposed) refresh(); });
   frame(true); refresh();
   return {
-    state: () => ({ application: "cubx", ...state(), paused: api.state()?.paused, sourceMeshesPerActor: 44, diagnostic, notice }),
+    state: () => ({ application: "cubx", ...state(), paused: api.state()?.paused, sourceMeshesPerActor: 44, diagnostic, notice, lastAction,
+      buttons: state().phase === "opened" ? CUBZ_MENUS[state().choice!].buttons.map((button, slot) => ({ number: cubzButtonNumber(state().choice!, slot), slot: slot + 1, ...button })) : [],
+      reconstructedButtons: 32, sharedExit: state().phase === "opened" }),
     advanceTime(milliseconds) {
       if (!Number.isFinite(milliseconds) || milliseconds < 0 || milliseconds > 60_000 || api.state()?.paused) return;
       let remaining = milliseconds / 1000;
