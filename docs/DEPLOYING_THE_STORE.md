@@ -96,6 +96,18 @@ The web `current` symlink is the final
 activation command. If restart, listener proof, activation, or the public smoke fails, both the
 server tree and the original `current`/`previous` release pointers are restored.
 
+Before updating the store or switching `current`, the deploy compares existing `/assets/` URLs
+with the candidate. Changed bytes stop the deploy and list both SHA-256 hashes for each URL.
+Give changed assets new versioned paths and update their references before retrying.
+The candidate hardlinks missing assets from the live build on the same release filesystem.
+An open tab can still load its original chunks after one deployment. Inherited files are
+excluded when preparing the following release, so the compatibility set does not grow with
+each deployment. The HTML still comes from the current release.
+
+Run `node scripts/with-verify-lock.mjs -- node scripts/smoke-release-continuity.mjs` to exercise
+two real builds locally. The smoke keeps an edited Studio tab open across the switch, requests
+its library module for the first time, and opens its exact draft in the new build.
+
 The whole server tree has **zero third-party imports** — every import is either `node:` or
 relative — so no `npm install` runs on the host.
 

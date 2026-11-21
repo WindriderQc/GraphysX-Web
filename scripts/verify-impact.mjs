@@ -37,7 +37,8 @@ const RULES = [
   { match: /^scripts\/(?:(?:package-cyber-race|extract-cyber-race-film|install-cyber-race-gamx)\.mjs|gamx\/[\w-]+\.ps1)$/, checks: [], label: "Cyber Race local packaging tools", deploy: false },
   { match: /^(?:src\/(?:quest3-(?:showcase|scene)\.ts|quest3-showcase\.css|nacre-mission\.ts)|public\/assets\/quest3\/)/, checks: ["quest3"], label: "NACRE scene and mission", deploy: true },
   { match: /^scripts\/(?:build-quest3-assets|build-nacre-audio)\.mjs$/, checks: ["quest3", "product-assets"], label: "NACRE offline asset generators", deploy: false },
-  { match: /^(?:\.github\/workflows\/deploy\.yml|scripts\/(?:write-release-metadata|smoke-live-release)\.mjs|ops\/)/, checks: BASELINE, label: "deployment configuration", deploy: true },
+  { match: /^scripts\/smoke-release-continuity\.mjs$/, checks: [], label: "manual two-build browser smoke", deploy: false },
+  { match: /^(?:\.github\/workflows\/deploy\.yml|scripts\/(?:prepare-release-assets|write-release-metadata|smoke-live-release)\.mjs|ops\/)/, checks: BASELINE, label: "deployment configuration", deploy: true },
   // Conversation changes affect opening/replay, corrected scene speech and profile
   // switching. The native renderer/host, schema and dependencies keep their broad rules.
   { match: /^(?:src\/llmx-(?:audio|conversation(?:-client)?|speech-queue|transport)\.ts|scripts\/(?:llmx-server|serve-llmx)\.mjs|server\/llmx-target\.(?:mjs|d\.mts))$/, checks: [...family("llmx-conversation"), "llmx-creation-actions", "llmx-creation-family", "llmx-world", "llmx"], label: "LLMx conversation and voice transport", deploy: true },
