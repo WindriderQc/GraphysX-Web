@@ -44,6 +44,7 @@ export async function mountCubxAtmel(root: HTMLElement, host: PlatformHost, onEx
   const observe = (clock = api.state()) => { const next = clock?.revision; if (next !== revision) { const current = api.exportDocument(); if (current) snapshot = current; revision = next; } };
   const state = (clock = api.state()) => atmelState(clock ? snapshot : null, clock?.elapsedSeconds ?? 0);
   const frame = (arrival = false) => {
+    observe(); if (disposed || state().phase === "unavailable") return;
     const camera = view === "panel" ? { position: [-24, 14, compact.matches ? 145 : 85] as [number, number, number], target: [-24, 12, 0] as [number, number, number] } : view === "overview"
       ? { position: [-42, compact.matches ? 70 : 55, compact.matches ? 180 : 100] as [number, number, number], target: [0, 15, 0] as [number, number, number] }
       : { position: [-6, 20, 9] as [number, number, number], target: [-12, 15, 0] as [number, number, number] };
@@ -72,6 +73,7 @@ export async function mountCubxAtmel(root: HTMLElement, host: PlatformHost, onEx
     surface.querySelectorAll<HTMLButtonElement>("[data-atmel-view]").forEach(button => { button.disabled = unavailable; button.setAttribute("aria-pressed", String(button.dataset.atmelView === view)); });
     find("[data-atmel-inside]").hidden = current.phase !== "opened" || view === "panel";
     find("[data-atmel-clock-panel]").hidden = view !== "panel" || unavailable;
+    find<HTMLButtonElement>("[data-atmel-frame]").disabled = unavailable;
     find<HTMLButtonElement>("[data-atmel-close]").disabled = current.phase !== "opened";
     find<HTMLButtonElement>("[data-atmel-pause]").disabled = !busy && current.phase !== "saver";
     find("[data-atmel-pause]").textContent = paused ? "Reprendre" : "Pause";
@@ -167,10 +169,14 @@ export async function mountCubxAtmel(root: HTMLElement, host: PlatformHost, onEx
   };
   const reframe = () => frame(); compact.addEventListener("change", reframe); reduced.addEventListener("change", reframe); window.addEventListener("resize", reframe);
   canvas.addEventListener("pointerdown", pointerDown); canvas.addEventListener("pointerup", pointerUp); canvas.addEventListener("pointercancel", pointerCancel); window.addEventListener("blur", pointerCancel);
+  const unsubscribeWorld = host.world.subscribeEvents(event => {
+    // Relinquish the old view synchronously, before the replacement's owner starts a move.
+    if (event.type === "world.loaded" && atmelState(api.exportDocument(), 0).phase === "unavailable") host.cancelCameraMove();
+  });
   const unsubscribe = host.subscribeFrame(() => { if (!disposed) refresh(); }); frame(true); refresh();
   return {
     state: () => { const clock = api.state(); observe(clock); const models = clock?.entities.filter(e => e.type === "model") ?? []; return { application: "cubx-atmel", ready: models.length > 0 && models.every(e => e.asset?.status === "ready"), ...state(clock), view, paused: clock?.paused, clocks: Object.fromEntries(ATMEL_CLOCKS.map(key => [key, atmelClock(snapshot, key)])), sourceChoices: 8, notice }; },
     advanceTime(milliseconds: number) { if (!Number.isFinite(milliseconds) || milliseconds < 0 || milliseconds > 60_000 || api.state()?.paused) return; let remaining = milliseconds / 1000; while (remaining > 1e-8 && !api.state()?.paused) { const step = Math.min(1 / 60, remaining); api.step(step); remaining -= step; } refresh(); },
-    dispose() { disposed = true; unsubscribe(); host.cancelCameraMove(); compact.removeEventListener("change", reframe); reduced.removeEventListener("change", reframe); window.removeEventListener("resize", reframe); canvas.removeEventListener("pointerdown", pointerDown); canvas.removeEventListener("pointerup", pointerUp); canvas.removeEventListener("pointercancel", pointerCancel); window.removeEventListener("blur", pointerCancel); surface.remove(); document.title = previousTitle; document.documentElement.lang = previousLanguage; },
+    dispose() { disposed = true; unsubscribeWorld(); unsubscribe(); host.cancelCameraMove(); compact.removeEventListener("change", reframe); reduced.removeEventListener("change", reframe); window.removeEventListener("resize", reframe); canvas.removeEventListener("pointerdown", pointerDown); canvas.removeEventListener("pointerup", pointerUp); canvas.removeEventListener("pointercancel", pointerCancel); window.removeEventListener("blur", pointerCancel); surface.remove(); document.title = previousTitle; document.documentElement.lang = previousLanguage; },
   };
 }

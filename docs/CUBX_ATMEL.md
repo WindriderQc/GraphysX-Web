@@ -87,7 +87,9 @@ applied to counted geometry. The vehicle wrapper still accepts only its establis
 All entities, keyframes, edits, simulation and snapshots use the existing v2 world API
 and shared frame loop. A replacement world arriving during loading cancels this mount.
 After loading, foreign documents are preserved on Studio handoff and destructive controls
-are disabled. Optional scene-store configuration is retained by Studio and experience links.
+are disabled. A replacement world cancels the old view's camera move synchronously; its own
+new camera and movement survive subsequent resize/media events. Optional scene-store
+configuration is retained by Studio and experience links.
 Simple Studio framing waits for native model bounds, excludes hidden source actors and fits
 the visible scene in its available viewport, including after a named scene reload.
 

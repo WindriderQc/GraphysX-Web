@@ -188,12 +188,22 @@ try {
   await race.locator(".gx-atmel").waitFor({ state: "detached" }); assert.deepEqual(canonicalScene(await sceneDocument(race)), canonicalScene(held)); assert.deepEqual(raceErrors, []); await race.close();
   // Once loaded, all reset/navigation controls fence a replacement rather than overwrite it.
   await open(page);
-  assert.equal(await page.evaluate(doc => window.__GRAPHYSX__.create(doc).ok, { ...foreign, id: "owner-foreign-world" }), true); await draw(page);
+  await page.evaluate(() => window.__GRAPHYSX_HOST__.framePath([{ position: [-6, 20, 9], target: [-12, 15, 0] }], 60));
+  const replacement = await page.evaluate(doc => ({ ok: window.__GRAPHYSX__.create(doc).ok, focusing: window.__GRAPHYSX_HOST__.focusing }), { ...foreign, id: "owner-foreign-world" });
+  assert.equal(replacement.ok, true); assert.equal(replacement.focusing, false, "replacement immediately cancels the old view's camera move"); await draw(page);
   const kept = await sceneDocument(page); assert.equal((await state(page)).phase, "unavailable");
   assert.equal(await page.locator("[data-atmel-reset]").isDisabled(), true);
+  assert.equal(await page.locator("[data-atmel-frame]").isDisabled(), true);
+  await page.evaluate(() => window.__GRAPHYSX_HOST__.frameView([17, 18, 19], [0, 0, 0], 0));
+  await page.setViewportSize({ width: 1030, height: 770 }); await draw(page);
+  assert.ok((await page.evaluate(() => window.__GRAPHYSX_HOST__.camera.position.toArray())).every((value, i) => Math.abs(value - [17, 18, 19][i]) < 1e-6), "old resize/media listeners cannot reframe the foreign world");
+  await page.evaluate(() => window.__GRAPHYSX_HOST__.framePath([{ position: [21, 22, 23], target: [0, 0, 0] }], .2));
+  await page.setViewportSize({ width: 1440, height: 960 }); await page.waitForFunction(() => !window.__GRAPHYSX_HOST__.focusing); await draw(page);
+  assert.ok((await page.evaluate(() => window.__GRAPHYSX_HOST__.camera.position.toArray())).every((value, i) => Math.abs(value - [21, 22, 23][i]) < 1e-6), "new owner's camera path survives a later resize");
+  assert.deepEqual(canonicalScene(await sceneDocument(page)), canonicalScene(kept));
   await page.locator("[data-atmel-studio]").last().click(); await page.locator(".gx-studio-simple:not([hidden])").waitFor();
   assert.deepEqual(canonicalScene(await sceneDocument(page)), canonicalScene(kept)); assert.deepEqual(errors, []);
   await writeFile(path.join(artifacts, "cubx-atmel-result.json"), JSON.stringify({ nativeActors: Object.keys(source.actors), sourceChoices: 8, cycles: 8, savedEntities: saved.entities.length, sourcePins: source.sourcePins.length, receipts, errors }, null, 2));
-  console.log("CubX Atmel: eight native cycles, original picking, waiting alignment, four protected layouts, editable glyphs/undo, Studio save/reload and foreign-world fences passed.");
+  console.log("CubX Atmel: eight native cycles, original picking, waiting alignment, four protected layouts, editable glyphs/undo, Studio save/reload and foreign-world document/camera fences passed.");
   await context.close();
 } finally { await browser.close(); }
