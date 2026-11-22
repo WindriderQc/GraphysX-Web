@@ -331,7 +331,7 @@ export async function loadAgentWorldModel(
   asset: ResolvedAgentWorldModelAsset,
   collision?: AgentWorldModelCollisionRequest,
   renderer?: WebGLRenderer,
-): Promise<void> {
+): Promise<void | { lodWarning: string }> {
   if (asset.format === "gltf") {
     if (collision) throw new Error("Native glTF models use separate primitive physics proxies");
     const { loadNativeGltf } = await import("./agent-world-gltf");

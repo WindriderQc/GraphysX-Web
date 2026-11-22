@@ -141,6 +141,8 @@ import {
   patchAgentWorldModelMaterialOverrides,
   resolveAgentWorldModelMaterialOverrides,
   sourceAgentWorldModelMaterials,
+  validateAgentWorldModelMaterialOverridePatch,
+  type AgentWorldModelMaterialOverrideIssue,
   type AgentWorldModelMaterialOverridePatch,
   type AgentWorldModelMaterialOverrides,
   type AgentWorldModelMaterialSlot,
@@ -1020,7 +1022,12 @@ export type AgentWorldEntityState = {
     };
   } | null;
   path: { pointCount: number; closed: boolean } | null;
-  asset: ({ status: "loading" | "ready" | "error"; error?: string } & ResolvedAgentWorldModelAsset) | null;
+  asset: ({
+    status: "loading" | "ready" | "error";
+    error?: string;
+    lodWarning?: string;
+    materialOverrideIssues?: AgentWorldModelMaterialOverrideIssue[];
+  } & ResolvedAgentWorldModelAsset) | null;
   appearance: Required<AgentAppearance> | null;
   agent: ResolvedAgentWorldAgentProfile | null;
   emitter: (ResolvedAgentWorldEmitter & { liveParticles: number }) | null;
@@ -2846,10 +2853,13 @@ export class AgentWorldRuntime {
     }
     if (patch.modelMaterialOverrides !== undefined) {
       if (definition.type !== "model") throw new Error("Only model entities accept modelMaterialOverrides");
-      definition.modelMaterialOverrides = patchAgentWorldModelMaterialOverrides(
+      const next = patchAgentWorldModelMaterialOverrides(
         definition.modelMaterialOverrides,
         patch.modelMaterialOverrides,
       );
+      // A known invalid edit must fail during transaction validation, before touching the live scene.
+      validateAgentWorldModelMaterialOverridePatch(runtime.object, patch.modelMaterialOverrides, next);
+      definition.modelMaterialOverrides = next;
     }
     if (patch.visible !== undefined) definition.visible = patch.visible;
     if (patch.castShadow !== undefined) definition.castShadow = patch.castShadow;
@@ -4124,9 +4134,9 @@ export class AgentWorldRuntime {
           triangleCount: collisionMesh.triangleCount,
         });
       },
-    } : undefined, this.modelRenderer).then(() => {
+    } : undefined, this.modelRenderer).then(result => {
       if (this.entities.get(runtime.definition.id) !== runtime || runtime.object.userData.graphysxDisposed) return;
-      runtime.assetState = { ...asset, status: "ready" };
+      runtime.assetState = { ...asset, ...result, status: "ready" };
       this.applyResolvedEntity(runtime);
       this.recordEvent("asset.ready", `${runtime.definition.id}: ${asset.id ?? asset.url}`);
       this.emit("asset.ready", [runtime.definition.id], { assetId: asset.id ?? asset.url });
@@ -4189,7 +4199,11 @@ export class AgentWorldRuntime {
     if (definition.type === "agent") applyAgentAppearance(object, definition);
     object.visible = definition.visible;
     if (definition.type === "model") {
-      applyAgentWorldModelMaterialOverrides(object, definition.modelMaterialOverrides);
+      const issues = applyAgentWorldModelMaterialOverrides(object, definition.modelMaterialOverrides);
+      if (runtime.assetState) {
+        if (issues.length > 0) runtime.assetState.materialOverrideIssues = issues;
+        else delete runtime.assetState.materialOverrideIssues;
+      }
     }
     const particles = findParticleSystem(object);
     if (particles && definition.emitter) particles.configure(definition.emitter);
