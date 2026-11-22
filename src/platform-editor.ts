@@ -1234,7 +1234,7 @@ export class PlatformEditor {
   private modelMaterialSection(entity: AgentWorldEntityState): HTMLElement {
     const slots = entity.materialSlots ?? [];
     const assetStatus = entity.asset?.status ?? "loading";
-    if (assetStatus !== "ready" || slots.length === 0) {
+    if (assetStatus !== "ready") {
       const note = document.createElement("div");
       note.className = "gx-ed-hint";
       note.dataset.gxModelMaterials = assetStatus;
@@ -1244,6 +1244,7 @@ export class PlatformEditor {
       return this.section("Materials", [note]);
     }
 
+    const issues = entity.asset?.materialOverrideIssues ?? [];
     const overridden = slots.filter((slot) => slot.overridden).length;
     const head = document.createElement("div");
     head.className = "gx-ed-material-head";
@@ -1253,12 +1254,28 @@ export class PlatformEditor {
     const resetAll = this.chip("Reset all", () => {
       this.patchEntity(entity.id, { modelMaterialOverrides: null }, "force");
     }, `Reset all material slots on ${entity.label} to source`);
-    resetAll.disabled = overridden === 0;
+    resetAll.disabled = overridden === 0 && issues.length === 0;
     resetAll.dataset.gxMaterialResetAll = "";
     head.append(status, resetAll);
 
+    const notes: HTMLElement[] = [];
+    if (entity.asset?.lodWarning) {
+      const note = document.createElement("div");
+      note.className = "gx-ed-hint";
+      note.textContent = entity.asset.lodWarning;
+      notes.push(note);
+    }
+    for (const issue of issues) {
+      const note = document.createElement("div");
+      note.className = "gx-ed-hint";
+      note.textContent = issue.message;
+      note.append(this.chip("Remove override", () => {
+        this.patchEntity(entity.id, { modelMaterialOverrides: { [issue.slotId]: null } }, "force");
+      }, `Remove ignored override for ${issue.slotId}`));
+      notes.push(note);
+    }
     const cards = slots.map((slot, index) => this.modelMaterialSlotCard(entity, slot, index));
-    return this.section("Materials", [head, ...cards]);
+    return this.section("Materials", [head, ...notes, ...cards]);
   }
 
   private modelMaterialSlotCard(

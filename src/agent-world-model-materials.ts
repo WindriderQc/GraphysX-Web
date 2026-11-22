@@ -22,6 +22,7 @@ export type AgentWorldModelMaterialOverride = {
 
 export type AgentWorldModelMaterialOverrides = Record<string, AgentWorldModelMaterialOverride>;
 export type AgentWorldModelMaterialOverridePatch = Record<string, AgentWorldModelMaterialOverride | null>;
+export type AgentWorldModelMaterialOverrideIssue = { slotId: string; message: string };
 export type AgentWorldModelMaterialRole = "body" | "glass" | "tire" | "wheel" | "undercarriage" | "surface" | "material";
 export type AgentWorldModelMaterialType = "phong" | "standard" | "physical" | "other";
 
@@ -245,15 +246,17 @@ export function patchAgentWorldModelMaterialOverrides(
 export function applyAgentWorldModelMaterialOverrides(
   target: Object3D,
   overrides: AgentWorldModelMaterialOverrides,
-): void {
+): AgentWorldModelMaterialOverrideIssue[] {
+  if (!Array.isArray(target.userData[SLOT_REGISTRY_KEY])) return [];
   const slots = runtimeSlots(target);
-  if (slots.length > 0) {
-    const known = new Set(slots.map((slot) => slot.id));
-    const unknown = Object.keys(overrides).find((slotId) => !known.has(slotId));
-    if (unknown) throw new Error(`Unknown material slot for loaded model: ${unknown}`);
+  const known = new Map(slots.map(slot => [slot.id, slot]));
+  const issues = new Map<string, string>();
+  for (const [slotId, values] of Object.entries(overrides)) {
+    const message = overrideError(known.get(slotId), slotId, values);
+    if (message) issues.set(slotId, message);
   }
   for (const slot of slots) {
-    const values = overrides[slot.id];
+    const values = issues.has(slot.id) ? undefined : overrides[slot.id];
     const overrideKey = values ? JSON.stringify(values) : null;
     if (slot.overrideKey === overrideKey) continue;
     const previous = slot.currentMaterial;
@@ -262,6 +265,21 @@ export function applyAgentWorldModelMaterialOverrides(
     slot.currentMaterial = next;
     slot.overrideKey = overrideKey;
     if (previous !== slot.sourceMaterial && previous !== next) previous.dispose();
+  }
+  return [...issues].map(([slotId, message]) => ({ slotId, message }));
+}
+
+export function validateAgentWorldModelMaterialOverridePatch(
+  target: Object3D,
+  patch: AgentWorldModelMaterialOverridePatch | null,
+  next: AgentWorldModelMaterialOverrides,
+): void {
+  if (!patch || !Array.isArray(target.userData[SLOT_REGISTRY_KEY])) return;
+  const slots = runtimeSlots(target);
+  for (const [slotId, values] of Object.entries(patch)) {
+    if (values === null) continue;
+    const message = overrideError(slots.find(slot => slot.id === slotId), slotId, next[slotId]!);
+    if (message) throw new Error(message);
   }
 }
 
@@ -287,7 +305,7 @@ export function inspectAgentWorldModelMaterialSlots(
       sourceMapName: slot.sourceMapName ?? sourceMap?.name ?? null,
       relatedSlotIds: [...slot.relatedSlotIds],
       sharesSourceMaterial: slot.sharesSourceMaterial,
-      overridden: Boolean(overrides[slot.id]),
+      overridden: slot.overrideKey !== null,
       color: colorOf(material, "color", "#ffffff"),
       opacity: material.opacity,
       transparent: material.transparent,
@@ -331,7 +349,6 @@ function runtimeSlots(target: Object3D): RuntimeSlot[] {
 }
 
 function materialWithOverride(source: Material, values: AgentWorldModelMaterialOverride): Material {
-  validateOverrideSupport(source, values);
   const material = source.clone();
   material.userData = { ...source.userData, graphysxModelMaterialOverride: true };
   if (values.color !== undefined && "color" in material && material.color instanceof Color) material.color.set(values.color);
@@ -354,28 +371,31 @@ function materialWithOverride(source: Material, values: AgentWorldModelMaterialO
   return material;
 }
 
-function validateOverrideSupport(material: Material, values: AgentWorldModelMaterialOverride): void {
+function overrideError(slot: RuntimeSlot | undefined, slotId: string, values: AgentWorldModelMaterialOverride): string | null {
+  if (!slot) return `Unknown material slot for loaded model: ${slotId}`;
+  const material = slot.sourceMaterial;
   if (values.color !== undefined && !("color" in material && material.color instanceof Color)) {
-    throw new Error(`${material.type} does not support a base color override`);
+    return `${material.type} does not support a base color override`;
   }
   if (
     (values.emissive !== undefined || values.emissiveIntensity !== undefined)
     && !("emissive" in material && material.emissive instanceof Color)
   ) {
-    throw new Error(`${material.type} does not support emissive overrides`);
+    return `${material.type} does not support emissive overrides`;
   }
   if (
     (values.roughness !== undefined || values.metalness !== undefined)
     && !(material instanceof MeshStandardMaterial)
   ) {
-    throw new Error(`${material.type} does not support roughness or metalness; upgrade is not implicit`);
+    return `${material.type} does not support roughness or metalness; upgrade is not implicit`;
   }
   if (
     (values.clearcoat !== undefined || values.clearcoatRoughness !== undefined)
     && !(material instanceof MeshPhysicalMaterial)
   ) {
-    throw new Error(`${material.type} does not support clearcoat; upgrade is not implicit`);
+    return `${material.type} does not support clearcoat; upgrade is not implicit`;
   }
+  return null;
 }
 
 function assignSlotMaterial(mesh: Mesh, materialIndex: number, material: Material): void {

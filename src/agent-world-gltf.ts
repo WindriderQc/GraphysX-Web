@@ -1,6 +1,6 @@
 import {
   Box3, Euler, Group, InstancedMesh, LOD, Material, Matrix4, Mesh, MeshStandardMaterial,
-  Quaternion, SRGBColorSpace, Texture, TextureLoader, Vector3, type Object3D, type WebGLRenderer,
+  Quaternion, SRGBColorSpace, Texture, TextureLoader, Vector3, type Line, type Object3D, type Points, type WebGLRenderer,
 } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
@@ -22,8 +22,8 @@ export function disposeNativeTree(root: Object3D): void {
   const resources = new Set<{ dispose(): void }>();
   const textures = new Set<Texture>();
   root.traverse(object => {
+    if (!(object as Mesh).isMesh && !(object as Line).isLine && !(object as Points).isPoints) return;
     const mesh = object as Mesh;
-    if (!mesh.isMesh) return;
     resources.add(mesh.geometry);
     if ((mesh as InstancedMesh).isInstancedMesh) resources.add(mesh as InstancedMesh);
     for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
@@ -46,45 +46,85 @@ export function instanceGltf(root: Group, instances: NonNullable<ResolvedAgentWo
   root.updateWorldMatrix(true, true);
   const sourceMeshes: Mesh[] = [];
   root.traverse(object => { if ((object as Mesh).isMesh) sourceMeshes.push(object as Mesh); });
-  for (const source of sourceMeshes) {
-    if ((source as Mesh & { isSkinnedMesh?: boolean }).isSkinnedMesh || source.morphTargetInfluences?.length || (source as InstancedMesh).isInstancedMesh) {
-      throw new Error("Model batches require static meshes without skinning, morph targets or nested instancing");
+  try {
+    for (const source of sourceMeshes) {
+      if ((source as Mesh & { isSkinnedMesh?: boolean }).isSkinnedMesh || source.morphTargetInfluences?.length || (source as InstancedMesh).isInstancedMesh) {
+        throw new Error("Model batches require static meshes without skinning, morph targets or nested instancing");
+      }
+      const mesh = new InstancedMesh(source.geometry, source.material, instances.length);
+      mesh.name = source.name;
+      batch.add(mesh);
+      const matrix = new Matrix4(); const rotation = new Quaternion(); const position = new Vector3(); const scale = new Vector3();
+      instances.forEach((instance, index) => {
+        position.fromArray(instance.position ?? [0,0,0]); scale.fromArray(instance.scale ?? [1,1,1]);
+        const degrees = instance.rotationDegrees ?? [0,0,0];
+        rotation.setFromEuler(new Euler(...degrees.map(value => value * Math.PI / 180) as [number,number,number]));
+        matrix.compose(position, rotation, scale).multiply(source.matrixWorld);
+        if (matrix.determinant() <= 0) throw new Error("Model batches require positive-determinant transforms");
+        mesh.setMatrixAt(index, matrix);
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.computeBoundingBox(); mesh.computeBoundingSphere();
     }
-    const mesh = new InstancedMesh(source.geometry, source.material, instances.length);
-    mesh.name = source.name;
-    const matrix = new Matrix4(); const rotation = new Quaternion(); const position = new Vector3(); const scale = new Vector3();
-    instances.forEach((instance, index) => {
-      position.fromArray(instance.position ?? [0,0,0]); scale.fromArray(instance.scale ?? [1,1,1]);
-      const degrees = instance.rotationDegrees ?? [0,0,0];
-      rotation.setFromEuler(new Euler(...degrees.map(value => value * Math.PI / 180) as [number,number,number]));
-      matrix.compose(position, rotation, scale).multiply(source.matrixWorld);
-      if (matrix.determinant() <= 0) throw new Error("Model batches require positive-determinant transforms");
-      mesh.setMatrixAt(index, matrix);
-    });
-    mesh.instanceMatrix.needsUpdate = true;
-    mesh.computeBoundingBox(); mesh.computeBoundingSphere();
-    batch.add(mesh);
+  } catch (error) {
+    // The original level still owns its geometry and materials.
+    for (const mesh of batch.children) (mesh as InstancedMesh).dispose();
+    throw error;
   }
   return batch;
 }
 
-export async function loadNativeGltf(target: Group, asset: ResolvedAgentWorldModelAsset, renderer?: WebGLRenderer): Promise<void> {
+export async function loadNativeGltf(target: Group, asset: ResolvedAgentWorldModelAsset, renderer?: WebGLRenderer): Promise<void | { lodWarning: string }> {
   if (target.userData.graphysxDisposed) return;
   const ktx = renderer ? new KTX2Loader().setTranscoderPath(`${import.meta.env?.BASE_URL ?? "/"}assets/codecs/basis/`).setWorkerLimit(2).detectSupport(renderer) : null;
   const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
   if (ktx) loader.setKTX2Loader(ktx);
-  const owned = new Group();
+  const presentation = new LOD(); presentation.name = "Model LOD";
+  const centre = new Vector3();
+  let fitScale = 1;
+  let pending: Group | null = null;
   let lightmap: Texture | null = null;
+  let attached = false;
+  let lodWarning: string | null = null;
   try {
     const sources = [{ url: asset.url, distance: 0 }, ...(asset.lods ?? [])];
-    // Sequential levels keep failed-load ownership simple and avoid unbounded parallel decodes.
-    const loaded: { root: Group; distance: number }[] = [];
-    for (const source of sources) {
-      const gltf = await loader.loadAsync(source.url);
-      owned.add(gltf.scene);
-      if (target.userData.graphysxDisposed) { disposeNativeTree(owned); return; }
-      if (asset.instances && gltf.animations.length) throw new Error("Animated glTF models cannot be static instance batches");
-      loaded.push({ root: gltf.scene, distance: source.distance });
+    for (const [index, source] of sources.entries()) {
+      try {
+        const gltf = await loader.loadAsync(source.url);
+        pending = gltf.scene;
+        if (target.userData.graphysxDisposed) return;
+        if (asset.instances && gltf.animations.length) throw new Error("Animated glTF models cannot be static instance batches");
+        const bounds = new Box3().setFromObject(pending);
+        const dimensions = bounds.getSize(new Vector3());
+        const extent = Math.max(dimensions.x, dimensions.y, dimensions.z);
+        if (!Number.isFinite(extent) || extent <= 0) throw new Error("glTF model has no finite nonempty bounds");
+        if (index === 0) {
+          fitScale = asset.fitSize / extent;
+          bounds.getCenter(centre);
+        }
+        if (asset.lightmap) pending.traverse(object => {
+          const mesh = object as Mesh;
+          if (!mesh.isMesh) return;
+          if (!mesh.geometry.getAttribute("uv1")) throw new Error("Baked lightmaps require glTF TEXCOORD_1 (uv1) on every mesh");
+          const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+          if (materials.some(material => !(material instanceof MeshStandardMaterial))) throw new Error("Baked lightmaps require PBR materials");
+        });
+        const fitted = new Group();
+        fitted.add(pending);
+        fitted.scale.setScalar(fitScale);
+        fitted.position.copy(centre).multiplyScalar(-fitScale);
+        const level = asset.instances ? instanceGltf(fitted, asset.instances) : fitted;
+        presentation.addLevel(level, source.distance, .12);
+        pending = null;
+      } catch (error) {
+        if (index === 0) throw error;
+        if (pending) disposeNativeTree(pending);
+        pending = null;
+        if (target.userData.graphysxDisposed) return;
+        // Keep a prefix so the saved, traversal-based slot IDs never shift onto later levels.
+        lodWarning = `Optional LOD unavailable (${source.url}, distance ${source.distance}): ${error instanceof Error ? error.message : String(error)}`;
+        break;
+      }
     }
     if (asset.lightmap) {
       if (/\.ktx2(?:\?|$)/i.test(asset.lightmap.url)) {
@@ -93,39 +133,21 @@ export async function loadNativeGltf(target: Group, asset: ResolvedAgentWorldMod
       } else lightmap = await new TextureLoader().loadAsync(asset.lightmap.url);
       lightmap.colorSpace = SRGBColorSpace; lightmap.flipY = false; lightmap.channel = 1;
     }
-    if (target.userData.graphysxDisposed) { disposeNativeTree(owned); lightmap?.dispose(); return; }
-    const bounds = new Box3().setFromObject(loaded[0]!.root);
-    const dimensions = bounds.getSize(new Vector3());
-    const extent = Math.max(dimensions.x, dimensions.y, dimensions.z);
-    if (!Number.isFinite(extent) || extent <= 0) throw new Error("glTF model has no finite nonempty bounds");
-    const fitScale = asset.fitSize / extent;
-    const centre = bounds.getCenter(new Vector3());
-    const presentation = new LOD(); presentation.name = "Model LOD";
-    owned.add(presentation);
-    for (const { root, distance } of loaded) {
-      const fitted = new Group(); fitted.add(root); fitted.scale.setScalar(fitScale); fitted.position.copy(centre).multiplyScalar(-fitScale);
-      owned.add(fitted);
-      // Bake fit into batch matrices; unbatched models preserve the native scene graph.
-      fitted.updateWorldMatrix(true, true);
-      let level: Group = fitted;
-      if (asset.instances) level = instanceGltf(fitted, asset.instances);
-      presentation.addLevel(level, distance, .12);
-    }
+    if (target.userData.graphysxDisposed) return;
+    let lightmapApplied = false;
     presentation.traverse(object => {
       const mesh = object as Mesh;
       if (!mesh.isMesh) return;
       mesh.userData.graphysxMaterialLocked = true;
       if (!lightmap) return;
-      if (!mesh.geometry.getAttribute("uv1")) throw new Error("Baked lightmaps require glTF TEXCOORD_1 (uv1) on every mesh");
-      for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
-        if (!(material instanceof MeshStandardMaterial)) throw new Error("Baked lightmaps require PBR materials");
+      const materials = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) as MeshStandardMaterial[];
+      for (const material of materials) {
         material.lightMap = lightmap; material.lightMapIntensity = asset.lightmap!.intensity ?? 1; material.needsUpdate = true;
+        lightmapApplied = true;
       }
     });
-    // Everything now belongs to presentation. Avoid double ownership on a rejected attachment.
-    owned.clear(); owned.add(presentation);
-    if (target.userData.graphysxDisposed) { disposeNativeTree(owned); return; }
-    target.add(presentation);
+    if (!lightmapApplied) lightmap?.dispose();
+    lightmap = null; // The meshes now own the shared lightmap.
     const slots: AgentWorldModelMaterialRegistration[] = [];
     let meshIndex = 0;
     presentation.traverse(object => {
@@ -139,8 +161,15 @@ export async function loadNativeGltf(target: Group, asset: ResolvedAgentWorldMod
       });
     });
     registerAgentWorldModelMaterialSlots(target, slots);
-    owned.clear();
-  } catch (error) {
-    disposeNativeTree(owned); lightmap?.dispose(); throw error;
-  } finally { ktx?.dispose(); }
+    target.add(presentation);
+    attached = true;
+    if (lodWarning) return { lodWarning };
+  } finally {
+    if (!attached) {
+      if (pending) disposeNativeTree(pending);
+      disposeNativeTree(presentation);
+      lightmap?.dispose();
+    }
+    ktx?.dispose();
+  }
 }
