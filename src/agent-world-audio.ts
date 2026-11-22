@@ -8,12 +8,14 @@
 // per-frame cost when nothing changed is a boolean check. PositionalAudio attaches to the
 // entity's own Object3D, so a sound on a spinning parent moves with it for free.
 
-import { Audio as ThreeAudio, AudioListener, AudioLoader, PositionalAudio, type Camera } from "three";
+import { Audio as ThreeAudio, AudioListener, AudioLoader, PositionalAudio, type Camera, type Object3D } from "three";
 import type { AgentWorldRuntime } from "./agent-world-runtime";
 import { agentWorldSoundUrl, type ResolvedAgentWorldSound } from "./agent-world-sounds";
 
+type SceneAudioNode = ThreeAudio | PositionalAudio;
 type TrackedSound = {
-  node: ThreeAudio | PositionalAudio;
+  node: SceneAudioNode;
+  owner: Object3D;
   config: ResolvedAgentWorldSound;
   url: string;
   /** True once setBuffer succeeded; play() before that is deferred to the load callback. */
@@ -26,16 +28,19 @@ export class AgentWorldAudioLayer {
   private readonly loader = new AudioLoader();
   private readonly buffers = new Map<string, Promise<AudioBuffer>>();
   private readonly tracked = new Map<string, TrackedSound>();
+  private readonly activeOneShots = new Set<SceneAudioNode>();
   private readonly unsubscribe: () => void;
   private readonly resumeContext: () => void;
   private dirty = true;
   private disposed = false;
+  private sceneGeneration = 0;
   /** One-shot nodes actually started, cumulative. Smokes read this. */
   private oneShots = 0;
 
   constructor(camera: Camera, private readonly world: AgentWorldRuntime) {
     camera.add(this.listener);
     this.unsubscribe = world.subscribeEvents((event) => {
+      if (event.type === "world.loaded") this.clearSceneAudio();
       if (
         event.type === "entity.spawned"
         || event.type === "entity.updated"
@@ -101,11 +106,10 @@ export class AgentWorldAudioLayer {
       seen.add(entity.id);
       this.reconcile(entity.id, entity.sound, entity.visible);
     }
-    // Entities gone from the world take their audio with them — including a whole-world
-    // replacement, where every id changes at once.
+    // Entities gone from the world take their audio with them.
     for (const [id, entry] of this.tracked) {
       if (seen.has(id)) continue;
-      this.release(entry);
+      this.release(entry.node);
       this.tracked.delete(id);
     }
   }
@@ -133,29 +137,37 @@ export class AgentWorldAudioLayer {
     const volume = typeof data.volume === "number" ? data.volume : 0.8;
     const refDistance = typeof data.refDistance === "number" ? data.refDistance : 8;
     const targetIds = Array.isArray(data.targetIds) ? data.targetIds.filter((t): t is string => typeof t === "string") : [];
+    const generation = this.sceneGeneration;
+    const targets = (targetIds.length ? targetIds : [null]).map(id => ({
+      id,
+      object: positional && id ? this.world.getEntityObject(id) : null,
+    }));
 
     void this.bufferFor(url).then((buffer) => {
-      if (this.disposed) return;
+      if (this.disposed || generation !== this.sceneGeneration || this.listener.context.state !== "running") return;
       // One node per target, so a sound aimed at three gates is heard at three places.
-      for (const targetId of targetIds.length ? targetIds : [null]) {
-        const object = targetId ? this.world.getEntityObject(targetId) : null;
-        const node = positional && object ? new PositionalAudio(this.listener) : new ThreeAudio(this.listener);
-        node.setBuffer(buffer);
-        node.setLoop(false);
-        node.setVolume(volume);
-        if (node instanceof PositionalAudio) {
-          node.setRefDistance(refDistance);
-          object?.add(node);
+      for (const { id, object } of targets) {
+        // The decoded buffer belongs to the original Object3D, even if its ID was reused.
+        if (positional && (!id || !object || this.world.getEntityObject(id) !== object)) continue;
+        const node = positional ? new PositionalAudio(this.listener) : new ThreeAudio(this.listener);
+        this.activeOneShots.add(node);
+        try {
+          node.setBuffer(buffer);
+          node.setLoop(false);
+          node.setVolume(volume);
+          if (node instanceof PositionalAudio) {
+            node.setRefDistance(refDistance);
+            object?.add(node);
+          }
+          node.onEnded = () => {
+            node.isPlaying = false;
+            this.releaseOneShot(node);
+          };
+          node.play();
+          this.oneShots += 1;
+        } catch {
+          this.releaseOneShot(node);
         }
-        // Detach on completion or the scene graph accumulates dead nodes for the life of
-        // the session — a ring chimed 200 times would leave 200 of them parented.
-        node.onEnded = () => {
-          node.isPlaying = false;
-          node.removeFromParent();
-          node.disconnect();
-        };
-        node.play();
-        this.oneShots += 1;
       }
     }).catch(() => {
       // Same contract as a sound entity with a bad source: silence, not a crashed layer.
@@ -164,37 +176,39 @@ export class AgentWorldAudioLayer {
 
   private reconcile(id: string, config: ResolvedAgentWorldSound, visible: boolean): void {
     const url = agentWorldSoundUrl(config.source);
+    const owner = this.world.getEntityObject(id);
     const existing = this.tracked.get(id);
 
     // Source or spatial mode changed → rebuild the node; everything else adjusts in place.
-    if (existing && (existing.url !== url || (existing.node instanceof PositionalAudio) !== config.positional)) {
-      this.release(existing);
+    if (existing && (existing.owner !== owner || existing.url !== url || (existing.node instanceof PositionalAudio) !== config.positional)) {
+      this.release(existing.node);
       this.tracked.delete(id);
     }
 
-    if (!url) return; // an unresolvable source stays silent, exactly like a missing texture
+    if (!url || !owner) return; // an unresolvable source stays silent, exactly like a missing texture
 
-    const entry = this.tracked.get(id) ?? this.track(id, config, url);
+    const entry = this.tracked.get(id) ?? this.track(id, owner, config, url);
     entry.config = config;
     entry.muted = !visible;
     if (entry.ready) this.applyConfig(entry);
   }
 
-  private track(id: string, config: ResolvedAgentWorldSound, url: string): TrackedSound {
+  private track(id: string, owner: Object3D, config: ResolvedAgentWorldSound, url: string): TrackedSound {
     const node = config.positional ? new PositionalAudio(this.listener) : new ThreeAudio(this.listener);
-    const entry: TrackedSound = { node, config, url, ready: false, muted: false };
+    const entry: TrackedSound = { node, owner, config, url, ready: false, muted: false };
     this.tracked.set(id, entry);
     // The node rides the entity's own object so transforms (and parents) carry it.
-    const object = this.world.getEntityObject(id);
-    if (object && config.positional) object.add(node);
+    if (config.positional) owner.add(node);
     void this.bufferFor(url).then((buffer) => {
-      if (this.disposed || this.tracked.get(id) !== entry) return;
+      if (this.disposed || this.tracked.get(id) !== entry || this.world.getEntityObject(id) !== owner) return;
       entry.node.setBuffer(buffer);
       entry.ready = true;
       this.applyConfig(entry);
     }).catch(() => {
-      // A failed decode is a silent entity, not a crashed layer. The URL stays recorded
-      // so a later patch to a working source rebuilds the node.
+      if (this.tracked.get(id) !== entry) return;
+      this.tracked.delete(id);
+      this.release(node);
+      // The next scene edit can retry the source without a retry loop in sync().
     });
     return entry;
   }
@@ -221,10 +235,22 @@ export class AgentWorldAudioLayer {
     return pending;
   }
 
-  private release(entry: TrackedSound): void {
-    if (entry.node.isPlaying) entry.node.stop();
-    entry.node.removeFromParent();
-    entry.node.disconnect();
+  private release(node: SceneAudioNode): void {
+    if (node.isPlaying) node.stop();
+    node.removeFromParent();
+    node.disconnect();
+    node.gain.disconnect();
+  }
+
+  private releaseOneShot(node: SceneAudioNode): void {
+    if (this.activeOneShots.delete(node)) this.release(node);
+  }
+
+  private clearSceneAudio(): void {
+    this.sceneGeneration += 1;
+    for (const entry of this.tracked.values()) this.release(entry.node);
+    this.tracked.clear();
+    for (const node of this.activeOneShots) this.releaseOneShot(node);
   }
 
   dispose(): void {
@@ -233,8 +259,8 @@ export class AgentWorldAudioLayer {
     this.unsubscribe();
     window.removeEventListener("pointerdown", this.resumeContext, { capture: true });
     window.removeEventListener("keydown", this.resumeContext, { capture: true });
-    for (const entry of this.tracked.values()) this.release(entry);
-    this.tracked.clear();
+    this.clearSceneAudio();
+    this.buffers.clear();
     this.listener.removeFromParent();
     void this.listener.context.close().catch(() => undefined);
   }
