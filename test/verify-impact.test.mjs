@@ -15,9 +15,9 @@ describe("verification by changed area", () => {
     for (const file of ["src/cubz-menu-app.ts", "src/cubz-menu-scene.ts", "src/cubz-menu-buttons.ts", "src/cubz-menu.css"]) {
       const plan = selectVerification([file]);
       assert.equal(plan.mode, "targeted"); assert.equal(plan.deploy, true);
-      for (const check of ["cubz-menu", "cubz-buttons", "cubx-atmel", "studio-simple", "my-creations", "roundtrip", "standalone", "product-assets", "asset-guard"]) assert.ok(names(plan).includes(check));
+      for (const check of ["cubz-menu", "cubz-buttons", "cubz-studio-framing", "cubx-atmel", "studio-simple", "my-creations", "roundtrip", "standalone", "product-assets", "asset-guard"]) assert.ok(names(plan).includes(check));
     }
-    for (const shared of ["src/agent-world-runtime.ts", "src/agent-world-motion.ts", "src/platform-host.ts", "src/main.ts", "src/cubz-unclassified.ts"]) {
+    for (const shared of ["src/agent-world-runtime.ts", "src/agent-world-motion.ts", "src/platform-host.ts", "src/platform-editor.ts", "src/visible-scene-bounds.ts", "src/main.ts", "src/cubz-unclassified.ts"]) {
       assert.equal(selectVerification(["src/cubz-menu-buttons.ts", shared]).mode, "full");
     }
     assert.equal(selectVerification(["scripts/audit-cubz-buttons.mjs"]).mode, "static");
