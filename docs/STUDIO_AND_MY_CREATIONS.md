@@ -28,12 +28,45 @@ Effacer les données du navigateur retire ces sauvegardes. **Exporter** produit 
 JSON transportable ; **Fichier → Importer un fichier** le rouvre dans le Studio.
 Les liens `localScene` retrouvent un nom dans ce navigateur, pas un document partagé en ligne.
 
+Les scènes nommées du Studio, de l’atelier ADN et de la création guidée utilisent
+désormais **IndexedDB**. Plusieurs poses CubZ complètes peuvent y cohabiter sans remplir
+le petit quota de `localStorage`. Les maillages natifs, objets masqués, panneaux et
+propriétés du document v2 restent inclus ; aucune réduction ni reconstruction n’est faite
+pour économiser de la place. La liste lit un catalogue léger, puis charge le document
+complet seulement pour l’ouverture, la copie ou l’export.
+
+**Enregistrée** apparaît après la fin de la transaction qui conserve ensemble le document
+et son catalogue, avec l’indication de durabilité `strict`. Un succès intermédiaire d’écriture
+ne suffit pas : une transaction annulée garde la version précédente et le travail ouvert.
+Les modifications faites pendant une écriture restent signalées comme non enregistrées.
+Ce protocole suit le [contrat de transaction IndexedDB](https://www.w3.org/TR/IndexedDB-3/#transaction-concept).
+Le quota disque du navigateur existe toujours ; l’export reste la copie indépendante à garder.
+
 Les anciens enregistrements du Studio, les variantes ADN et les créations guidées figurent
-dans la même liste, sans migration. **Brouillons** retrouve les deux générations d’autosauvegarde
+dans la même liste, sans déplacement ni suppression. Mettre à jour un ancien enregistrement
+crée sa version actuelle dans IndexedDB et garde ses octets d’origine dans `localStorage`.
+Si une ancienne fenêtre modifie ensuite cette source, **autre version** permet de la retrouver
+et de l’exporter ou d’en créer une copie. Elle ne remplace pas la version actuelle.
+Les noms déjà utilisés et les révisions périmées sont refusés dans la même transaction que
+l’écriture ; deux fenêtres ne peuvent pas écraser leurs changements silencieusement.
+Les raccourcis de reprise ADN et création guidée retrouvent la dernière version, y compris
+les modifications faites dans le Studio.
+
+**Brouillons** retrouve les deux générations d’autosauvegarde
 du Studio. Reprendre un brouillon ouvre une copie de travail ; l’enregistrement nommé suit
 la règle existante de consommation du brouillon récupéré, uniquement si ses données n’ont pas changé.
 Une entrée illisible reste exportable. En cas de stockage bloqué ou plein, conserver la scène
 ouverte et exporter un fichier ; un échec n’est pas présenté comme un enregistrement réussi.
+Les brouillons gardent leur format synchrone actuel et son quota ; **Enregistrer** peut
+conserver une grosse scène dans IndexedDB même si l’autosauvegarde n’a plus de place.
+Un stockage historique bloqué n’empêche pas les nouvelles sauvegardes si IndexedDB est accessible.
+
+L’API publique synchrone `api.save(name)` / `api.load(name)` garde son contrat historique
+dans `localStorage`. L’interface utilise le dépôt asynchrone `scene-library.ts`, puis
+`api.exportDocument()` / `api.load(definition)` sur la même World API. Les outils synchrones
+ne deviennent pas implicitement asynchrones et ne constituent pas un accès aux nouveaux
+enregistrements IndexedDB par leur nom. L’ouverture par **Mes créations**, les liens du Studio
+et l’import JSON restent les points d’entrée de ces documents.
 
 Si un serveur de scènes optionnel est disponible, la bibliothèque propose une destination
 distincte pour son panneau existant. Elle ne déplace ni n’envoie les scènes locales.
@@ -60,7 +93,7 @@ Les contrats Node couvrent la découverte des anciens formats, les copies, le do
 complet, les conflits et les erreurs de stockage. Les parcours navigateur enregistrés sont :
 
 ```powershell
-npm run verify -- --wait --checks=studio-simple,my-creations,ux-navigation
+npm run verify -- --wait --checks=studio-simple,my-creations,cubz-storage,scene-library-safety,cubz-studio-framing,dna-creation,first-creation,editor-drafts,top20
 npm run verify -- --wait
 ```
 
@@ -72,6 +105,21 @@ Il garde aussi le mode complet des deux liens de comparaison source.
 les brouillons, l’export de secours et une fermeture/réouverture réelle de Chromium
 sur un profil temporaire propre au test. Les régressions avancées restent vérifiées après
 un passage explicite par **Mode complet**.
+`cubz-storage` sauvegarde huit variantes natives complètes dans un seul profil, conserve
+deux anciennes poses et leurs brouillons/pointeurs, copie et met à jour des scènes, exporte
+et réimporte le JSON exact, provoque une annulation après le succès d’une requête et une
+erreur de quota, puis ferme réellement Chromium et rouvre chaque scène. Les cartes et
+actions sont aussi vérifiées à 390 et 320 px.
+`scene-library-safety` retarde de vraies ouvertures IndexedDB : une fenêtre fermée ou un
+monde remplacé garde son autorité, les modifications pendant l’écriture restent à garder,
+et une confirmation tardive ne renomme pas le monde suivant. Une ancienne fenêtre peut
+retrouver, exporter, rouvrir et copier sa version sans remplacer la sauvegarde actuelle.
+Deux fenêtres créant simultanément le même nom n’obtiennent qu’un seul enregistrement ;
+l’autre garde son document. Le focus reste dans le dialogue pendant l’attente et après
+un échec : Échap et Ctrl/Cmd+S ne traversent pas vers le Studio derrière.
+Un remplacement externe du document retire immédiatement son ancien nom de sauvegarde,
+même si le nouveau monde réutilise le même identifiant. Annuler/rétablir une modification
+ordinaire conserve au contraire le fichier en cours.
 
 Le gate et ses captures ne constituent pas une réception sur téléphone physique ou avec
 lecteur d’écran. Les services privés et le matériel VR ont leur réception séparée.

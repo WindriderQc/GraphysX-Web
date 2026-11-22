@@ -1,4 +1,4 @@
-import { enterCompleteStudio } from "./studio-smoke-helpers.mjs";
+import { enterCompleteStudio, waitForStoredScene } from "./studio-smoke-helpers.mjs";
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -225,8 +225,7 @@ try {
   await capture(page, "cubz-studio-pose");
   page.once("dialog", dialog => dialog.accept("CubZ smoke pose"));
   await page.locator(".gx-ed-toolbar").getByRole("button", { name: "Save", exact: true }).click();
-  await page.waitForFunction(() => Boolean(localStorage.getItem("graphysx.agent-world.v2.CubZ smoke pose")));
-  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("graphysx.agent-world.v2.CubZ smoke pose")));
+  const saved = JSON.parse(await waitForStoredScene(page, "CubZ smoke pose"));
   assert.equal(saved.entities.filter(entity => entity.tags?.includes("cubz-source-mesh")).length, 132);
   const downloadEvent = page.waitForEvent("download"); await page.locator(".gx-ed-toolbar").getByRole("button", { name: "Export", exact: true }).click();
   const download = await downloadEvent; await download.saveAs(path.join(artifacts, "cubz-studio-pose.json"));

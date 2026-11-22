@@ -1,5 +1,6 @@
 import type { PlatformHost } from "./platform-host";
-import { LOCAL_SCENE_PREFIX, readFirstCreationResume, readLocalSceneSlot, rememberFirstCreation, type LocalSceneSlot } from "./local-scenes";
+import { rememberFirstCreation } from "./local-scenes";
+import { readLibraryResume, saveLibraryScene } from "./scene-library";
 import { FIRST_CREATION_TONES, composeFirstCreation, firstCreationCanTune, firstCreationTone, firstCreationToneCommands, type FirstCreationTone } from "./first-creation-scene";
 import "./first-creation.css";
 
@@ -9,17 +10,19 @@ export type FirstCreationApplication = {
   dispose: () => void;
 };
 
-export function mountFirstCreation(root: HTMLElement, host: PlatformHost, onExit: () => void, resume: boolean): FirstCreationApplication {
+export async function mountFirstCreation(root: HTMLElement, host: PlatformHost, onExit: () => void, resume: boolean, isCurrent: () => boolean = () => true): Promise<FirstCreationApplication> {
   const { api } = host;
+  const initial = api.state();
+  let slot = resume ? await readLibraryResume("creation") : null;
+  if (!isCurrent() || api.state()?.world.id !== initial?.world.id || api.state()?.revision !== initial?.revision) throw new DOMException("World changed before resume", "AbortError");
   const previousTitle = document.title;
   const previousLanguage = document.documentElement.lang;
   document.title = "Jardin des lucioles · GraphysX";
   document.documentElement.lang = "fr";
 
-  let slot = resume ? readFirstCreationResume() : null;
   let notice = slot ? "Scène reprise. Tu peux continuer à la façonner." : "";
   if (slot) {
-    const restored = api.load(slot.definition);
+    const restored = api.load(slot.definition!);
     if (!restored.ok) slot = null;
   }
   if (!slot) {
@@ -111,29 +114,28 @@ export function mountFirstCreation(root: HTMLElement, host: PlatformHost, onExit
   }
   if (!canTune) notice = "Cette scène a évolué dans l’éditeur. Tu peux l’y ouvrir ou l’enregistrer sous un autre nom.";
   nameInput.addEventListener("input", refresh);
-  find<HTMLFormElement>("form").addEventListener("submit", (event) => {
+  let saving = false, disposed = false;
+  find<HTMLFormElement>("form").addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (saving) return;
     const name = nameInput.value.trim();
     if (!name) { notice = "Choisis un nom pour ta scène."; refresh(); return; }
     try {
-      const existing = window.localStorage.getItem(LOCAL_SCENE_PREFIX + name);
-      if (existing !== null && (slot?.name !== name || slot.raw !== existing)) {
-        notice = "Ce nom est déjà utilisé ou la scène a changé dans un autre onglet. Choisis un nouveau nom pour garder une copie.";
-      } else {
-        const saved = api.save(name);
-        if (!saved.ok) throw new Error("L’enregistrement est indisponible. Ta scène est encore ouverte.");
-        const written: LocalSceneSlot | null = readLocalSceneSlot(name);
-        if (!written) throw new Error("La copie enregistrée n’a pas pu être relue.");
-        slot = written;
-        baseline = JSON.stringify(api.exportDocument());
-        dirty = false;
-        nameInput.value = name;
-        notice = rememberFirstCreation(name) ? "Scène enregistrée. Retrouve-la avec « Reprendre » au Centre." :
-          "Scène enregistrée. Elle est disponible dans les scènes locales de l’éditeur.";
-      }
+      saving = true; saveButton.disabled = true;
+      const signature = JSON.stringify(api.exportDocument()), initial = api.state();
+      const saved = await saveLibraryScene(api, name, slot);
+      if (disposed || api.state()?.world.id !== initial?.world.id) return;
+      if (!saved.ok) throw new Error(saved.reason === "conflict" ? "Ce nom est déjà utilisé ou la scène a changé dans un autre onglet. Choisis un nouveau nom pour garder une copie." : saved.error);
+      slot = saved.entry;
+      baseline = signature;
+      dirty = JSON.stringify(api.exportDocument()) !== signature;
+      nameInput.value = name;
+      notice = rememberFirstCreation(name) ? "Scène enregistrée. Retrouve-la avec « Reprendre » au Centre." :
+        "Scène enregistrée. Elle est disponible dans les scènes locales de l’éditeur.";
     } catch (error) {
       notice = error instanceof Error ? error.message : "L’enregistrement est indisponible.";
-    }
+    } finally { saving = false; saveButton.disabled = false; }
+    if (disposed) return;
     refresh();
   });
 
@@ -143,7 +145,7 @@ export function mountFirstCreation(root: HTMLElement, host: PlatformHost, onExit
     onExit();
   });
   const warnBeforeLeaving = (event: BeforeUnloadEvent): void => {
-    if (!dirty || leaving) return;
+    if ((!dirty && !saving) || leaving) return;
     event.preventDefault();
     event.returnValue = true;
   };
@@ -158,6 +160,7 @@ export function mountFirstCreation(root: HTMLElement, host: PlatformHost, onExit
     state: () => ({ application: "creation", tone: firstCreationTone(api.exportDocument())?.id ?? null, savedName: slot?.name ?? null, dirty }),
     advanceTime: (milliseconds) => api.step(milliseconds / 1000),
     dispose() {
+      disposed = true;
       compact.removeEventListener("change", frame);
       window.removeEventListener("beforeunload", warnBeforeLeaving);
       surface.remove();

@@ -1,4 +1,4 @@
-import { enterCompleteStudio } from "./studio-smoke-helpers.mjs";
+import { enterCompleteStudio, readStoredScene } from "./studio-smoke-helpers.mjs";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -89,8 +89,7 @@ try {
       await atelier.getByLabel(/Donne un nom/).fill(sceneName);
       await atelier.getByRole("button", { name: "Enregistrer", exact: true }).click();
       await atelier.getByRole("status").getByText(/Ce nom est déjà utilisé/).waitFor();
-      const savedColor = await page.evaluate((slot) => JSON.parse(localStorage.getItem("graphysx.agent-world.v2." + slot))
-        .entities.find((entity) => entity.id === "garden-lantern").material.emissive, sceneName);
+      const savedColor = JSON.parse(await readStoredScene(page, sceneName)).entities.find(entity => entity.id === "garden-lantern").material.emissive;
       assert.equal(savedColor, authored.lantern, "starting again cannot overwrite the previous creation");
     }
     assert.deepEqual(errors, []);

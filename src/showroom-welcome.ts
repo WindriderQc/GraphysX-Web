@@ -1,6 +1,6 @@
 import type { NestorConsoleTopic, NestorPresentation } from "./showroom-nestor";
 import { summarizeProposal } from "./coauthor-proposal";
-import { readDnaCreationResume, readFirstCreationResume } from "./local-scenes";
+import { readLibraryResume, subscribeSceneLibrary } from "./scene-library";
 import "./showroom-center.css";
 import { describeTourPosition } from "./nestor-tour";
 import type { NestorTourState } from "./nestor-tour";
@@ -433,6 +433,8 @@ export function mountWelcome(
     overlay.querySelector("[data-tour-start]")?.remove();
   }
   let updateResume: (() => void) | undefined;
+  let unsubscribeResume: (() => void) | undefined;
+  let resumeGeneration = 0;
   if (center) {
     overlay.classList.add("gx-welcome--center");
     const entry = document.createElement("div");
@@ -454,17 +456,20 @@ export function mountWelcome(
     resume.href = import.meta.env.BASE_URL + "?app=creation&resume=1";
     const name = document.createElement("span");
     resume.append("Reprendre · ", name);
+    resume.hidden = dnaResume.hidden = true;
     updateResume = () => {
-      const saved = readFirstCreationResume();
-      resume.hidden = !saved;
-      name.textContent = saved?.name ?? "";
-      const dnaSaved = readDnaCreationResume();
-      dnaResume.hidden = !dnaSaved;
-      dnaResume.textContent = dnaSaved ? "Reprendre l’ADN · " + dnaSaved.name : "";
+      const generation = ++resumeGeneration;
+      void Promise.all([readLibraryResume("creation"), readLibraryResume("dna")]).then(([saved, dnaSaved]) => {
+        if (generation !== resumeGeneration || !overlay.isConnected) return;
+        resume.hidden = !saved;
+        name.textContent = saved?.name ?? "";
+        dnaResume.hidden = !dnaSaved;
+        dnaResume.textContent = dnaSaved ? "Reprendre l’ADN · " + dnaSaved.name : "";
+      });
     };
     updateResume();
     window.addEventListener("pageshow", updateResume);
-    window.addEventListener("storage", updateResume);
+    unsubscribeResume = subscribeSceneLibrary(updateResume);
     entry.append(dna, dnaResume, create, resume);
     if (hooks?.onOpenPersonalScenes) {
       const personal = document.createElement("a"); personal.className = "gx-create-resume gx-go-personal";
@@ -479,9 +484,9 @@ export function mountWelcome(
     overlay.querySelector("[data-nestor-briefing]")?.after(entry);
   }
   const dispose = () => {
+    resumeGeneration += 1; unsubscribeResume?.();
     if (updateResume) {
       window.removeEventListener("pageshow", updateResume);
-      window.removeEventListener("storage", updateResume);
     }
     overlay.remove();
     style.remove();

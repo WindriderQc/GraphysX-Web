@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { applySmokeTimeout, launchSmokeBrowser } from "./smoke-harness.mjs";
-import { canonicalScene, drawStudio, namedSave, sceneCard, sceneDocument, studioState } from "./studio-smoke-helpers.mjs";
+import { canonicalScene, drawStudio, namedSave, sceneCard, sceneDocument, studioState, readStoredScene } from "./studio-smoke-helpers.mjs";
 
 const base = process.env.SMOKE_BASE || "http://127.0.0.1:4209/";
 const artifacts = process.env.SMOKE_ARTIFACTS || path.resolve("output/playwright/cubz-studio-framing");
@@ -58,8 +58,8 @@ function assertFramed(result, label) {
 }
 
 async function reopen(page, name, saved, label) {
-  const key = "graphysx.agent-world.v2." + name;
-  const bytes = await page.evaluate(key => localStorage.getItem(key), key);
+  const bytes = await readStoredScene(page, name);
+  assert.ok(bytes?.length > 1_000_000, "the complete native CubZ document is durably stored");
   await page.click("[data-studio-action=my-scenes]");
   await page.getByRole("dialog", { name: "Mes créations", exact: true }).waitFor();
   await sceneCard(page, name).getByRole("button", { name: "Modifier dans le Studio", exact: true }).click();
@@ -72,7 +72,7 @@ async function reopen(page, name, saved, label) {
   await settled(page);
   const cold = await composition(page); assertFramed(cold, label + " cold");
   assert.deepEqual(canonicalScene(await sceneDocument(page)), canonicalScene(saved), "cold framing preserves the whole authored scene");
-  assert.equal(await page.evaluate(key => localStorage.getItem(key), key), bytes, "opening never rewrites the original saved bytes");
+  assert.equal(await readStoredScene(page, name), bytes, "opening never rewrites the original saved bytes");
   assert.equal((await studioState(page)).dirty, false);
   await page.screenshot({ path: path.join(artifacts, "cubz-studio-" + label + ".png") });
   return { library, cold, savedBytesPreserved: true, documentPreserved: true };
