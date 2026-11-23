@@ -79,12 +79,13 @@ export function irisTone(local: EyeLocal, radius: number, contrast = 1): number 
 /**
  * Height of the upper lid's edge in the eye's frame, metres above the eye centre.
  *
- * The sculpt cuts the lid at `0.38 × radius` above the centre on the eyeball's front; the rig
+ * The sculpt cuts the lid at `0.66 × radius` above the centre on the eyeball's front; the rig
  * turns the lid about the eye centre by `lidRadians`, positive closing it downward. So the edge
- * sits at an elevation of `asin(0.38) − lidRadians` on the front of the eyeball.
+ * sits at an elevation of `asin(0.66) − lidRadians` on the front of the eyeball. Keep the
+ * resting edge aligned with UPPER_LID_LINE in the offline sculptor.
  */
 export function lidEdgeY(radius: number, lidRadians: number): number {
-  const elevation = Math.asin(0.38) - lidRadians;
+  const elevation = Math.asin(0.66) - lidRadians;
   return radius * Math.sin(Math.max(-Math.PI / 2, Math.min(Math.PI / 2, elevation)));
 }
 
