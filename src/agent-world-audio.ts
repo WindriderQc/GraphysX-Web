@@ -16,7 +16,7 @@ type SceneAudioNode = ThreeAudio | PositionalAudio;
 type TrackedSound = {
   node: SceneAudioNode;
   owner: Object3D;
-  config: ResolvedAgentWorldSound;
+  config: Readonly<ResolvedAgentWorldSound>;
   url: string;
   /** True once setBuffer succeeded; play() before that is deferred to the load callback. */
   ready: boolean;
@@ -99,12 +99,10 @@ export class AgentWorldAudioLayer {
     if (!this.dirty || this.disposed) return;
     this.dirty = false;
 
-    const state = this.world.getState();
     const seen = new Set<string>();
-    for (const entity of state?.entities ?? []) {
-      if (entity.type !== "sound" || !entity.sound) continue;
-      seen.add(entity.id);
-      this.reconcile(entity.id, entity.sound, entity.visible);
+    for (const { id, sound, visible } of this.world.getSoundSources()) {
+      seen.add(id);
+      this.reconcile(id, sound, visible);
     }
     // Entities gone from the world take their audio with them.
     for (const [id, entry] of this.tracked) {
@@ -174,7 +172,7 @@ export class AgentWorldAudioLayer {
     });
   }
 
-  private reconcile(id: string, config: ResolvedAgentWorldSound, visible: boolean): void {
+  private reconcile(id: string, config: Readonly<ResolvedAgentWorldSound>, visible: boolean): void {
     const url = agentWorldSoundUrl(config.source);
     const owner = this.world.getEntityObject(id);
     const existing = this.tracked.get(id);
@@ -193,7 +191,7 @@ export class AgentWorldAudioLayer {
     if (entry.ready) this.applyConfig(entry);
   }
 
-  private track(id: string, owner: Object3D, config: ResolvedAgentWorldSound, url: string): TrackedSound {
+  private track(id: string, owner: Object3D, config: Readonly<ResolvedAgentWorldSound>, url: string): TrackedSound {
     const node = config.positional ? new PositionalAudio(this.listener) : new ThreeAudio(this.listener);
     const entry: TrackedSound = { node, owner, config, url, ready: false, muted: false };
     this.tracked.set(id, entry);

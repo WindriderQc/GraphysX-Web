@@ -5775,3 +5775,7 @@ Request: "tu me refait un passage pour améliorer encore nos capacités GraphysX
 ## GraphysX — keep decoded audio with its scene
 
 - Reproduced issue 16 on b438db5 by holding Web Audio decode completion. Old cues played globally after the target vanished and attached to replacement objects that reused the same ID. Bind deferred cues to the scene generation and the original positional object, release active voices when replacing the scene, and leave failed sources eligible for a later edit to retry. Browser checks pass for all three stale targets, overlapping HRTF cues, a reused looping source and retrying the same URL. NACRE passes its desktop and synthetic XR audio journeys, including reactor position, mission cues, mute, world replacement and visibility.
+
+## NACRE — reduce runtime work per tick
+
+- Compared with 06c8720 on the same 50-entity NACRE standby scene in Chromium. Direct mission tag reads remove 3 full state projections per tick. Dirty audio sync reads only the 3 sound configurations and removes 50 projections. Visual updates visit 8 material entries instead of 54 in standby, with no measured improvement in visual-update time. Desktop and synthetic XR checks cover cell placement, reactor modulation, door opening, HRTF audio, mute and the belvedere. The delayed audio decode regression passes. Physical Quest performance remains to be measured.
