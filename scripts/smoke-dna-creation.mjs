@@ -1,4 +1,4 @@
-import { enterCompleteStudio } from "./studio-smoke-helpers.mjs";
+import { enterCompleteStudio, readStoredScene, waitForStoredScene, installSceneWriteFault, restoreSceneWrites, overwriteStoredScene } from "./studio-smoke-helpers.mjs";
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -112,7 +112,7 @@ try {
     await app.locator("[data-dna-notice]").getByText(/Variante enregistrée/).waitFor();
     const studio = app.getByRole("link", { name: "Ouvrir ma variante dans le Studio ↗", exact: true });
     assert.equal(await reachable(studio), true, "Studio action is shown after verified save");
-    assert.deepEqual(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), prefix + name), mutated, "save contains exact DNA and authored physics apparatus");
+    assert.deepEqual(JSON.parse(await readStoredScene(page, name)), mutated, "save contains exact DNA and authored physics apparatus");
     assert.equal(await page.evaluate((key) => localStorage.getItem(key), resumeKey), name);
     await draw(page);
     await page.screenshot({ path: path.join(artifacts, `dna-saved-${device}.png`) });
@@ -134,7 +134,7 @@ try {
       });
       page.once("dialog", (dialog) => dialog.accept(name));
       await page.locator(".gx-ed-toolbar").getByRole("button", { name: "Save", exact: true }).click();
-      await page.waitForFunction(({ key, value }) => localStorage.getItem(key) === value, { key: prefix + name, value: JSON.stringify(edited) });
+      await waitForStoredScene(page, name, JSON.stringify(edited));
       await page.locator(".gx-ed-exit").click();
       await page.getByRole("link", { name: "Reprendre l’ADN · " + name, exact: true }).click();
       await app.locator("[data-dna-notice]").getByText(/Variante reprise/).waitFor();
@@ -149,26 +149,23 @@ try {
       await app.getByLabel("3 Garde ta variante").fill(name);
       await app.getByRole("button", { name: "Enregistrer", exact: true }).click();
       await app.locator("[data-dna-notice]").getByText(/Ce nom est déjà utilisé/).waitFor();
-      assert.deepEqual(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), prefix + name), edited);
+      assert.deepEqual(JSON.parse(await readStoredScene(page, name)), edited);
       await app.getByLabel("3 Garde ta variante").fill("Storage blocked");
-      await page.evaluate(() => { window.__dnaSetItem = Storage.prototype.setItem; Storage.prototype.setItem = function () { throw new DOMException("Blocked", "QuotaExceededError"); }; });
+      await installSceneWriteFault(page);
       await app.getByRole("button", { name: "Enregistrer", exact: true }).click();
       await app.locator("[data-dna-notice]").getByText(/enregistrement est indisponible/).waitFor();
       assert.equal((await read(page)).dirty, true);
       assert.equal(await studio.isVisible(), false);
-      await page.evaluate(() => { Storage.prototype.setItem = window.__dnaSetItem; delete window.__dnaSetItem; });
+      await restoreSceneWrites(page);
       await app.getByRole("button", { name: "Enregistrer", exact: true }).click();
       await studio.waitFor();
-      const conflicted = await page.evaluate((key) => {
-        const value = JSON.parse(localStorage.getItem(key)); value.label = "Other tab";
-        const raw = JSON.stringify(value); localStorage.setItem(key, raw); return raw;
-      }, prefix + "Storage blocked");
+      const conflicted = await overwriteStoredScene(page, "Storage blocked", { ...JSON.parse(await readStoredScene(page, "Storage blocked")), label: "Other tab" });
       await app.getByRole("button", { name: "1 · Muter", exact: true }).click();
       await app.getByRole("radio", { name: /Plus ramifié/ }).check();
       await app.getByRole("button", { name: "3 · Garder", exact: true }).click();
       await app.getByRole("button", { name: "Mettre à jour", exact: true }).click();
       await app.locator("[data-dna-notice]").getByText(/scène a changé dans un autre onglet/).waitFor();
-      assert.equal(await page.evaluate((key) => localStorage.getItem(key), prefix + "Storage blocked"), conflicted);
+      assert.equal(await readStoredScene(page, "Storage blocked"), conflicted);
     } else {
       await page.locator(".gx-ed-exit").click();
       await page.getByRole("link", { name: "Reprendre l’ADN · " + name, exact: true }).click();

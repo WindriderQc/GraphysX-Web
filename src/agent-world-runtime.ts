@@ -1716,7 +1716,7 @@ export class AgentWorldRuntime {
     this.worldRoot.name = "AgentEntities";
     this.environmentRoot.name = "AgentEnvironment";
     this.group.add(this.environmentRoot, this.worldRoot);
-    this.loadDefinition(definition);
+    this.loadDefinition(definition, "initial");
     this.recordEvent("world.created", `Created ${this.definition.label}`);
   }
 
@@ -1859,7 +1859,7 @@ export class AgentWorldRuntime {
       // Loading is intentionally strict and may discover a bad parent reference
       // after it has started rebuilding. Restore the prior world so create/load
       // remain atomic from an agent's point of view.
-      this.loadDefinition(before);
+      this.loadDefinition(before, "rollback");
       this.selectedIds = beforeSelection;
       this.elapsedSeconds = beforeElapsedSeconds;
       this.updateSimulation(0);
@@ -2183,7 +2183,7 @@ export class AgentWorldRuntime {
     } catch (error) {
       // Validation already refused bad inputs without touching the live world. This is
       // a defensive rollback for an unexpected failure while installing a prepared edit.
-      this.loadDefinition(before);
+      this.loadDefinition(before, "rollback");
       this.selectedIds = beforeSelection;
       this.elapsedSeconds = beforeElapsedSeconds;
       this.recordEvent("transaction.rejected", error instanceof Error ? error.message : String(error));
@@ -2285,7 +2285,7 @@ export class AgentWorldRuntime {
     if (!previous) return this.failure("There is no transaction to undo");
     this.redoHistory.push(this.exportHistoryDefinition());
     if (this.redoHistory.length > 40) this.redoHistory.shift();
-    this.loadDefinition(previous);
+    this.loadDefinition(previous, "undo");
     this.revision += 1;
     this.recordEvent("transaction.undone", "Restored the previous world definition");
     return this.success(this.getState());
@@ -2296,7 +2296,7 @@ export class AgentWorldRuntime {
     if (!next) return this.failure("There is no transaction to redo");
     this.history.push(this.exportHistoryDefinition());
     if (this.history.length > 40) this.history.shift();
-    this.loadDefinition(next);
+    this.loadDefinition(next, "redo");
     this.revision += 1;
     this.recordEvent("transaction.redone", "Reapplied the next world definition");
     return this.success(this.getState());
@@ -3178,7 +3178,7 @@ export class AgentWorldRuntime {
     this.emit("environment.changed", [], { sky: this.environment.sky, overlay: this.environment.overlay, background: this.environment.background, envelope: this.environment.envelope, post: this.environment.post, lighting: this.environment.lighting, dayNight: this.environment.dayNight });
   }
 
-  private loadDefinition(source: AgentWorldDefinition): void {
+  private loadDefinition(source: AgentWorldDefinition, reason: "initial" | "replace" | "undo" | "redo" | "rollback" = "replace"): void {
     validateWorldDefinition(source);
     assertAuthoredWorldEntityNamespaces(source);
     // A wholesale world replacement owns the graph. Host presence controllers keep their
@@ -3225,7 +3225,7 @@ export class AgentWorldRuntime {
     // A wholesale replacement invalidates any incremental picture a consumer was keeping,
     // whether it came from a load, a rollback or an undo. Saying so is cheaper than every
     // consumer inferring it from a storm of spawn events.
-    this.emit("world.loaded", [], { worldId: this.definition.id, entityCount: this.entities.size });
+    this.emit("world.loaded", [], { worldId: this.definition.id, entityCount: this.entities.size, reason });
     // Armed *after* the emit, deliberately. `world.loaded` idles a run — that is how an
     // external consumer learns its course was replaced underneath it — so arming first would
     // have the runtime's own evaluator immediately read that event and idle the run it had

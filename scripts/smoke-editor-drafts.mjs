@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { waitForStoredScene } from "./studio-smoke-helpers.mjs";
 import { applySmokeTimeout, launchSmokeBrowser, useLightRender } from "./smoke-harness.mjs";
 
 const BASE = process.env.SMOKE_BASE || "http://127.0.0.1:4188/";
@@ -12,7 +13,8 @@ try {
   const save = async (name) => {
     page.once("dialog", (dialog) => dialog.accept(name));
     await toolbar.getByRole("button", { name: "Save", exact: true }).click();
-    await page.waitForFunction((slot) => localStorage.getItem("graphysx.agent-world.v2." + slot) !== null, name);
+    await waitForStoredScene(page, name);
+    await page.waitForFunction(name => document.querySelector(".gx-ed-status")?.textContent.includes("saved to " + name), name);
   };
   const findDraft = async (id) => {
     const handle = await page.waitForFunction((entityId) => Object.keys(localStorage).find((key) =>
@@ -30,6 +32,7 @@ try {
   assert.equal(await hasEntity(firstId), true);
   const firstKey = await findDraft(firstId);
   await toolbar.getByRole("combobox", { name: "Open a named local scene slot" }).selectOption("draft-original");
+  await page.waitForFunction(() => document.querySelector(".gx-ed-status")?.textContent.includes("loaded draft-original"));
   assert.equal(await hasEntity(firstId), false, "opening the slot restores its saved copy");
   assert.equal(await page.evaluate((key) => localStorage.getItem(key) !== null, firstKey), true, "the previous draft survives switching");
 

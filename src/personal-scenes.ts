@@ -15,6 +15,9 @@ export type PersonalSceneEntry = {
   raw: string;
   definition: AgentWorldDefinition | null;
   savedAt: string | null;
+  repository?: "database" | "legacy";
+  revision?: string;
+  sourceKey?: string;
 };
 export type PersonalSceneResult =
   | { ok: true; entry: PersonalSceneEntry; dated: boolean }
@@ -63,11 +66,16 @@ export function datePersonalScene(storage: SceneStorage, name: string, now = new
 }
 
 export function readPersonalScene(storage: SceneStorage, key: string): PersonalSceneEntry | null {
+  if (!key.startsWith(LOCAL_SCENE_PREFIX) && key !== LEGACY_EDITOR_DRAFT_KEY && !key.startsWith(EDITOR_DRAFT_PREFIX)) return null;
+  const raw = storage.getItem(key);
+  return raw === null ? null : personalSceneFromRaw(key, raw, key.startsWith(LOCAL_SCENE_PREFIX) ? metadata(storage)[key.slice(LOCAL_SCENE_PREFIX.length)]?.savedAt ?? null : null);
+}
+
+/** Decode without rewriting the original bytes, including unreadable rescue entries. */
+export function personalSceneFromRaw(key: string, raw: string, date: string | null = null): PersonalSceneEntry | null {
   const isScene = key.startsWith(LOCAL_SCENE_PREFIX);
   const isDraft = key === LEGACY_EDITOR_DRAFT_KEY || key.startsWith(EDITOR_DRAFT_PREFIX);
   if (!isScene && !isDraft) return null;
-  const raw = storage.getItem(key);
-  if (raw === null) return null;
   let definition: AgentWorldDefinition | null = null;
   let savedAt: string | null = null;
   if (isDraft) {
@@ -76,7 +84,7 @@ export function readPersonalScene(storage: SceneStorage, key: string): PersonalS
     savedAt = draft?.savedAt ?? null;
   } else {
     try { definition = sceneDefinition(JSON.parse(raw)); } catch { /* Keep unreadable data exportable. */ }
-    savedAt = metadata(storage)[key.slice(LOCAL_SCENE_PREFIX.length)]?.savedAt ?? null;
+    savedAt = date;
   }
   return {
     key, kind: isScene ? "scene" : "draft", raw, definition, savedAt,

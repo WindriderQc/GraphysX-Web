@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { waitForStoredScene } from "./studio-smoke-helpers.mjs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { applySmokeTimeout, launchSmokeBrowser } from "./smoke-harness.mjs";
@@ -114,7 +115,7 @@ try {
   await draw(page); await capture(page, "flightx-pilot");
   page.once("dialog", dialog => dialog.accept("FlightX native variant"));
   await page.locator(".gx-ed-toolbar").getByRole("button", { name: "Save", exact: true }).click();
-  await page.waitForFunction(() => Boolean(localStorage.getItem("graphysx.agent-world.v2.FlightX native variant")));
+  await waitForStoredScene(page, "FlightX native variant");
   const downloadEvent = page.waitForEvent("download"); await page.locator(".gx-ed-toolbar").getByRole("button", { name: "Export", exact: true }).click();
   const download = await downloadEvent; await download.saveAs(path.join(artifacts, "flightx-variant.json"));
   const exported = JSON.parse(await readFile(path.join(artifacts, "flightx-variant.json"), "utf8"));

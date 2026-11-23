@@ -1,6 +1,7 @@
 import type { PlatformHost } from "./platform-host";
 import { Vector3 } from "three";
-import { LOCAL_SCENE_PREFIX, readDnaCreationResume, readLocalSceneSlot, rememberDnaCreation } from "./local-scenes";
+import { rememberDnaCreation } from "./local-scenes";
+import { readLibraryResume, readSceneLibrary, saveLibraryScene, subscribeSceneLibrary } from "./scene-library";
 import { DNA_MUTATIONS, DNA_PAD_TOP, DNA_SEED_RADIUS, DNA_SIDES, composeDnaCreation, dnaCreationCanTune, dnaCreationMeasurements, dnaCreationMutation, dnaMutationCommands, dnaSeedResetCommands, type DnaMutation, type DnaSide } from "./dna-creation-scene";
 import "./dna-creation.css";
 
@@ -8,15 +9,17 @@ export type DnaCreationApplication = { state: () => unknown; advanceTime: (milli
 type Drop = { falling: boolean; bounced: boolean; complete: boolean; peak: number | null; impactSpeed: number | null; lastVelocity: number };
 const emptyDrop = (): Drop => ({ falling: false, bounced: false, complete: false, peak: null, impactSpeed: null, lastVelocity: 0 });
 
-export function mountDnaCreation(root: HTMLElement, host: PlatformHost, onExit: () => void, resume: boolean): DnaCreationApplication {
+export async function mountDnaCreation(root: HTMLElement, host: PlatformHost, onExit: () => void, resume: boolean, isCurrent: () => boolean = () => true): Promise<DnaCreationApplication> {
   const { api } = host;
+  const initial = api.state();
+  let slot = resume ? await readLibraryResume("dna") : null;
+  if (!isCurrent() || api.state()?.world.id !== initial?.world.id || api.state()?.revision !== initial?.revision) throw new DOMException("World changed before resume", "AbortError");
   const previousTitle = document.title;
   const previousLanguage = document.documentElement.lang;
   document.title = "Une mutation, un monde · GraphysX";
   document.documentElement.lang = "fr";
-  let slot = resume ? readDnaCreationResume() : null;
   let notice = slot ? "Variante reprise. Tes modifications du Studio sont conservées." : "";
-  if (slot && !api.load(slot.definition).ok) slot = null;
+  if (slot && !api.load(slot.definition!).ok) slot = null;
   if (!slot) {
     const created = api.create(composeDnaCreation());
     if (!created.ok) throw new Error(created.error ?? "L’atelier ADN ne s’est pas ouvert.");
@@ -25,6 +28,7 @@ export function mountDnaCreation(root: HTMLElement, host: PlatformHost, onExit: 
   api.pause(true);
   let baseline = JSON.stringify(api.exportDocument());
   let dirty = false;
+  let savedCurrent = !!slot;
   let leaving = false;
   let canTune = dnaCreationCanTune(api.exportDocument());
   let measurements = dnaCreationMeasurements(api.exportDocument());
@@ -121,8 +125,6 @@ export function mountDnaCreation(root: HTMLElement, host: PlatformHost, onExit: 
     }));
     const noticeElement = find("[data-dna-notice]");
     if (noticeElement.textContent !== notice) noticeElement.textContent = notice;
-    let savedCurrent = false;
-    try { savedCurrent = !!slot && localStorage.getItem(LOCAL_SCENE_PREFIX + slot.name) === slot.raw; } catch { /* Storage may be blocked after a successful save. */ }
     studio.hidden = !slot || dirty || !savedCurrent || nameInput.value.trim() !== slot.name;
     if (slot) studio.href = import.meta.env.BASE_URL + "?host=editor&studio=simple&paused=1&localScene=" + encodeURIComponent(slot.name);
     find<HTMLButtonElement>("[data-dna-save]").textContent = slot?.name === nameInput.value.trim() ? "Mettre à jour" : "Enregistrer";
@@ -180,24 +182,24 @@ export function mountDnaCreation(root: HTMLElement, host: PlatformHost, onExit: 
   pauseButton.addEventListener("click", () => { if (phase === "running") api.pause(!api.state()?.paused); refresh(); });
   find("[data-dna-reset]").addEventListener("click", () => { if (canTune) resetSeeds(); refresh(); });
   nameInput.addEventListener("input", refresh);
-  find<HTMLFormElement>("form").addEventListener("submit", (event) => {
+  let saving = false, disposed = false;
+  const saveButton = find<HTMLButtonElement>("[data-dna-save]");
+  find<HTMLFormElement>("form").addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (saving) return;
     const name = nameInput.value.trim();
     if (!name) { notice = "Choisis un nom pour ta variante."; refresh(); return; }
     try {
-      const existing = localStorage.getItem(LOCAL_SCENE_PREFIX + name);
-      if (existing !== null && (slot?.name !== name || slot.raw !== existing)) {
-        notice = "Ce nom est déjà utilisé ou la scène a changé dans un autre onglet. Choisis un nouveau nom pour garder une copie.";
-      } else {
-        const saved = api.save(name);
-        if (!saved.ok) throw new Error("L’enregistrement est indisponible. Ta variante est encore ouverte ; garde cet onglet.");
-        const written = readLocalSceneSlot(name);
-        const current = JSON.stringify(api.exportDocument());
-        if (!written || written.raw !== current) throw new Error("La copie enregistrée n’a pas pu être vérifiée. Ta variante reste ouverte.");
-        slot = written; baseline = current; dirty = false; nameInput.value = name;
-        notice = rememberDnaCreation(name) ? "Variante enregistrée. Ouvre-la dans le Studio ou reprends-la depuis l’accueil." : "Variante enregistrée. Ouvre-la dans le Studio ; le raccourci de reprise est indisponible.";
-      }
+      saving = true; saveButton.disabled = true;
+      const current = JSON.stringify(api.exportDocument()), initial = api.state();
+      const saved = await saveLibraryScene(api, name, slot);
+      if (disposed || api.state()?.world.id !== initial?.world.id) return;
+      if (!saved.ok) throw new Error(saved.reason === "conflict" ? "Ce nom est déjà utilisé ou la scène a changé dans un autre onglet. Choisis un nouveau nom pour garder une copie." : saved.error);
+      slot = saved.entry; savedCurrent = true; baseline = current; dirty = JSON.stringify(api.exportDocument()) !== current; nameInput.value = name;
+      notice = rememberDnaCreation(name) ? "Variante enregistrée. Ouvre-la dans le Studio ou reprends-la depuis l’accueil." : "Variante enregistrée. Ouvre-la dans le Studio ; le raccourci de reprise est indisponible.";
     } catch (error) { notice = error instanceof Error ? error.message : "L’enregistrement est indisponible. Ta variante reste ouverte."; }
+    finally { saving = false; saveButton.disabled = false; }
+    if (disposed) return;
     refresh();
     if (!studio.hidden) studio.scrollIntoView({ block: "nearest" });
   });
@@ -263,8 +265,14 @@ export function mountDnaCreation(root: HTMLElement, host: PlatformHost, onExit: 
     }
   };
   const unsubscribeLabels = host.subscribeAfterRender(placeLabels);
+  const unsubscribeSaves = subscribeSceneLibrary(() => {
+    const observed = slot;
+    if (!observed) return;
+    void readSceneLibrary(observed).then(entry => { if (!disposed && slot === observed) { savedCurrent = !!entry; refresh(); } })
+      .catch(() => { if (!disposed && slot === observed) { savedCurrent = false; refresh(); } });
+  });
   const warnBeforeLeaving = (event: BeforeUnloadEvent): void => {
-    if (dirty && !leaving) { event.preventDefault(); event.returnValue = true; }
+    if ((dirty || saving) && !leaving) { event.preventDefault(); event.returnValue = true; }
   };
   find("[data-dna-exit]").addEventListener("click", () => {
     if (dirty && !confirm("Ta variante a changé. Retourner à l’accueil sans enregistrer ces modifications ?")) return;
@@ -289,6 +297,7 @@ export function mountDnaCreation(root: HTMLElement, host: PlatformHost, onExit: 
       }
     },
     dispose() {
+      disposed = true; unsubscribeSaves();
       unsubscribe(); unsubscribeLabels(); compact.removeEventListener("change", reframe); reduced.removeEventListener("change", motionPreference);
       window.removeEventListener("beforeunload", warnBeforeLeaving); window.removeEventListener("storage", refresh);
       surface.remove(); document.title = previousTitle; document.documentElement.lang = previousLanguage;

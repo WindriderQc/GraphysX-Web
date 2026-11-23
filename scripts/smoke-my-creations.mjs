@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { applySmokeTimeout, launchSmokeBrowser, launchPersistentSmokeContext } from "./smoke-harness.mjs";
-import { studioState, sceneDocument, canonicalScene, sceneCard, namedSave, drawStudio } from "./studio-smoke-helpers.mjs";
+import { studioState, sceneDocument, canonicalScene, sceneCard, namedSave, drawStudio, readStoredScene, selectStudioObject, installSceneWriteFault, restoreSceneWrites } from "./studio-smoke-helpers.mjs";
 
 const base = process.env.SMOKE_BASE || "http://127.0.0.1:4210/";
 const output = path.resolve(process.env.SMOKE_ARTIFACTS || "output/playwright/my-creations");
@@ -37,6 +37,7 @@ try {
     localStorage.setItem("graphysx.dna-creation.resume.v1", "untouched-resume-pointer");
   }, { prefix, raw, oldDraft });
   await openLibrary();
+  await sceneCard(page, "Ancienne scène").waitFor();
   assert.equal(await page.locator("[data-personal-key]").count(), 4);
   assert.equal(await sceneCard(page, "Sauvegarde abîmée").getByRole("button", { name: "Modifier dans le Studio", exact: true }).isDisabled(), true);
   const rescue = page.waitForEvent("download"); await sceneCard(page, "Sauvegarde abîmée").getByRole("button", { name: "Exporter", exact: true }).click();
@@ -54,37 +55,39 @@ try {
   await copy.getByRole("status").getByText(/existe déjà/).waitFor();
   await copy.getByLabel("Nom de la scène", { exact: true }).fill("Ma copie retrouvée"); await copy.getByRole("button", { name: "Créer la copie", exact: true }).click();
   await sceneCard(page, "Ma copie retrouvée").waitFor();
-  assert.equal(await page.evaluate(key => localStorage.getItem(key), prefix + "Ma copie retrouvée"), raw);
+  assert.equal(await readStoredScene(page, "Ma copie retrouvée"), raw);
   await capture("historical-and-copy");
   await sceneCard(page, "Ma copie retrouvée").getByRole("button", { name: "Modifier dans le Studio", exact: true }).click();
   await page.waitForFunction(() => !document.querySelector(".gx-personal"));
   assert.deepEqual(canonicalScene(await sceneDocument(page)), canonicalScene(fixture));
   // A write from another page must never be overwritten using this tab's old saved bytes.
-  const other = await context.newPage(); await other.goto(new URL("release.json", base).href);
-  const changedRaw = JSON.stringify({ ...fixture, label: "Changed in another tab" });
-  await other.evaluate(({ key, raw }) => localStorage.setItem(key, raw), { key: prefix + "Ma copie retrouvée", raw: changedRaw });
+  const other = applySmokeTimeout(await context.newPage()); await other.goto(page.url());
+  await other.waitForFunction(() => JSON.parse(window.render_game_to_text?.() || "{}").studio?.savedName === "Ma copie retrouvée");
+  await selectStudioObject(other, fixture.entities[0].id);
+  await other.getByLabel("Nom de l’objet", { exact: true }).fill("Changed in another tab");
+  await other.getByLabel("Nom de l’objet", { exact: true }).press("Tab");
+  const changedRaw = JSON.stringify(await sceneDocument(other));
+  await namedSave(other, "Ma copie retrouvée");
+  await other.waitForFunction(() => !document.querySelector(".gx-personal"));
   await page.click("[data-studio-action=save]");
   const save = page.getByRole("dialog", { name: "Enregistrer ma scène", exact: true });
   await save.getByRole("button", { name: "Enregistrer", exact: true }).click();
   await save.getByRole("status").getByText(/autre fenêtre/).waitFor();
-  assert.equal(await other.evaluate(key => localStorage.getItem(key), prefix + "Ma copie retrouvée"), changedRaw);
+  assert.deepEqual(canonicalScene(JSON.parse(await readStoredScene(other, "Ma copie retrouvée"))), canonicalScene(JSON.parse(changedRaw)));
   await save.getByLabel("Nom de la scène", { exact: true }).fill("Ma version préservée"); await save.getByRole("button", { name: "Enregistrer", exact: true }).click();
   await page.waitForFunction(() => !document.querySelector(".gx-personal"));
   assert.equal((await studioState(page)).savedName, "Ma version préservée");
   await other.close();
-  // A failed localStorage write keeps the live document and reports a recoverable error.
-  await page.evaluate(() => {
-    window.__studioOriginalSetItem = Storage.prototype.setItem;
-    Storage.prototype.setItem = function(key, value) { if (key.startsWith("graphysx.agent-world.v2.")) throw new DOMException("Smoke quota", "QuotaExceededError"); return window.__studioOriginalSetItem.call(this, key, value); };
-  });
+  // A failed database write keeps the live document and reports a recoverable error.
+  await installSceneWriteFault(page);
   await page.click("[data-studio-action=save]");
   await save.getByLabel("Nom de la scène", { exact: true }).fill(""); await save.getByRole("button", { name: "Enregistrer", exact: true }).click();
   await save.getByRole("status").getByText(/Donne un nom/).waitFor();
   await save.getByLabel("Nom de la scène", { exact: true }).fill("Quota rejected"); await save.getByRole("button", { name: "Enregistrer", exact: true }).click();
   await save.getByRole("status").getByText(/enregistrée|indisponible/).waitFor();
   assert.deepEqual(canonicalScene(await sceneDocument(page)), canonicalScene(fixture));
-  assert.equal(await page.evaluate(key => localStorage.getItem(key), prefix + "Quota rejected"), null);
-  await page.evaluate(() => { Storage.prototype.setItem = window.__studioOriginalSetItem; delete window.__studioOriginalSetItem; });
+  assert.equal(await readStoredScene(page, "Quota rejected"), null);
+  await restoreSceneWrites(page);
   await page.keyboard.press("Escape"); await namedSave(page, "Après fermeture du navigateur");
   const restartURL = page.url(), saved = await sceneDocument(page);
   await openLibrary(); await page.click("[data-personal-tab=draft]");
@@ -108,7 +111,7 @@ try {
   await context.close(); context = null;
   browser = await launchSmokeBrowser();
   const blocked = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
-  await blocked.addInitScript(() => Object.defineProperty(window, "localStorage", { get() { throw new DOMException("Smoke denied", "SecurityError"); } }));
+  await blocked.addInitScript(() => { for (const key of ["localStorage", "indexedDB"]) Object.defineProperty(window, key, { get() { throw new DOMException("Smoke denied", "SecurityError"); } }); });
   page = await attach(blocked); await page.goto(new URL("?intro=0", base).href); await page.click(".gx-go-personal");
   await page.getByRole("dialog", { name: "Mes créations", exact: true }).getByRole("status").getByText(/indisponible/).waitFor();
   await capture("blocked-storage"); await blocked.close();

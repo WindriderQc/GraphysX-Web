@@ -2,6 +2,20 @@
 
 Original prompt: "lets go then, lets make this happen!!"
 
+## 2026-11-22 — Store complete personal scenes in IndexedDB
+
+- Reproduced the real CubZ quota failure: the third roughly 3.7 MB UTF-16 inline pose cannot fit in localStorage. Keep the historical GraphysX archive and existing worktrees read-only; custody compares ten protected repositories, including their pre-existing dirty files.
+- Named Studio, DNA and guided-creation saves now use a local asynchronous scene library. Complete v2 JSON and small catalogue entries commit atomically with strict durability; receipts wait for transaction completion. Existing localStorage scenes remain readable in place, and explicit promotion retains their source bytes, recovery drafts and resume pointers. A later legacy write appears as another recoverable version.
+- Keep the synchronous World API save/load contract and draft recovery backend. The UI loads definitions through the ordinary World API and retains the existing Studio framing. Compare-and-swap revisions reject stale updates and name collisions; delayed reads and save receipts keep their originating world's authority, and edits during a write stay dirty.
+- The full regression pass exposed a save-target association surviving until the next paint after an external world replacement. The existing world.loaded stream event now identifies replacement, undo/redo, initial load and rollback; clear the old file synchronously for external replacements even when the world ID is reused, while ordinary undo/redo retains it. The safety smoke inspects the immediate state in the same JavaScript task, so a coalesced repaint cannot conceal it. The cross-tab test edits through the real inspector rather than replacing a world. Keep the earlier failed run and its snapshot as evidence.
+- Browser regressions cover eight full native CubZ variants in one profile, exact copy/update/export/import, request-success followed by transaction abort, quota/blocked storage, actual Chromium disk-profile restart, simultaneous tabs, late callbacks and legacy alternate versions. Update existing save assertions to inspect committed database bytes and wait for the asynchronous UI receipt; retain draft and synchronous-API failure checks.
+- Verification and production acceptance are separate receipts under output/cubz-storage. The standard unmodified visual client and the full repository gate remain required before release; no historical source or media payload is rewritten.
+
+## 2026-11-22 — Keep local HTTP fixtures on browser-compatible ports
+
+- This Windows host allocates automatic TCP ports from 1024, so port-zero HTTP fixtures can land on ports rejected by Node fetch and Chromium. A verification pass caught three explicit Undici bad-port failures and a release-check failure caused by the same unreachable fixture.
+- Automatic HTTP listeners now select available high ports, retrying only bind collisions/access failures. Explicit ports and their errors remain unchanged. The shared static server and the two affected Node fixtures use this helper; no OS networking settings, test assertions or deadlines are changed. Real HTTP checks cover reachability, collision recovery and preservation of an occupied explicit port's owner.
+
 ## 2026-10-27 — Synchronize paused steering visuals after Retry
 
 - Visual review of the published mobile fix found a pre-existing reset mismatch: the

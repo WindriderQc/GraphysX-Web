@@ -1,4 +1,4 @@
-import { enterCompleteStudio } from "./studio-smoke-helpers.mjs";
+import { enterCompleteStudio, waitForStoredScene } from "./studio-smoke-helpers.mjs";
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -138,7 +138,7 @@ try {
   assert.deepEqual(canonical(await page.evaluate(() => window.__GRAPHYSX__.exportDocument())), canonical(authored));
   page.once("dialog", dialog => dialog.accept("Maison visit variant"));
   await page.locator(".gx-ed-toolbar").getByRole("button", { name: "Save", exact: true }).click();
-  await page.waitForFunction(() => Boolean(localStorage.getItem("graphysx.agent-world.v2.Maison visit variant")));
+  await waitForStoredScene(page, "Maison visit variant");
   const downloaded = page.waitForEvent("download"); await page.locator(".gx-ed-toolbar").getByRole("button", { name: "Export", exact: true }).click();
   const file = path.join(output, "maison-variant.json"); await (await downloaded).saveAs(file);
   assert.deepEqual(canonical(JSON.parse(await readFile(file, "utf8"))), canonical(authored));

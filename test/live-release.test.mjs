@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { verifyLiveRelease } from "../scripts/smoke-live-release.mjs";
 import { createBallsyRoute } from "../server/ballsy-http.mjs";
+import { listenHttp } from "../scripts/http-listen.mjs";
 
 const sha = "a".repeat(40);
 const vrEntry = "assets/vr-lab-app-Bu1ld_42.js";
@@ -53,7 +54,7 @@ async function fixture(t, override = () => null, { prefix = "", mutateBuild = ()
     res.writeHead(status, { "content-type": mime, ...headers });
     res.end(content);
   });
-  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  await listenHttp(server);
   t.after(async () => {
     await new Promise(resolve => server.close(resolve));
     assert.equal(path.dirname(path.resolve(dir)), path.resolve(tmpdir()));

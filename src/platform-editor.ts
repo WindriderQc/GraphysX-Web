@@ -1,7 +1,8 @@
 import { Box3, MathUtils, Object3D, Raycaster, Vector2, Vector3, type PerspectiveCamera, type Scene, type WebGLRenderer } from "three";
 import { LOCAL_SCENE_PREFIX } from "./local-scenes";
 import { visibleSceneBounds } from "./visible-scene-bounds";
-import { LEGACY_EDITOR_DRAFT_KEY, EDITOR_DRAFT_PREFIX, EDITOR_SLOT_INDEX_KEY, readEditorDraft, browserSceneStorage, readPersonalScene, savePersonalScene, datePersonalScene, type EditorDraft, type PersonalSceneEntry } from "./personal-scenes";
+import { LEGACY_EDITOR_DRAFT_KEY, EDITOR_DRAFT_PREFIX, EDITOR_SLOT_INDEX_KEY, readEditorDraft, type EditorDraft, type PersonalSceneEntry } from "./personal-scenes";
+import { listSceneLibrary, readSceneLibrary, saveLibraryScene, type SceneLibraryReference } from "./scene-library";
 import { mountSceneSaveDialog } from "./personal-scenes-view";
 import { mountSimpleStudio, type SimpleStudio, type StudioAction } from "./studio-simple";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -225,6 +226,10 @@ export class PlatformEditor {
   private simpleStudio!: SimpleStudio;
   private namedScene: PersonalSceneEntry | null = null;
   private closeSaveDialog: (() => void) | null = null;
+  private disposed = false;
+  private savingScene = false;
+  private slotRefresh = 0;
+  private documentGeneration = 0;
 
   /** Remembered in memory for the session — the drawer reopens on the tab you left. */
   private libraryTab: LibraryTab = "prefabs";
@@ -365,6 +370,15 @@ export class PlatformEditor {
     // rebuilding the DOM per event would rebuild it dozens of times for one logical change.
     this.unsubscribeEvents = deps.world.subscribeEvents((event) => {
       if (event.type === "trigger.enter" || event.type === "trigger.exit") return;
+      if (event.type === "world.loaded") {
+        this.documentGeneration += 1;
+        // External world replacements must drop the old save target immediately,
+        // including when a pending database receipt beats the next animation frame.
+        if ((event.data.reason === "replace" && !this.replacingDocument) || this.namedScene?.definition?.id !== deps.api.state()?.world.id) {
+          this.namedScene = null;
+          this.toolbarNotice = "";
+        }
+      }
       // Playing after visiting the editor must not autosave the materialised race as an
       // authoring draft. Hidden chrome still mirrors the world, but only a visible editor
       // owns draft persistence.
@@ -401,13 +415,6 @@ export class PlatformEditor {
       add: kind => this.addPrimitive(kind), canExit: true,
     });
     document.documentElement.dataset.gxEditor = "visible";
-    const localName = new URLSearchParams(window.location.search).get("localScene");
-    if (localName) {
-      try {
-        const storage = browserSceneStorage(), entry = storage ? readPersonalScene(storage, LOCAL_SCENE_PREFIX + localName) : null;
-        if (entry?.definition?.id === deps.api.state()?.world.id) this.namedScene = entry;
-      } catch { /* Opening a document never depends on optional date metadata. */ }
-    }
     this.applyExperience();
     this.setMobilePanel("viewport");
     this.renderLibrary();
@@ -534,12 +541,17 @@ export class PlatformEditor {
   }
 
   /** Re-read after flushing: a draft written by this tab must not be reopened stale. */
-  openPersonalScene(entry: PersonalSceneEntry): string | null {
+  async openPersonalScene(entry: SceneLibraryReference | string, isCurrent: () => boolean = () => true): Promise<string | null> {
     if (!this.flushDraft()) return "Le navigateur ne peut pas garder tes modifications actuelles. Exporte-les avant d’ouvrir une autre scène.";
+    const key = this.draftKey, initial = this.deps.api.state(), signature = this.documentSignature(), enabled = this.enabled;
     let fresh: PersonalSceneEntry | null = null;
-    try { const storage = browserSceneStorage(); fresh = storage ? readPersonalScene(storage, entry.key) : null; } catch { /* Report a recoverable read failure below. */ }
-    if (!fresh || fresh.raw !== entry.raw) return "Cette sauvegarde a changé. Actualise Mes créations avant de l’ouvrir.";
+    try { fresh = await readSceneLibrary(entry); }
+    catch { return "Cette sauvegarde a changé ou n’est pas accessible. Actualise Mes créations avant de l’ouvrir."; }
+    const current = this.deps.api.state();
+    if (this.disposed || !isCurrent() || this.draftKey !== key || this.enabled !== enabled || current?.world.id !== initial?.world.id || current?.revision !== initial?.revision || this.documentSignature() !== signature) return "L’ouverture a été interrompue : le Studio a changé. Ton travail actuel est conservé.";
+    if (!fresh) return "Cette sauvegarde n’est plus disponible. Actualise Mes créations avant de l’ouvrir.";
     if (!fresh.definition) return "Cette sauvegarde est illisible. Tu peux encore exporter ses données.";
+    if (!this.flushDraft()) return "Le navigateur ne peut pas garder tes modifications actuelles. Enregistre-les ou exporte-les avant d’ouvrir une autre scène.";
     const definition = fresh.definition;
     if (!this.openEditorDocument(() => this.deps.api.load(definition), fresh.kind === "draft" ? "Brouillon repris" : "Scène ouverte", fresh.kind === "draft" ? { key: fresh.key, raw: fresh.raw } : undefined)) {
       return this.toolbarNotice || "La scène n’a pas pu être ouverte.";
@@ -547,6 +559,17 @@ export class PlatformEditor {
     this.namedScene = fresh.kind === "scene" ? fresh : null;
     this.deps.api.pause(true); this.refresh("force");
     return null;
+  }
+
+  private acceptNamedSave(entry: PersonalSceneEntry, key: string, signature: string, generation: number, notice = "Enregistrée : " + entry.name): void {
+    if (this.disposed || !this.enabled || this.draftKey !== key || this.documentGeneration !== generation || entry.definition?.id !== this.deps.api.state()?.world.id) return;
+    this.namedScene = entry; this.rememberSlot(entry.name);
+    if (this.documentSignature() === signature) this.markSaved(notice);
+    else {
+      this.savedSignature = signature; this.dirty = true;
+      this.toolbarNotice = "Version enregistrée : " + entry.name + ". Tes nouvelles modifications restent à enregistrer.";
+    }
+    this.deps.onLocalSceneSaved?.(entry.name); this.refresh("force");
   }
 
   private simpleAction(action: StudioAction): void {
@@ -572,15 +595,13 @@ export class PlatformEditor {
 
   private saveSimpleScene(): void {
     this.closeSaveDialog?.();
-    const expected = this.namedScene, signature = this.documentSignature();
+    const expected = this.namedScene, signature = this.documentSignature(), key = this.draftKey, generation = this.documentGeneration;
     this.closeSaveDialog = mountSceneSaveDialog(this.deps.container, {
       name: expected?.name ?? this.deps.api.exportDocument()?.label ?? "Ma scène",
-      onSave: name => signature !== this.documentSignature()
+      onSave: name => this.disposed || key !== this.draftKey || generation !== this.documentGeneration || signature !== this.documentSignature()
         ? { ok: false, reason: "scene", error: "La scène a changé pendant l’ouverture de cette fenêtre. Ferme-la puis choisis Enregistrer à nouveau." }
-        : savePersonalScene(this.deps.api, browserSceneStorage(), name, expected),
-      onSaved: entry => {
-        this.namedScene = entry; this.rememberSlot(entry.name); this.markSaved("Enregistrée : " + entry.name); this.deps.onLocalSceneSaved?.(entry.name); this.refresh("force");
-      },
+        : saveLibraryScene(this.deps.api, name, expected),
+      onSaved: entry => this.acceptNamedSave(entry, key, signature, generation),
     });
   }
 
@@ -934,6 +955,7 @@ export class PlatformEditor {
 
   private refreshSlotOptions(): void {
     if (!this.slotSelect) return;
+    const generation = ++this.slotRefresh;
     this.slotSelect.replaceChildren();
     const placeholder = document.createElement("option");
     placeholder.value = "";
@@ -945,6 +967,15 @@ export class PlatformEditor {
       option.textContent = name;
       this.slotSelect.append(option);
     }
+    void listSceneLibrary().then(catalog => {
+      if (this.disposed || generation !== this.slotRefresh) return;
+      const selected = this.slotSelect.value;
+      const names = new Set([...this.slotSelect.options].map(option => option.value));
+      for (const entry of catalog.entries) {
+        if (entry.kind === "scene" && !entry.previousVersion && !names.has(entry.name)) this.slotSelect.append(new Option(entry.name, entry.name));
+      }
+      this.slotSelect.value = selected;
+    });
   }
 
   /**
@@ -1811,7 +1842,7 @@ export class PlatformEditor {
     this.slotSelect.title = "Open a named local scene slot";
     this.slotSelect.setAttribute("aria-label", "Open a named local scene slot");
     this.slotSelect.addEventListener("change", () => {
-      if (this.slotSelect.value) this.loadScene(this.slotSelect.value);
+      if (this.slotSelect.value) void this.loadScene(this.slotSelect.value);
       this.slotSelect.value = "";
     });
     toolbar.append(this.group([this.slotSelect]));
@@ -2646,32 +2677,35 @@ export class PlatformEditor {
     this.refresh("force");
   }
 
-  private saveScene(): void {
+  private async saveScene(): Promise<void> {
     if (this.experience === "simple") { this.saveSimpleScene(); return; }
+    if (this.savingScene) return;
     const name = window.prompt("Save scene as", "editor-scene");
     if (!name) return;
-    const result = this.deps.api.save(name);
+    const key = this.draftKey, signature = this.documentSignature(), generation = this.documentGeneration;
+    this.savingScene = true;
+    this.toolbarNotice = "saving…"; this.refresh("skip");
+    const beforeUnload = (event: BeforeUnloadEvent): void => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", beforeUnload);
+    const result = await saveLibraryScene(this.deps.api, name, this.namedScene).finally(() => {
+      this.savingScene = false; window.removeEventListener("beforeunload", beforeUnload);
+    });
+    if (this.disposed || key !== this.draftKey || generation !== this.documentGeneration) return;
     if (result.ok) {
-      this.namedScene = null;
-      try {
-        const storage = browserSceneStorage();
-        if (storage) { datePersonalScene(storage, name.trim()); this.namedScene = readPersonalScene(storage, LOCAL_SCENE_PREFIX + name.trim()); }
-      } catch { /* The API has already confirmed that the scene bytes were saved. */ }
-      this.rememberSlot(name.trim());
-      this.markSaved(`saved to ${name.trim()}`);
-      this.deps.onLocalSceneSaved?.(name.trim());
+      this.acceptNamedSave(result.entry, key, signature, generation, "saved to " + name.trim());
     } else {
-      this.toolbarNotice = result.error ?? "Save failed";
+      this.toolbarNotice = "Save failed: " + result.error;
       this.refresh("skip");
     }
   }
 
-  private loadScene(slotName?: string): void {
+  private async loadScene(slotName?: string): Promise<void> {
     const name = (slotName ?? window.prompt("Load saved scene", "editor-scene"))?.trim();
     if (!name) return;
+    const key = this.draftKey;
     try {
-      const storage = browserSceneStorage(), entry = storage ? readPersonalScene(storage, LOCAL_SCENE_PREFIX + name) : null;
-      const error = entry ? this.openPersonalScene(entry) : "Cette scène n’est plus disponible dans ce navigateur.";
+      const error = await this.openPersonalScene(LOCAL_SCENE_PREFIX + name);
+      if (this.disposed || (error && key !== this.draftKey)) return;
       if (error) this.toolbarNotice = error;
       else { this.toolbarNotice = "loaded " + name; this.rememberSlot(name); }
       this.refresh("force");
@@ -4138,6 +4172,7 @@ ${preset.provenance.note}`),
   }
 
   dispose(): void {
+    this.disposed = true;
     this.flushDraft();
     this.closeSaveDialog?.();
     this.simpleStudio.dispose();

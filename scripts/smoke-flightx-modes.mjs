@@ -1,4 +1,4 @@
-import { enterCompleteStudio } from "./studio-smoke-helpers.mjs";
+import { enterCompleteStudio, waitForStoredScene } from "./studio-smoke-helpers.mjs";
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -109,7 +109,7 @@ try {
   assert.equal(await page.locator(".gx-flightx").count(), 0);
   page.once("dialog", dialog => dialog.accept("FlightX playable variant"));
   await page.locator(".gx-ed-toolbar").getByRole("button", { name: "Save", exact: true }).click();
-  await page.waitForFunction(() => Boolean(localStorage.getItem("graphysx.agent-world.v2.FlightX playable variant")));
+  await waitForStoredScene(page, "FlightX playable variant");
   const downloadEvent = page.waitForEvent("download"); await page.locator(".gx-ed-toolbar").getByRole("button", { name: "Export", exact: true }).click();
   const download = await downloadEvent; await download.saveAs(path.join(artifacts, "flightx-playable-variant.json"));
   const exported = JSON.parse(await readFile(path.join(artifacts, "flightx-playable-variant.json"), "utf8")); assert.deepEqual(canonical(exported), canonical(authored));

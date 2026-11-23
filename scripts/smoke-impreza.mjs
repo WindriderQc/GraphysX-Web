@@ -1,4 +1,4 @@
-import { enterCompleteStudio } from "./studio-smoke-helpers.mjs";
+import { enterCompleteStudio, waitForStoredScene } from "./studio-smoke-helpers.mjs";
 import assert from "node:assert/strict";
 import { mkdir, writeFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -141,8 +141,7 @@ try {
   await capture(page, "impreza-studio");
   page.once("dialog", dialog => dialog.accept("Impreza restored world"));
   await page.locator(".gx-ed-toolbar").getByRole("button", { name: "Save", exact: true }).click();
-  await page.waitForFunction(() => Boolean(localStorage.getItem("graphysx.agent-world.v2.Impreza restored world")));
-  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("graphysx.agent-world.v2.Impreza restored world")));
+  const saved = JSON.parse(await waitForStoredScene(page, "Impreza restored world"));
   const savedRig = saved.entities.find(e => e.id === "impreza-player").steering;
   assert.equal(saved.entities.find(e => e.id === "impreza-player").label, "Impreza authored variant");
   assert.equal(saved.entities.filter(e => e.id === "impreza-authored-fixture").length, 1);

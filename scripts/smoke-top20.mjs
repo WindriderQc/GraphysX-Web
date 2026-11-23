@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { enterCompleteStudio } from "./studio-smoke-helpers.mjs";
+import { enterCompleteStudio, readStoredScene, waitForStoredScene, installSceneWriteFault, restoreSceneWrites } from "./studio-smoke-helpers.mjs";
 import { SMOKE_TIMEOUT, applySmokeTimeout, launchSmokeBrowser } from "./smoke-harness.mjs";
 
 const BASE = process.env.SMOKE_BASE || "http://127.0.0.1:4188/";
@@ -91,17 +91,21 @@ try {
       return window.__restoreStorage.call(this, key, value);
     };
   });
+  await installSceneWriteFault(editor);
   try {
     editor.once("dialog", (dialog) => dialog.accept("quota-slot"));
     await editor.locator(".gx-ed-toolbar").getByRole("button", { name: "Save", exact: true }).click();
+    await editor.waitForFunction(() => document.querySelector(".gx-ed-status")?.textContent.includes("Save failed"));
     out.quota = await editor.evaluate((key) => ({
       status: document.querySelector(".gx-ed-status")?.textContent ?? "",
-      stored: localStorage.getItem("graphysx.agent-world.v2.quota-slot"),
       draftRetained: JSON.parse(localStorage.getItem(key) ?? "null")
         ?.definition?.entities.some((entity) => entity.id === "quota-probe"),
-      cacheRejected: !window.__GRAPHYSX__.load("quota-slot").ok,
+      legacyApiRejected: !window.__GRAPHYSX__.save("quota-api").ok && localStorage.getItem("graphysx.agent-world.v2.quota-api") === null,
+      cacheRejected: !window.__GRAPHYSX__.load("quota-api").ok,
     }), quotaDraftKey);
+    out.quota.stored = await readStoredScene(editor, "quota-slot");
   } finally {
+    await restoreSceneWrites(editor);
     await editor.evaluate(() => { Storage.prototype.setItem = window.__restoreStorage; delete window.__restoreStorage; });
   }
   await editor.reload({ waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
@@ -143,12 +147,14 @@ try {
 
   editor.once("dialog", (dialog) => dialog.accept("top20-slot"));
   await editor.locator(".gx-ed-toolbar").getByRole("button", { name: "Save", exact: true }).click();
+  await waitForStoredScene(editor, "top20-slot");
+  await editor.waitForFunction(() => document.querySelector(".gx-ed-status")?.textContent.includes("saved to top20-slot"));
   out.slot = await editor.evaluate(() => ({
     option: !!document.querySelector('.gx-ed-toolbar option[value="top20-slot"]'),
-    stored: !!window.localStorage.getItem("graphysx.agent-world.v2.top20-slot"),
     liveStatus: document.querySelector(".gx-ed-status")?.getAttribute("aria-live"),
     status: document.querySelector(".gx-ed-status")?.textContent ?? "",
   }));
+  out.slot.stored = !!await readStoredScene(editor, "top20-slot");
 
   const importedJson = { ...definition, id: "top20-json-import", label: "Top 20 JSON Import" };
   // The temporary input is removed on native chooser cancellation. Listen before
@@ -350,7 +356,7 @@ const ok =
   /unsaved/.test(out.draft?.dirtyText ?? "") &&
   out.draft?.draftWorld === "top20-editor" && out.draft?.recovered === true &&
   /unsaved/.test(out.quota?.status ?? "") && /Save failed/.test(out.quota?.status ?? "") &&
-  out.quota?.stored === null && out.quota?.draftRetained === true && out.quota?.cacheRejected === true && out.quota?.recoveredAfterReload === true &&
+  out.quota?.stored === null && out.quota?.draftRetained === true && out.quota?.legacyApiRejected === true && out.quota?.cacheRejected === true && out.quota?.recoveredAfterReload === true &&
   out.editorPause?.pressed === "true" && out.editorPause?.resumed === true && out.editorPause?.label === "Pause" &&
   out.redo?.spawned === true && out.redo?.undone === true && out.redo?.redone === true && out.redo?.invalidated === true &&
   out.redo?.bridgeRedo === true && out.redo?.parity?.missing?.length === 0 && out.redo?.parity?.extra?.length === 0 &&
