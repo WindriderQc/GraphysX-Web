@@ -5757,3 +5757,7 @@ Request: "tu me refait un passage pour améliorer encore nos capacités GraphysX
 ## GraphysX — recover degraded GLB models
 
 - Reproduced issues 14–15 on e62d981. A missing optional LOD discarded the decoded base, and a stale override marked the model as a load error even after correction. Keep the successfully loaded prefix to preserve authored slot IDs. Report missing LODs and ignored overrides while the asset remains ready, and reject new invalid edits before they can replace the world. The focused browser smoke checks an actual LOD 404, a required base 404, normal LOD switching, Studio recovery, stable model identity and exactly-once disposal. The healthy NACRE journey also reached its belvedere with the existing reactor modulation.
+
+## GraphysX — keep decoded audio with its scene
+
+- Reproduced issue 16 on b438db5 by holding Web Audio decode completion. Old cues played globally after the target vanished and attached to replacement objects that reused the same ID. Bind deferred cues to the scene generation and the original positional object, release active voices when replacing the scene, and leave failed sources eligible for a later edit to retry. Browser checks pass for all three stale targets, overlapping HRTF cues, a reused looping source and retrying the same URL. NACRE passes its desktop and synthetic XR audio journeys, including reactor position, mission cues, mute, world replacement and visibility.
