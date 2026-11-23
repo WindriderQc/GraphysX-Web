@@ -1,6 +1,7 @@
 import http from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
+import { listenHttp } from "./http-listen.mjs";
 
 // Dependency-free static file server with SPA fallback. Used by scripts/verify.mjs to
 // serve a release build for the headless smokes, and by scripts/staging-server.mjs to
@@ -155,12 +156,10 @@ export function startStaticServer({
     socket.on("error", () => {});
   });
 
-  return new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen({ port, host, backlog: 1024 }, () => {
+  return listenHttp(server, { port, host, backlog: 1024 }).then(() => {
       // Report the port actually bound, so callers can pass 0 and get an ephemeral one.
       const bound = server.address()?.port ?? port;
-      resolve({
+      return {
         server,
         port: bound,
         url: `http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${bound}/`,
@@ -171,7 +170,6 @@ export function startStaticServer({
           server.close(() => done());
           server.closeAllConnections?.();
         }),
-      });
-    });
+      };
   });
 }

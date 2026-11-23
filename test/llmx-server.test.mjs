@@ -2,13 +2,14 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { test } from "node:test";
 import { createLlmXRoute } from "../scripts/llmx-server.mjs";
+import { listenHttp } from "../scripts/http-listen.mjs";
 
 const consumer = "/api/consumers/nestor/v1/llmx";
 const sessionId = "session-1234567890";
 
 async function serve(t, handler) {
   const server = http.createServer(handler);
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await listenHttp(server);
   t.after(async () => {
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));

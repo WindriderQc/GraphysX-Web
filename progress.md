@@ -11,6 +11,11 @@ Original prompt: "lets go then, lets make this happen!!"
 - Browser regressions cover eight full native CubZ variants in one profile, exact copy/update/export/import, request-success followed by transaction abort, quota/blocked storage, actual Chromium disk-profile restart, simultaneous tabs, late callbacks and legacy alternate versions. Update existing save assertions to inspect committed database bytes and wait for the asynchronous UI receipt; retain draft and synchronous-API failure checks.
 - Verification and production acceptance are separate receipts under output/cubz-storage. The standard unmodified visual client and the full repository gate remain required before release; no historical source or media payload is rewritten.
 
+## 2026-11-22 — Keep local HTTP fixtures on browser-compatible ports
+
+- This Windows host allocates automatic TCP ports from 1024, so port-zero HTTP fixtures can land on ports rejected by Node fetch and Chromium. A verification pass caught three explicit Undici bad-port failures and a release-check failure caused by the same unreachable fixture.
+- Automatic HTTP listeners now select available high ports, retrying only bind collisions/access failures. Explicit ports and their errors remain unchanged. The shared static server and the two affected Node fixtures use this helper; no OS networking settings, test assertions or deadlines are changed. Real HTTP checks cover reachability, collision recovery and preservation of an occupied explicit port's owner.
+
 ## 2026-10-27 — Synchronize paused steering visuals after Retry
 
 - Visual review of the published mobile fix found a pre-existing reset mismatch: the
