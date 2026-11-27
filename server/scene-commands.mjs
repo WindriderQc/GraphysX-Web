@@ -10,7 +10,7 @@ import { resolveModelPresentation } from "./model-presentation.mjs";
 import { materializeMeshCommand } from "./mesh-authoring.mjs";
 import { entitySubtreeIds } from "./entity-subtree.mjs";
 import { MOTION_FIELDS, validateMotionBehavior } from "./motion-behaviors.mjs";
-import { ENERGY_FIELDS, MODULATE_FIELDS, VISUAL_LIMITS, findModulateTargetError, modulateTargetError, validateEnergyShader, validateModulateBehavior } from "./visual-effects.mjs";
+import { ENERGY_FIELDS, PLAYGROUND_SHADER_FIELDS, MODULATE_FIELDS, VISUAL_LIMITS, findModulateTargetError, modulateTargetError, validateEnergyShader, validatePlaygroundShader, validateModulateBehavior } from "./visual-effects.mjs";
 import { assertInlineMesh, assertInlinePixels, assertMeshSceneBudget, assertMeshTextureCoordinates, MESH_FIELDS, MESH_GROUP_FIELDS, MESH_LIMITS, PIXEL_FIELDS, PIXEL_LIMITS } from "./inline-mesh.mjs";
 import {
   assertAuthoredSceneCommandNamespaces,
@@ -63,6 +63,7 @@ export const FIELDS = Object.freeze({
     "normalTexture", "normalScale", "shader", "side",
   ]),
   energyShader: ENERGY_FIELDS,
+  playgroundShader: PLAYGROUND_SHADER_FIELDS,
   geometry: Object.freeze(["width", "height", "depth", "radius", "tube", "radialSegments"]),
   path: Object.freeze(["points", "closed", "tension"]),
   asset: Object.freeze(["id", "url", "format", "fitSize", "alphaTest", "colorKey", "colorKeyTolerance", "instances", "lods", "lightmap"]),
@@ -155,7 +156,7 @@ export const ENUMS = Object.freeze({
   forceFieldKinds: Object.freeze(["attractor", "flow", "drag", "vortex"]),
   forceFieldShapes: Object.freeze(["sphere", "box", "infinite"]),
   surfaceSketches: Object.freeze(["waveform", "grid-pulse", "plasma"]),
-  shaderIds: Object.freeze(["archive-ppl", "archive-meshlight", "energy"]),
+  shaderIds: Object.freeze(["archive-ppl", "archive-meshlight", "energy", "archive-playground"]),
   assetFormats: Object.freeze(["graphysx-mesh-json", "gltf"]),
 });
 
@@ -199,10 +200,11 @@ const PATCH_KEYS = new Set(FIELDS.patch);
 const ENVIRONMENT_KEYS = new Set(FIELDS.environment);
 const setOf = (keys) => new Set(keys);
 
-const SKY_IDS = new Set(["clearblue", "ballz18-clear-sky", "lostvalley", "skyx", "winter", "clearnight", "nightsky"]);
+const SKY_IDS = new Set(["clearblue", "ballz18-clear-sky", "lostvalley", "skyx", "winter", "clearnight", "nightsky", "playground-asteroids"]);
 const OVERLAY_IDS = new Set(["vignette", "starfield", "scanlines"]);
 const HDRI_IDS = new Set(["studio-small-08", "studio-garden", "overcast-soil", "lilienstein", "vignaioli-night"]);
 const TEXTURE_IDS = new Set([
+  "playground-two-way", "playground-earth",
   "checker", "green-grid", "abstract-cubes", "two-way", "eroded-metal", "rusted-metal", "marble", "notes-marble10",
   "wood-floor", "classic-alien01", "classic-alien01-normal", "classic-checkerboard", "classic-alien02",
   "classic-alien02-normal", "classic-wood03", "worn-wood", "earth", "moon", "mars", "venus",
@@ -213,6 +215,7 @@ const TEXTURE_IDS = new Set([
 // remain authorable when they carry their HTTPS URL; an id alone is only safe when every
 // released client is guaranteed to know it.
 const MODEL_ASSET_IDS = new Set([
+  "archive-playground-airplane", "archive-dominus-port-crateshed", "archive-dominus-renzokscale",
   "archive-cuisine", "archive-maison", "archive-unity-arena",
   "bush-01", "bush-02", "bush-03", "bush-04", "camp1-post", "camp1-tent1", "camp1-tent2", "camp1-tent3",
   "doman-m", "grass-flower01", "grass-flower02", "grass-reed01", "grass-reed02", "grass-reed03", "ishad-f",
@@ -405,6 +408,11 @@ function validateTexture(value, label, allowImportedMedia = false) {
 function validateShader(value, label, allowImportedMedia = false) {
   if (value === null) return;
   requireRecord(value, label);
+  if (value.id === "archive-playground") {
+    try { validatePlaygroundShader(value); }
+    catch (error) { reject(error instanceof Error ? error.message : String(error)); }
+    return;
+  }
   if (value.id === "energy") {
     try { validateEnergyShader(value); }
     catch (error) { reject(error instanceof Error ? error.message : String(error)); }

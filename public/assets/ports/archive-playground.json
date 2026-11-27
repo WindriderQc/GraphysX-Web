@@ -1,0 +1,157 @@
+{
+  "schema": "graphysx.archive-playground/v1",
+  "source": {
+    "project": "SBQC/public/Projects/3D Playground",
+    "files": [
+      {
+        "path": "index.html",
+        "bytes": 4581,
+        "sha256": "c30743ccf5a00bdf27a79b6c0ee74f316d0b331e6930b996cf8e3386cf16f06e"
+      },
+      {
+        "path": "main.js",
+        "bytes": 1908,
+        "sha256": "31c748393d3c6680cb4317ad4e727ed4229153008f0a575f09f89ff7b2a8cef5"
+      },
+      {
+        "path": "GraphysX/sceneManager.js",
+        "bytes": 6085,
+        "sha256": "5969047828b688b0407f957c7aadf9bb8a7413b5e5a606824b5db5b10426e053"
+      },
+      {
+        "path": "GraphysX/generalLights.js",
+        "bytes": 2000,
+        "sha256": "a2669db2f9d83cbffd05324a0051899aa9daf569d1d82e73642c46f529d7ffcc"
+      },
+      {
+        "path": "GraphysX/graphysx.js",
+        "bytes": 4453,
+        "sha256": "3f6b11f097a5cee57ae563b2b4b9c77372be9d6a629ce41d5cfba5c166941490"
+      },
+      {
+        "path": "scene/world.js",
+        "bytes": 158,
+        "sha256": "aaeaaa205ea7cca53b2568bb10eb29304f73a1fc523e882747a654ff45184f49"
+      },
+      {
+        "path": "scene/airplane.js",
+        "bytes": 943,
+        "sha256": "a5cff358c7247397886586cada23ba891f865772fd439e241213d3dfd2d1db21"
+      },
+      {
+        "path": "scene/earth.js",
+        "bytes": 1050,
+        "sha256": "ba50cdfb14d65b7751008895167e5d5ec88b485b700a26bba2d17826b3f99e96"
+      },
+      {
+        "path": "scene/morphSphere.js",
+        "bytes": 1484,
+        "sha256": "8dfdf4232e2cce50b15311b2785055fb0f3effcf1bd8611007141e747451f200"
+      },
+      {
+        "path": "scene/planeZ.js",
+        "bytes": 1518,
+        "sha256": "978d83b4118c1d765fd54e88d53b84431618ce768a7fd671f57ae1c6bf20f661"
+      },
+      {
+        "path": "scene/testCube.js",
+        "bytes": 1145,
+        "sha256": "df22e8f2f7a66080700626ffc65fae0ac29ef3d9867c25593a5a2938298c288b"
+      },
+      {
+        "path": "scene/testLine.js",
+        "bytes": 598,
+        "sha256": "79d8556905f684ca960496e5f2752ebb9764ad023f6a8ce974755fbbec0f4f9b"
+      }
+    ]
+  },
+  "assets": [
+    {
+      "source": "Media/Airplane.glb",
+      "url": "/assets/threejs-playground/media/Airplane.glb",
+      "bytes": 377648,
+      "sha256": "2f9a5382e70bdbef5d54024c6846a3a53389b889d73121159fb335352d311388"
+    },
+    {
+      "source": "textures/twoway.jpg",
+      "url": "/assets/threejs-playground/textures/twoway.jpg",
+      "bytes": 20876,
+      "sha256": "4998527ace4e853954e77ec5b937024cb2d2e23064fbbde4a039224e978a2b21"
+    },
+    {
+      "source": "textures/earth/earth_uv_with_topo.jpg",
+      "url": "/assets/threejs-playground/textures/earth/earth_uv_with_topo.jpg",
+      "bytes": 2566770,
+      "sha256": "a9f0088972dee0254610af851c4d6838ca3f2cf79176987e0a5713e2c15ec042"
+    },
+    {
+      "source": "textures/sky/asteroids/asteroids_bk.jpg",
+      "url": "/assets/threejs-playground/textures/sky/asteroids/asteroids_bk.jpg",
+      "bytes": 140154,
+      "sha256": "c93993eea4760d30293b437b3d3191067291c6add2490df06c69e99bf3c1203d"
+    },
+    {
+      "source": "textures/sky/asteroids/asteroids_dn.jpg",
+      "url": "/assets/threejs-playground/textures/sky/asteroids/asteroids_dn.jpg",
+      "bytes": 100659,
+      "sha256": "14918b653f59e7d652aa71461ef1a4f9ac2037b7485cec328cdfeeee9ed87d1f"
+    },
+    {
+      "source": "textures/sky/asteroids/asteroids_ft.jpg",
+      "url": "/assets/threejs-playground/textures/sky/asteroids/asteroids_ft.jpg",
+      "bytes": 133257,
+      "sha256": "4eb42fc7eb8c7eee84fb63c174711634570fce2c79ea1c484b35bc9f6452e3bc"
+    },
+    {
+      "source": "textures/sky/asteroids/asteroids_lf.jpg",
+      "url": "/assets/threejs-playground/textures/sky/asteroids/asteroids_lf.jpg",
+      "bytes": 127445,
+      "sha256": "eb609931ba0b4c21d89447c03819b7ca06387ee505b8ab259b8212047ae6ce76"
+    },
+    {
+      "source": "textures/sky/asteroids/asteroids_rt.jpg",
+      "url": "/assets/threejs-playground/textures/sky/asteroids/asteroids_rt.jpg",
+      "bytes": 127102,
+      "sha256": "a69148b4cfcecec961c1319e3f262e2f46ab4f00de5fbcf9805f3fb20ebce582"
+    },
+    {
+      "source": "textures/sky/asteroids/asteroids_up.jpg",
+      "url": "/assets/threejs-playground/textures/sky/asteroids/asteroids_up.jpg",
+      "bytes": 118191,
+      "sha256": "87e1f43997f0a705a88a4be1be6c53301b8afe0c10e7a8ead83377e615fe9886"
+    }
+  ],
+  "airplaneBounds": {
+    "min": [
+      -1.2133740186691284,
+      -0.6046370267868042,
+      -1.8883689641952515
+    ],
+    "max": [
+      1.2133740186691284,
+      0.6046370267868042,
+      1.8883689641952515
+    ],
+    "size": [
+      2.426748037338257,
+      1.2092740535736084,
+      3.776737928390503
+    ]
+  },
+  "evidence": {
+    "faithful": [
+      "Neuf fichiers d’origine conservés à l’octet près.",
+      "Le cube, l’avion et sa trajectoire, les trois planètes, les trois sphères déformées, la ligne bleue et le plan procédural.",
+      "Les équations des sphères et les noms, valeurs initiales et limites des 16 réglages."
+    ],
+    "adapted": [
+      "Le terrain aléatoire utilise une graine fixe et est présenté à l’horizontale. La caméra de visite remplace le point de vue d’origine non cadré.",
+      "Les animations utilisent la même horloge que le Studio, avec un équivalent source à 60 images par seconde.",
+      "L’éclairage utilise les lumières du moteur actuel.",
+      "Les rotations X des planètes sont une option explicite : leur calcul était commenté dans la source."
+    ],
+    "unestablished": [
+      "L’objet SceneSubject était commenté dans la composition d’origine ; il n’est pas ajouté à cette reprise."
+    ]
+  }
+}

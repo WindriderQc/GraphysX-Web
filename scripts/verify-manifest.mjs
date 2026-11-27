@@ -16,6 +16,9 @@ export const VERIFY_STATIC_CHECKS = {
 // reports it as not run unless `--gpu-receptions` is given on a machine with a GPU.
 // See "GPU receptions" in docs/CI_PERFORMANCE.md.
 export const VERIFY_SMOKES = [
+  { name: "revival-playground", tier: "apps", script: "scripts/smoke-revival-playground.mjs", covers: "Original GLB/sky/terrain/morph composition, 16 effective controls, shader pause/step, full terrain range, user edits, Studio/save/cold reopen and reduced-motion 320/390 layouts" },
+  { name: "revival-dominus", tier: "apps", script: "scripts/smoke-revival-dominus.mjs", covers: "All 65 native models including two binary-X recoveries, measured bounds for all 28 source placements, view undo/redo, source material edits, Studio persistence and unobscured mobile models" },
+  { name: "revival-lifecycle", tier: "apps", script: "scripts/smoke-revival-lifecycle.mjs", covers: "Real delayed source responses cannot replace a foreign same-ID world or a document already handed to Studio" },
   { name: "cubx-atmel", tier: "apps", script: "scripts/smoke-cubx-atmel.mjs", covers: "Native Atmel welcome: pinned constellation, eight source click meshes and complete cycles, rigid waiting, local glyph edits/undo, protected mobile framing, Studio save/reload and foreign-world loading fence" },
   { name: "studio-return", tier: "core", script: "scripts/smoke-studio-return.mjs", covers: "Actual Home/Simple/Complete/catalogue return and real advancing clock, intentional pause and foreign document retained; behaviour with light renderer" },
   { name: "studio-simple", tier: "core", script: "scripts/smoke-studio-simple.mjs", covers: "Human Simple Studio, 1440/390/320/844 layouts, real edits and blur clicks, unobscured framing, undo/redo, simulation, named save/open/reload, Complete mode, JSON import/export and native Maison material preservation" },

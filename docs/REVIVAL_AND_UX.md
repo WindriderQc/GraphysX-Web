@@ -169,6 +169,11 @@ destinations extend the single v2 product and do not reactivate the old browser 
 
 ## Remaining archaeology with concrete owners
 
+The [current recovery tracker](REVIVAL_STATUS.md) reconciles this historical audit with
+the product. Playground and Dominus now have editable v2 ports; Dominus includes two
+newly decoded binary-X models that the older gallery snapshot marked unsupported.
+Source presence, porting, browser qualification and deployment remain separate evidence.
+
 The new welcome creation journey is documented in [DNA_CREATION.md](DNA_CREATION.md):
 choose one structural mutation, compare its actual growth and twin-seed physics,
 save the complete variant locally, and open/resume that document in the Studio.

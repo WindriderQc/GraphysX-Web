@@ -106,13 +106,14 @@ const describe = {
     color: "Base colour.", emissive: "Self-lit colour; combine with bloom for glow.", emissiveIntensity: "Emissive strength.",
     roughness: "0 mirror, 1 matte.", metalness: "0 dielectric, 1 metal.", opacity: "Below 1 is translucent.",
     wireframe: "Draw edges only.", texture: "Curated `{ id, repeat?, offset?, rotationDegrees? }`, or authored `{ id: 'inline', pixels: { width, height, rgba } }`. pixels.rgba is flat unsigned RGBA bytes in UV order, bottom row first. Same repeat/offset controls.",
-    normalTexture: "Curated normal map, same shape as texture.", normalScale: "Normal map strength.", shader: "Archive translation or {id: energy, ...energyShader}. Energy adds per-eye Fresnel and local-space flowing emission to PBR. null clears it. Native model source slots use modelMaterialOverrides instead.",
+    normalTexture: "Curated normal map, same shape as texture.", normalScale: "Normal map strength.", shader: "Archive translation, {id: archive-playground, effect: morph|unlit}, or {id: energy, ...energyShader}. Playground retains fixed archived programs; morph follows the world clock. Energy adds per-eye Fresnel and local-space flowing emission to PBR. null clears it. Native model source slots use modelMaterialOverrides instead.",
   },
   energyShader: {
     id: "energy", blend: "normal (default) or additive. Additive shells add light without darkening the scenery; no depth writes.", rimColor: "#rrggbb rim colour; default #53dfff.", rimPower: "Fresnel falloff, default 2.5.",
     rimIntensity: "Rim brightness multiplied by material.emissiveIntensity, default 1.", rimOpacity: "Fade face-on alpha for atmosphere/hologram shells; depth writes disabled. Default false.",
     flowSpeed: "Signed flow cycles/second, default 0.4.", flowScale: "Cycles per local-space Y unit, default 6.", flowStrength: "Flow emission, default 0.35; 0 disables bands.",
   },
+  playgroundShader: { id: "archive-playground", effect: "morph: original normal displacement, clip-space Z rotation and RGB equation; unlit: original basic texture/color. Fixed programs only." },
   mesh: {
     positions: "Flat xyz triples in local metres (+Y up). Duplicate vertices for UV seams and hard edges.",
     indices: "Flat zero-based vertex indices in CCW triangles. Every index must exist; degenerate triangles are refused.",
@@ -274,6 +275,7 @@ export function buildWorldVocabulary({ descriptors = {} } = {}) {
       path: fieldList("path", FIELDS.path, { extraBounds: { points: LIMITS.path.points } }),
       asset: fieldList("asset", FIELDS.asset),
       energyShader: fieldList("energyShader", FIELDS.energyShader),
+      playgroundShader: fieldList("playgroundShader", FIELDS.playgroundShader),
       agent: fieldList("agent", FIELDS.agent),
       sound: fieldList("sound", FIELDS.sound),
       emitter: fieldList("emitter", FIELDS.emitter),

@@ -60,6 +60,12 @@ export type AgentWorldSkyDescriptor = AgentWorldSkyCommon &
  */
 export const GRAPHYSX_AGENT_WORLD_SKIES = [
   {
+    id: "playground-asteroids", label: "Playground · Asteroids", resolution: 512, horizonColor: "#090b15",
+    description: "The six byte-identical source faces. Preserve the original BoxGeometry material order.",
+    source: "SBQC/public/Projects/3D Playground/textures/sky/asteroids", orientation: "native-cubemap",
+    faceUrls: ["/assets/threejs-playground/textures/sky/asteroids/asteroids_ft.jpg", "/assets/threejs-playground/textures/sky/asteroids/asteroids_bk.jpg", "/assets/threejs-playground/textures/sky/asteroids/asteroids_up.jpg", "/assets/threejs-playground/textures/sky/asteroids/asteroids_dn.jpg", "/assets/threejs-playground/textures/sky/asteroids/asteroids_rt.jpg", "/assets/threejs-playground/textures/sky/asteroids/asteroids_lf.jpg"],
+  },
+  {
     id: "clearblue",
     label: "Clear Blue",
     basePath: "/assets/sky/clearblue",

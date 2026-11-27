@@ -16,6 +16,8 @@ export type AgentWorldTextureDescriptor = {
  * documents readable while the browser-facing URLs remain an implementation detail.
  */
 export const GRAPHYSX_AGENT_WORLD_TEXTURES = [
+  { id: "playground-two-way", label: "Playground · panneau d’origine", url: "/assets/threejs-playground/textures/twoway.jpg", category: "pattern", description: "Byte-identical texture from SBQC 3D Playground.", defaultRepeat: [1, 1], source: "SBQC/public/Projects/3D Playground/textures/twoway.jpg" },
+  { id: "playground-earth", label: "Playground · Terre d’origine", url: "/assets/threejs-playground/textures/earth/earth_uv_with_topo.jpg", category: "science", description: "The source uses this same Earth texture for all three named planets.", defaultRepeat: [1, 1], source: "SBQC/public/Projects/3D Playground/textures/earth/earth_uv_with_topo.jpg" },
   {
     id: "cubx-atmel-grass",
     label: "CubX · herbe d’origine",

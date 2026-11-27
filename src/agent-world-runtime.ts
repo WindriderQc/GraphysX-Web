@@ -191,7 +191,8 @@ import {
   type ArchivePplSettings,
 } from "./archive-ppl-material";
 import { applyEnergyShader, updateEnergyShader, type EnergyShaderSettings } from "./energy-material";
-import { findModulateTargetError, modulateTargetError, validateEnergyShader, validateModulateBehavior } from "../server/visual-effects.mjs";
+import { applyPlaygroundShader, updatePlaygroundShader, type PlaygroundShaderSettings } from "./playground-material";
+import { findModulateTargetError, modulateTargetError, validateEnergyShader, validatePlaygroundShader, validateModulateBehavior } from "../server/visual-effects.mjs";
 import {
   allAgentWorldSkies,
   resolveAgentWorldSky,
@@ -351,7 +352,7 @@ export type AgentWorldMaterial = {
   /** Strength applied uniformly to the normal map's X/Y channels. */
   normalScale: number;
   /** Optional shader extension; null keeps the platform PBR material. */
-  shader: ArchiveMeshlightSettings | ArchivePplSettings | EnergyShaderSettings | null;
+  shader: ArchiveMeshlightSettings | ArchivePplSettings | EnergyShaderSettings | PlaygroundShaderSettings | null;
 };
 
 export type AgentWorldSplinePath = {
@@ -1360,6 +1361,7 @@ const VALIDATED_BODY = Object.freeze({}) as PhysicsBodyHandle;
 type RuntimeEntity = {
   visualMaterials: Array<{ material: MeshStandardMaterial; emissiveIntensity: number }>;
   energyMaterials: MeshStandardMaterial[];
+  playgroundMaterials: MeshStandardMaterial[];
   visualLights: Array<{ light: AmbientLight | DirectionalLight | PointLight; intensity: number }>;
   emissionModulated: boolean;
   lightModulated: boolean;
@@ -1473,6 +1475,7 @@ export const GRAPHYSX_AGENT_CAPABILITIES = [
   "material.texture",
   "material.shader.archive-meshlight",
   "material.shader.archive-ppl",
+  "material.shader.archive-playground",
   "model.material-slots",
   "texture.list",
   "environment.sky",
@@ -2786,6 +2789,7 @@ export class AgentWorldRuntime {
     const runtime: RuntimeEntity = {
       visualMaterials: [],
       energyMaterials: [],
+      playgroundMaterials: [],
       visualLights: [],
       emissionModulated: false,
       lightModulated: false,
@@ -4209,6 +4213,7 @@ export class AgentWorldRuntime {
     if (runtime.lightModulated) for (const entry of runtime.visualLights) entry.light.intensity = entry.intensity;
     runtime.visualMaterials.length = 0;
     runtime.energyMaterials.length = 0;
+    runtime.playgroundMaterials.length = 0;
     runtime.visualLights.length = 0;
     const { definition, object } = runtime;
     if (definition.type === "agent") applyAgentAppearance(object, definition);
@@ -4286,6 +4291,7 @@ export class AgentWorldRuntime {
           seenMaterials.add(material);
           runtime.visualMaterials.push({ material, emissiveIntensity: material.emissiveIntensity });
           if (material.userData.graphysxEnergyUniforms) runtime.energyMaterials.push(material);
+          if (material.userData.graphysxPlaygroundUniforms && material.userData.graphysxPlaygroundEffect === "morph") runtime.playgroundMaterials.push(material);
         }
       }
       if (definition.type !== "model" && (child instanceof AmbientLight || child instanceof DirectionalLight || child instanceof PointLight)) {
@@ -4317,6 +4323,7 @@ export class AgentWorldRuntime {
       for (const entry of runtime.visualMaterials) entry.material.emissiveIntensity = clamp(entry.emissiveIntensity * emissionFactor, 0, 100);
     }
     for (const material of runtime.energyMaterials) updateEnergyShader(material, this.elapsedSeconds);
+    for (const material of runtime.playgroundMaterials) updatePlaygroundShader(material, this.elapsedSeconds);
     if (lightActive || runtime.lightModulated) for (const entry of runtime.visualLights) entry.light.intensity = clamp(entry.intensity * lightFactor, 0, 100);
     runtime.emissionModulated = emissionActive;
     runtime.lightModulated = lightActive;
@@ -5110,14 +5117,16 @@ function applyAgentArchiveShader(material: MeshStandardMaterial, settings: Agent
   applyArchiveMeshlightShader(material, null, archiveMeshlightEmptySpecular);
   applyArchivePplShader(material, null);
   if (settings?.id !== "energy") applyEnergyShader(material, null);
+  if (settings?.id !== "archive-playground") applyPlaygroundShader(material, null);
 
-  if (!settings || settings.id === "archive-ppl" || settings.id === "energy") {
+  if (!settings || settings.id === "archive-ppl" || settings.id === "energy" || settings.id === "archive-playground") {
     material.userData.graphysxSpecularTextureToken = Symbol("no-agent-specular-texture");
     previous?.dispose();
     delete material.userData.graphysxAgentSpecularTexture;
     delete material.userData.graphysxSpecularTextureKey;
     if (settings?.id === "archive-ppl") applyArchivePplShader(material, settings);
     if (settings?.id === "energy") applyEnergyShader(material, settings);
+    if (settings?.id === "archive-playground") applyPlaygroundShader(material, settings);
     return;
   }
 
@@ -5226,6 +5235,10 @@ function resolveMaterial(source?: Partial<AgentWorldMaterial>, base: AgentWorldM
 function resolveArchiveShader(source: AgentWorldMaterial["shader"] | undefined): AgentWorldMaterial["shader"] {
   if (source === null || source === undefined) return null;
   if (source.id === "energy") { validateEnergyShader(source); return deepClone(source); }
+  if (source.id === "archive-playground") {
+    validatePlaygroundShader(source);
+    return deepClone(source);
+  }
   if (source.id === "archive-ppl") {
     return {
       id: "archive-ppl",

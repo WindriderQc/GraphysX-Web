@@ -1,0 +1,56 @@
+{
+  "schema": "graphysx.revival-status/v1",
+  "updated": "2026-11-26",
+  "scope": "Product reconciliation and source-linked recovery. Not an exhaustive certification or archive deletion clearance.",
+  "historicalCensus": { "source": "GraphysX/ARCHIVE_SCENE_CENSUS.md", "date": "2026-07-18", "distinctRecords": 54, "currentCompletionScore": false },
+  "experiences": [
+    {
+      "id": "threejs-playground", "phase": "ported", "fidelity": "source-with-explicit-adapters", "route": "?app=playground",
+      "evidence": "public/assets/ports/archive-playground.json", "implementation": "src/archive-playground-scene.ts",
+      "sourceFamily": "SBQC/public/Projects/3D Playground", "sourceFilesHashed": 12, "exactRuntimeAssets": 9,
+      "discovered": ["Original planet X updates were commented out; the new X controls are explicitly optional adaptations.", "SceneSubject was imported but commented out of the source composition, so it is not added as a recovered object."],
+      "remaining": ["Historical pixel-for-pixel rendering is not certified; modern lighting and colour management are disclosed."],
+      "verification": ["test/archive-revivals.test.mjs", "scripts/smoke-revival-playground.mjs", "scripts/smoke-revival-lifecycle.mjs"]
+    },
+    {
+      "id": "dominus", "phase": "ported", "fidelity": "source-models-and-catalog-placements", "route": "?app=dominus",
+      "evidence": "public/assets/ports/archive-dominus.json", "implementation": "src/archive-dominus-scene.ts",
+      "sourceFamily": "Yanik C++ BCKUP/Media/Models/Dominus Art", "modelCount": 65, "sourcePortPlacements": 28,
+      "discovered": ["port_crateshed.X: 274 vertices, 176 triangles and four original material bindings recovered from binary X.", "renzokscale.X: 917 vertices, 1118 triangles and the original RENZOKDO.JPG recovered from binary X.", "The previous 63 decoded / 2 unsupported snapshot is superseded for these two assets; its original evidence is retained."],
+      "remaining": ["The 28 placements are an ObjectLibrary editor grid. A completed authored village/game was not established; the 65-model gallery is a current inspection layout."],
+      "verification": ["test/archive-revivals.test.mjs", "scripts/smoke-revival-dominus.mjs", "scripts/smoke-revival-lifecycle.mjs"]
+    }
+  ],
+  "previewReconciliation": [
+    { "id": "ballz-slide1", "disposition": "needs-review", "note": "Do not confuse Slide1 with the already ported SlideLarge/Great Slide." },
+    { "id": "ballz-track-gallery", "disposition": "needs-review", "note": "Reconcile individual track revisions with current playable courses before counting scenes." },
+    { "id": "ballz-xml-worlds", "disposition": "needs-review", "note": "Trace each authored XML composition and unresolved references." },
+    { "id": "ballz2011-level1", "disposition": "modern-counterpart", "implementation": "src/archive-level1-2011-scene.ts" },
+    { "id": "common-archive", "disposition": "modern-counterpart", "implementation": "src/archive-worlds.ts" },
+    { "id": "cubx-actor-lineage", "disposition": "partial-counterpart", "implementation": "src/cubx-atmel-scene.ts", "note": "The lineage inspector and Atmel/CubZ families are distinct evidence." },
+    { "id": "cubz-tva-animation", "disposition": "modern-counterpart", "implementation": "src/archive-world-motion.ts" },
+    { "id": "dominus-asset-gallery", "disposition": "graduated", "experience": "dominus" },
+    { "id": "dominus-port-evidence", "disposition": "graduated", "experience": "dominus" },
+    { "id": "notes-manager", "disposition": "partial-counterpart", "implementation": "src/archive-worlds.ts", "note": "Source plates/addition are available. An original text editor/persistence implementation remains unestablished." },
+    { "id": "object-library-catalog", "disposition": "partial-counterpart", "experience": "dominus", "note": "The 28 Dominus port records are covered. Reconcile the other ObjectLibrary records separately." },
+    { "id": "particle-effect", "disposition": "needs-review", "note": "Compare source effects with current emitter presets; a shared particle system alone is not full effect parity." },
+    { "id": "particle-preset-library", "disposition": "needs-review", "note": "Reconcile each source preset and its textures." },
+    { "id": "stockroom-xml-artifact", "disposition": "needs-review", "note": "Keep serializer evidence distinct from authored worlds." },
+    { "id": "suzanne2-ascii", "disposition": "modern-counterpart", "implementation": "src/archive-suzanne2-scene.ts" },
+    { "id": "threejs-playground", "disposition": "graduated", "experience": "threejs-playground" },
+    { "id": "xml-scene", "disposition": "needs-review", "note": "Compare source scene documents with the current legacy XML importer; do not imply all documents are exposed." }
+  ],
+  "researchQueue": [
+    { "id": "census-product-reconciliation", "state": "to-reconcile", "evidence": "docs/legacy-revival-audit.json", "next": "Map every one of the 54 dated historical records to current routes, original assets, behavior fidelity and exact acceptance evidence. Existing delivered families have their own linked revival documents; do not infer a current completion percentage from the old census." },
+    { "id": "cubz-original-keys", "state": "unestablished", "evidence": "docs/CUBZ_BUTTONS.md", "next": "Historical internal artwork/actions and old compressed payload versions. Current keys are explicit reconstructions, not proof of the original meanings." },
+    { "id": "xml-reference-resolution", "state": "to-reconcile", "evidence": "src/content/xml-scene-documents.json", "next": "Resolve each missing/duplicate path against source versions and identify new binary-X candidates." },
+    { "id": "historical-games", "state": "to-reconcile", "evidence": "src/race-definitions.ts", "next": "Trace ZombieKiller, native HUD/rules and remaining authored tracks into current product destinations." },
+    { "id": "vehicles-flight", "state": "partial", "evidence": "docs/IMPREZA_REVIVAL.md", "next": "Original audio, solver/tire semantics, orphan-car bindings, historical FlightX layouts and networking." },
+    { "id": "device-integration", "state": "hardware-unverified", "evidence": "docs/CUBX_ATMEL.md", "next": "Separate protocol evidence/simulation from actual serial, Arduino and TCP acceptance." },
+    { "id": "native-rendering", "state": "partial", "evidence": "docs/REVIVAL_AND_UX.md", "next": "Compare source water, materials, shader/sky bindings and lighting with the current adapters." }
+  ],
+  "acceptance": {
+    "rule": "Ported describes source integration, not passed tests or deployment. The corresponding commit/PR carries actual local gate, CI, production identity and browser receipts.",
+    "releaseIdentity": "release.json", "softwareEvidence": "output/revival/", "physicalAcceptance": "separate"
+  }
+}

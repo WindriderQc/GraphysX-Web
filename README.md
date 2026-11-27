@@ -74,6 +74,9 @@ visits the real DNA, physics and flocking systems; manual camera input interrupt
 
 The [revival and UX audit](docs/REVIVAL_AND_UX.md) compares the original C++/C# projects,
 the first web revival and the current product, and records remaining recovery work.
+The [current revival tracker](docs/REVIVAL_STATUS.md) links discoveries, unresolved research,
+source hashes, product destinations and validation evidence. Playground (`?app=playground`)
+and Dominus (`?app=dominus`) use the same editable world and Studio as current creations.
 The [complete UI/UX review](docs/UI_UX_REVIEW.md) maps visitor intentions to destinations,
 documents the November navigation polish and Maison visit, and orders the remaining work.
 It is **not a deletion clearance** for the historical repository.
