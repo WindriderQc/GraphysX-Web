@@ -69,6 +69,11 @@ with a renderer override. The recipe:
 
 ## Status
 
+Playground and the two Dominus previews now have product counterparts at `?app=playground`
+and `?app=dominus`. Their old harness modules remain unconverted; the product uses ordinary
+v2 worlds instead. See [the current recovery tracker](REVIVAL_STATUS.md) for this distinction
+and the reconciliation of all 17 old harnesses.
+
 Converted and runnable: **milky-way**, **suzanne1-ascii**.
 
 The other **17 are listed in the index, disabled, showing the canvas id they still query** —

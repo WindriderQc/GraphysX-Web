@@ -47,6 +47,10 @@ export async function modelManifestAssets(publicDir, manifestUrl) {
   const urls = new Set([manifestUrl]);
   const readJson = async (url) => JSON.parse(await readFile(path.join(publicDir, url.replace(/^\//, "")), "utf8"));
   const manifest = await readJson(manifestUrl);
+  for (const asset of manifest.assets ?? []) {
+    if (typeof asset.url !== "string") throw new Error(`Invalid asset URL in ${manifestUrl}`);
+    urls.add(asset.url);
+  }
   for (const entry of Object.values(manifest.models ?? {})) {
     if (typeof entry?.url !== "string") throw new Error(`Invalid model URL in ${manifestUrl}`);
     urls.add(entry.url);
@@ -126,6 +130,7 @@ export async function productAssetManifest() {
   // The mesh JSON carries absolute `textureUrl`s, so this cannot drift from the meshes.
   for (const url of await assetLiterals("src/agent-world-asset-catalog.ts", "url")) {
     wanted.add(url);
+    if (!url.endsWith(".json")) continue; // Native GLB files are already self-contained.
     const payload = JSON.parse(await readFile(path.join(PUBLIC, url.replace(/^\//, "")), "utf8"));
     for (const mesh of payload.meshes ?? []) {
       for (const material of mesh.materials ?? []) {
@@ -141,6 +146,9 @@ export async function productAssetManifest() {
   // Complete TVA rigs load only on the CubZ route; their source data is not JS boot code.
   for (const url of await anyAssetLiterals("src/cubz-menu-scene.ts")) wanted.add(url);
   for (const url of await anyAssetLiterals("src/cubx-atmel-scene.ts")) wanted.add(url);
+  for (const source of ["src/archive-playground-scene.ts", "src/archive-dominus-scene.ts"]) {
+    for (const url of await anyAssetLiterals(source)) for (const asset of await modelManifestAssets(PUBLIC, url)) wanted.add(asset);
+  }
   // Native Impreza model payloads, their original textures and both source heightfields.
   for (const url of await anyAssetLiterals("src/impreza-source.ts")) {
     for (const asset of await modelManifestAssets(PUBLIC, url)) wanted.add(asset);

@@ -2,6 +2,17 @@
 
 Original prompt: "lets go then, lets make this happen!!"
 
+## 2026-11-26 — Restore Three.js Playground and Dominus in the current Studio
+
+- User asks for both original experiences, Studio access, tests and deployment; keep the historical archive unchanged. The follow-up also requests durable tracking of discoveries and remaining archaeology.
+- Work starts at published bd96ca8 in an isolated checkout. Source-hash manifests retain the nine Playground runtime assets and twelve authored code files, all 65 Dominus model sources and the 28 original ObjectLibrary port placements. The default source compositions, inspection layouts and modern camera/lighting/clock adapters remain distinguished.
+- Decode two previously unsupported uncompressed binary-X files using bounded counted token records: port_crateshed (274 vertices / 176 triangles / four materials) and renzokscale (917 / 1118 / original RENZOKDO.JPG). Keep the original bytes as test fixtures and preserve older audit snapshots. Archive inputs are never written.
+- Original source inspection confirms the planet X rotations were commented out and SceneSubject was not instantiated. X spin is an explicitly current opt-in; the commented-out object is not invented as source content.
+- Build ordinary editable v2 worlds and a common visit surface. Fixed source shader programs use the existing clock and cached material lists; native GLB/model/texture/sky registries and production asset discovery include their exact resources. Terrain chunks respect existing document limits even at 100×100, preserve hidden chunks and user children, and travel through the same save/load path as other creations.
+- docs/REVIVAL_STATUS.md and revival-status.json track this lot, all 17 old preview harnesses and the unresolved research queue without reusing the old 54-record census as a current completion score. Local/CI/deployment receipts will be attached to the tested commit and PR, not inferred from this implementation entry.
+- Focused qualification: eight source/storage/decoder/ledger tests passed; both real-browser visits passed desktop, small-screen, editing, save and cold-reopen checks; both delayed-source lifecycle cases passed. The unmodified standard game client passed both routes with inspected captures. Inspecting the screenshots exposed the inherited short fog envelope and default tinted lights; each visit now declares its clear viewing envelope and neutral inspection lights. Catalogue thumbnails are captured from the actual routes.
+- Keep failed iteration receipts. Cold reopen must await the actual saved world and expected model count: an empty default-world query can otherwise satisfy every(modelReady) before IndexedDB loading completes. Large-scene comparisons retain strict equality but record exact JSON on failure instead of allocating Node's enormous array diff. Source --check and protected-checkout custody passed. Full clean-commit qualification, CI and public release acceptance follow separately.
+
 ## 2026-11-22 — Store complete personal scenes in IndexedDB
 
 - Reproduced the real CubZ quota failure: the third roughly 3.7 MB UTF-16 inline pose cannot fit in localStorage. Keep the historical GraphysX archive and existing worktrees read-only; custody compares ten protected repositories, including their pre-existing dirty files.

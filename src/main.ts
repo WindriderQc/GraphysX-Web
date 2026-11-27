@@ -35,6 +35,7 @@ import type { CubzMenuApplication } from "./cubz-menu-app";
 import type { ImprezaApplication } from "./impreza-app";
 import type { FlightxApplication } from "./flightx-app";
 import type { MaisonApplication } from "./maison-app";
+import type { ArchiveRevivalApplication } from "./archive-revival-app";
 import type { SceneBrowser } from "./scene-browser";
 import type { LiveAgentPresenceController, LiveAgentPresenceState } from "./live-agent-presence";
 import type { LiveMissionRuntimeController, LiveMissionRuntimeState } from "./live-mission-runtime";
@@ -571,7 +572,7 @@ if (appParam === "quest3") {
      * Keyed by id rather than a boolean because this is the seam a second application uses, not
      * a special case for EV3.
      */
-    let appSurface: TenWorkshopApplication | KidxApplication | LlmXApplication | DiskxApplication | EcosystemApplication | NetxApplication | IslandApplication | FirstCreationApplication | DnaCreationApplication | CubzMenuApplication | ImprezaApplication | FlightxApplication | MaisonApplication | null = null;
+    let appSurface: TenWorkshopApplication | KidxApplication | LlmXApplication | DiskxApplication | EcosystemApplication | NetxApplication | IslandApplication | FirstCreationApplication | DnaCreationApplication | CubzMenuApplication | ImprezaApplication | FlightxApplication | MaisonApplication | ArchiveRevivalApplication | null = null;
     // Application surfaces own the whole play viewport. Keep this separate from the lazy
     // surface module so later host chrome (notably the asynchronously mounted scene browser)
     // can respect the route before the application's import has finished.
@@ -581,10 +582,28 @@ if (appParam === "quest3") {
     let returnFromApplicationStudio = false;
     let sceneBrowser: SceneBrowser | null = null;
     const openApplication = (id: string): boolean => {
-      if (id !== "make-ten" && id !== "ev3-lab" && id !== "llmx" && id !== "diskx" && id !== "ecosystem" && id !== "netx" && id !== "island" && id !== "creation" && id !== "dna" && id !== "cubx" && id !== "impreza" && id !== "flightx" && id !== "maison") return false;
+      if (id !== "make-ten" && id !== "ev3-lab" && id !== "llmx" && id !== "diskx" && id !== "ecosystem" && id !== "netx" && id !== "island" && id !== "creation" && id !== "dna" && id !== "cubx" && id !== "impreza" && id !== "flightx" && id !== "maison" && id !== "playground" && id !== "dominus") return false;
       if (applicationOpen) return true;
       applicationOpen = true;
       requestShowroomInteraction(false);
+      if (id === "playground" || id === "dominus") {
+        showroomEnvironment?.(); showroomEnvironment = null;
+        void import("./archive-revival-app").then(({ mountArchiveRevival }) => {
+          if (nestorBlockedByLiveSession()) { applicationOpen = false; syncFrontDoor(); return; }
+          appSurface = mountArchiveRevival(root, host, id, () => {
+            appSurface?.dispose(); appSurface = null; applicationOpen = false;
+            window.location.assign(import.meta.env.BASE_URL);
+          }, () => {
+            appSurface?.dispose(); appSurface = null; applicationOpen = false; returnFromApplicationStudio = true;
+            const destination = new URL(import.meta.env.BASE_URL, location.href); destination.searchParams.set("host", "editor");
+            if (explicitStore) destination.searchParams.set("store", explicitStore);
+            history.replaceState(null, "", destination.pathname + destination.search);
+            sceneBrowser?.setEnabled(!nestorBlockedByLiveSession()); host.applyEnvironment(); enterBrowsedEditor();
+            void host.editorReady().then(editor => { if (host.mode === "editor" && matchMedia("(max-width: 700px)").matches) editor?.showViewport(); });
+          });
+        }).catch((error: unknown) => showStartupError(root, error));
+        return true;
+      }
       if (id === "make-ten") {
         showroomEnvironment?.();
         showroomEnvironment = null;
@@ -1303,7 +1322,15 @@ if (appParam === "quest3") {
             // scene, so their simulation vocabulary is selectable and editable.
             // The recovered Voie Lactee vignette. Same shape as the playgrounds: it opens in the
             // editor like any browsed scene.
-            // The recovered Maison massing model.
+            // Complete source-backed archive applications share the Studio world.
+            ...([
+              { app: "playground", id: "archive-threejs-playground", label: "Three.js Playground · la scène retrouvée", openLabel: "Explorer le Playground", summary: "L’avion GLB, trois planètes, les sphères déformées et le terrain du projet d’origine. Ajuste les réglages puis ouvre ta version dans le Studio.", meta: "9 fichiers d’origine · 16 réglages · animations et sauvegarde dans le même moteur" },
+              { app: "dominus", id: "archive-dominus", label: "Dominus · les modèles retrouvés", openLabel: "Explorer Dominus", summary: "Retrouve les 28 placements du catalogue et les 65 modèles d’origine : bâtiments, arbres, personnages et accessoires. Chaque modèle est éditable dans le Studio.", meta: "65 modèles · 2 fichiers binaires nouvellement décodés · placements sources et galerie distincts" },
+            ] as const).map(entry => ({ ...entry, open: () => {
+              const destination = new URL(import.meta.env.BASE_URL, location.href); destination.searchParams.set("app", entry.app);
+              if (explicitStore) destination.searchParams.set("store", explicitStore);
+              window.location.assign(destination.href); return new Promise<void>(() => {});
+            } })),
             {
               id: "archive-cubz-menu", label: "CubZ · le menu retrouvé",
               openLabel: "Ouvrir le menu 3D",

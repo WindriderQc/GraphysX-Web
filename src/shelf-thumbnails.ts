@@ -7,6 +7,8 @@ import type { AgentLevelState } from "./agent-level-library";
  */
 export const SHELF_SCENE_THUMBNAIL_IDS: ReadonlySet<string> = new Set([
   "archive-cubz-menu",
+  "archive-threejs-playground",
+  "archive-dominus",
   "nacre-quest3",
   "archive-impreza-worlds",
   "archive-cubz-tracks",

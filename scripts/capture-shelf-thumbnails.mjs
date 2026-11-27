@@ -8,6 +8,8 @@ const OUTPUT = path.resolve("public/assets/shelf-thumbnails");
 const PORT = Number(process.env.SHELF_THUMBNAIL_PORT || 4197);
 const BASE = `http://127.0.0.1:${PORT}/?intro=0`;
 const BROWSE_IDS = [
+  "archive-threejs-playground",
+  "archive-dominus",
   "archive-cubz-menu",
   "archive-impreza-worlds",
   "archive-cubz-tracks",
@@ -51,9 +53,10 @@ const browser = await chromium.launch({ headless: true, args: ["--use-angle=swif
 async function capture(id, shelf, selector) {
   const page = await browser.newPage({ viewport: { width: 640, height: 360 }, deviceScaleFactor: 1 });
   const directFlight = id === "archive-flightx";
-  await page.goto(directFlight ? new URL("?app=flightx&view=source&intro=0", BASE).href : BASE, { waitUntil: "domcontentloaded", timeout: 60_000 });
+  const revival = id === "archive-threejs-playground" ? "playground" : id === "archive-dominus" ? "dominus" : null;
+  await page.goto(revival ? new URL(`?app=${revival}&view=models&intro=0`, BASE).href : directFlight ? new URL("?app=flightx&view=source&intro=0", BASE).href : BASE, { waitUntil: "domcontentloaded", timeout: 60_000 });
   await page.waitForFunction(() => Boolean(window.__GRAPHYSX_HOST__), null, { timeout: 60_000 });
-  if (!directFlight) {
+  if (!directFlight && !revival) {
     await page.click(`.gx-welcome .gx-go-${shelf}`);
     await page.click('[data-collection="all"]');
     await page.waitForSelector(selector, { timeout: 60_000 });
@@ -64,6 +67,14 @@ async function capture(id, shelf, selector) {
     await page.$eval(selector, (element) => element.click());
   }
   await page.waitForFunction(() => (window.__GRAPHYSX__?.query({}).length ?? 0) > 0, null, { timeout: 60_000 });
+  if (revival) {
+    await page.waitForFunction(() => JSON.parse(window.render_game_to_text?.() || "{}").application?.ready, null, { timeout: 60000 });
+    await page.evaluate(kind => {
+      window.__GRAPHYSX__.pause(true);
+      window.__GRAPHYSX__.step(2);
+      window.__GRAPHYSX_HOST__.frameView(kind === "playground" ? [68, 58, 72] : [55, 65, 80], kind === "playground" ? [15, 14, 5] : [0, 2, 3], 0);
+    }, revival);
+  }
   if (id === "archive-cubz-menu") {
     await page.waitForSelector('[data-cubz-choice="7"]');
     await page.$eval('[data-cubz-choice="7"]', element => { element.click(); window.__GRAPHYSX__.pause(true); window.__GRAPHYSX__.step(3); });

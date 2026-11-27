@@ -1,5 +1,6 @@
 /** Shared document/runtime contract. These are bounded visual effects, never transform motion. */
 export const ENERGY_FIELDS = Object.freeze(["id", "blend", "rimColor", "rimPower", "rimIntensity", "rimOpacity", "flowSpeed", "flowScale", "flowStrength"]);
+export const PLAYGROUND_SHADER_FIELDS = Object.freeze(["id", "effect"]);
 export const MODULATE_FIELDS = Object.freeze(["id", "type", "property", "minimumFactor", "maximumFactor", "frequencyHz", "phaseDegrees", "startSeconds"]);
 const INTENSITY_TARGETS = ["ambient-light", "directional-light", "point-light"];
 export const VISUAL_LIMITS = Object.freeze({
@@ -23,6 +24,10 @@ export function validateEnergyShader(value) {
   if (value.rimColor !== undefined && (typeof value.rimColor !== "string" || !/^#[0-9a-f]{6}$/i.test(value.rimColor))) throw new Error("energy.rimColor must be #rrggbb");
   if (value.rimOpacity !== undefined && typeof value.rimOpacity !== "boolean") throw new Error("energy.rimOpacity must be boolean");
   numbers(value, ["rimPower", "rimIntensity", "flowSpeed", "flowScale", "flowStrength"], "energy");
+}
+export function validatePlaygroundShader(value) {
+  only(value, PLAYGROUND_SHADER_FIELDS, "archive-playground");
+  if (value.id !== "archive-playground" || !["morph", "unlit"].includes(value.effect)) throw new Error("archive-playground.effect must be morph or unlit");
 }
 export function validateModulateBehavior(value) {
   only(value, MODULATE_FIELDS, "modulate");
