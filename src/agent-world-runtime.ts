@@ -1359,6 +1359,7 @@ const VALIDATED_BODY = Object.freeze({}) as PhysicsBodyHandle;
 
 type RuntimeEntity = {
   visualMaterials: Array<{ material: MeshStandardMaterial; emissiveIntensity: number }>;
+  energyMaterials: MeshStandardMaterial[];
   visualLights: Array<{ light: AmbientLight | DirectionalLight | PointLight; intensity: number }>;
   emissionModulated: boolean;
   lightModulated: boolean;
@@ -2311,6 +2312,18 @@ export class AgentWorldRuntime {
   /** Cheap ephemeral selection read for host UI; does not build a whole scene state. */
   getSelectedIds(): string[] { return [...this.selectedIds]; }
 
+  /** Read-only tags for host systems that already know the entity ID. */
+  getEntityTags(id: string): readonly string[] | undefined {
+    return this.entities.get(id)?.definition.tags;
+  }
+
+  /** Host audio needs source settings and live visibility, without a world snapshot. */
+  *getSoundSources(): IterableIterator<{ id: string; sound: Readonly<ResolvedAgentWorldSound>; visible: boolean }> {
+    for (const { definition, object } of this.entities.values()) {
+      if (definition.sound) yield { id: definition.id, sound: definition.sound, visible: object.visible };
+    }
+  }
+
   /** Frame UI needs the clock, not a clone of every mesh/material/inline terrain sample. */
   getClock(): { worldId: string; paused: boolean; elapsedSeconds: number; revision: number } {
     return { worldId: this.definition.id, paused: this.paused, elapsedSeconds: this.elapsedSeconds, revision: this.revision };
@@ -2772,6 +2785,7 @@ export class AgentWorldRuntime {
     }
     const runtime: RuntimeEntity = {
       visualMaterials: [],
+      energyMaterials: [],
       visualLights: [],
       emissionModulated: false,
       lightModulated: false,
@@ -4194,6 +4208,7 @@ export class AgentWorldRuntime {
     if (runtime.emissionModulated) for (const entry of runtime.visualMaterials) entry.material.emissiveIntensity = entry.emissiveIntensity;
     if (runtime.lightModulated) for (const entry of runtime.visualLights) entry.light.intensity = entry.intensity;
     runtime.visualMaterials.length = 0;
+    runtime.energyMaterials.length = 0;
     runtime.visualLights.length = 0;
     const { definition, object } = runtime;
     if (definition.type === "agent") applyAgentAppearance(object, definition);
@@ -4270,6 +4285,7 @@ export class AgentWorldRuntime {
           if (!(material instanceof MeshStandardMaterial) || seenMaterials.has(material)) continue;
           seenMaterials.add(material);
           runtime.visualMaterials.push({ material, emissiveIntensity: material.emissiveIntensity });
+          if (material.userData.graphysxEnergyUniforms) runtime.energyMaterials.push(material);
         }
       }
       if (definition.type !== "model" && (child instanceof AmbientLight || child instanceof DirectionalLight || child instanceof PointLight)) {
@@ -4297,10 +4313,10 @@ export class AgentWorldRuntime {
       if (behavior.property === "intensity") { lightFactor *= factor; lightActive = true; }
       else { emissionFactor *= factor; emissionActive = true; }
     }
-    for (const entry of runtime.visualMaterials) {
-      if (emissionActive || runtime.emissionModulated) entry.material.emissiveIntensity = clamp(entry.emissiveIntensity * emissionFactor, 0, 100);
-      updateEnergyShader(entry.material, this.elapsedSeconds);
+    if (emissionActive || runtime.emissionModulated) {
+      for (const entry of runtime.visualMaterials) entry.material.emissiveIntensity = clamp(entry.emissiveIntensity * emissionFactor, 0, 100);
     }
+    for (const material of runtime.energyMaterials) updateEnergyShader(material, this.elapsedSeconds);
     if (lightActive || runtime.lightModulated) for (const entry of runtime.visualLights) entry.light.intensity = clamp(entry.intensity * lightFactor, 0, 100);
     runtime.emissionModulated = emissionActive;
     runtime.lightModulated = lightActive;

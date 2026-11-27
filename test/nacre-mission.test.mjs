@@ -43,6 +43,7 @@ function fixture(){
   };
   const world={
     getElapsedSeconds:()=>seconds,getEntityObject:id=>objects.get(id),
+    getEntityTags:id=>entities.get(id)?.tags,
     applyHostPoses(poses){for(const pose of poses){objects.get(pose.id).position.fromArray(pose.position);objects.get(pose.id).quaternion.fromArray(pose.quaternion);}return poses.length;},
     subscribeEvents(callback){listeners.add(callback);return()=>listeners.delete(callback);},
   };

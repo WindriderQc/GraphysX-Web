@@ -11,8 +11,9 @@ export const NACRE = {
 };
 export const NACRE_PHASES = ["standby", "cell", "carrying", "docked", "charging", "opening", "ready", "complete"] as const;
 export type NacrePhase = typeof NACRE_PHASES[number];
-type WorldPort = Pick<AgentWorldRuntime, "getElapsedSeconds" | "getEntityObject" | "applyHostPoses" | "subscribeEvents">;
+type WorldPort = Pick<AgentWorldRuntime, "getElapsedSeconds" | "getEntityObject" | "getEntityTags" | "applyHostPoses" | "subscribeEvents">;
 type World = WorldPort & { api: GraphysXAgentWorldApi };
+const NO_TAGS: readonly string[] = [];
 const update = (id: string, patch: AgentWorldEntityPatch): AgentWorldCommand => ({ op: "update", id, patch });
 const online = (phase: NacrePhase | null) => phase === "opening" || phase === "ready" || phase === "complete";
 
@@ -34,6 +35,7 @@ export class NacreMission {
 
   constructor(world: WorldPort, api: GraphysXAgentWorldApi) {
     this.world = { api, getElapsedSeconds: () => world.getElapsedSeconds(), getEntityObject: id => world.getEntityObject(id),
+      getEntityTags: id => world.getEntityTags(id),
       applyHostPoses: poses => world.applyHostPoses(poses), subscribeEvents: listener => world.subscribeEvents(listener) };
     this.off = world.subscribeEvents(event => {
       if (event.type === "world.loaded") {
@@ -42,7 +44,7 @@ export class NacreMission {
     });
   }
 
-  private tags(): string[] { return this.world.api.query({ ids: [NACRE.state] })[0]?.tags ?? []; }
+  private tags(): readonly string[] { return this.world.getEntityTags(NACRE.state) ?? NO_TAGS; }
   get phase(): NacrePhase | null {
     const value = this.tags().find(tag => tag.startsWith("phase:"))?.slice(6);
     return NACRE_PHASES.includes(value as NacrePhase) ? value as NacrePhase : null;
