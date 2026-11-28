@@ -176,6 +176,7 @@ export function resolveVerifyOptions(args, env = process.env) {
       base: { type: "string" },
       "no-build": { type: "boolean", default: false },
       wait: { type: "boolean", default: false },
+      resume: { type: "boolean", default: false },
       "force-lock": { type: "boolean", default: false },
       "gpu-receptions": { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
@@ -190,6 +191,9 @@ export function resolveVerifyOptions(args, env = process.env) {
   }
 
   const externalBase = values.base ?? (env.SMOKE_BASE || null);
+  if (values.resume && (externalBase || values["no-build"] || env.CI)) {
+    throw new Error("--resume is for local verification of its own build, without --base, SMOKE_BASE, --no-build or CI.");
+  }
   if (externalBase !== null) {
     let url;
     try { url = new URL(externalBase); } catch { /* Report the option, without echoing credentials. */ }
@@ -219,6 +223,7 @@ export function resolveVerifyOptions(args, env = process.env) {
     externalBase,
     noBuild: values["no-build"],
     wait: values.wait,
+    resume: values.resume,
     forceLock: values["force-lock"],
     gpuReceptions: values["gpu-receptions"],
     help: values.help,

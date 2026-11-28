@@ -62,6 +62,30 @@ names them as not run instead of running them. Do not turn the local list into a
 for a documentation or Node-only change. GitHub configuration and the HTTP checker
 can be validated with Node tests, including explicit bad-publication fixtures.
 
+## Resume a local gate
+
+A local run with its own build records each check in `output/verify/receipt.json`.
+The console shows the active check and its position in the queue. The receipt
+records the revision, selected checks, timestamps, attempts and results alongside
+the existing screenshots. After an interruption, run the same command in the
+same checkout with `--resume`, for example:
+
+```bash
+npm run verify -- --wait --checks=quest3,quest3-controls,audio-scene
+npm run verify -- --wait --checks=quest3,quest3-controls,audio-scene --resume
+```
+
+Checks with a recorded pass keep their original result and artifacts. The
+interrupted check, failures and pending checks run again. Transport retries in
+reused passes still count against the gate's retry budget. Keep the checkout and
+`dist/` stable during verification. A changed revision, source inputs, selection,
+verification environment or verified build requires a fresh run. A fresh command
+without `--resume` replaces the receipt and artifacts, as before.
+
+CI, external URLs and `--no-build` continue to use their existing fresh-run
+workflow. A resumed selection or shard has the same coverage as its original
+command, including any GPU receptions the selection skips.
+
 ## Local LLMx journey cost on devX (2026-10-29)
 
 devX is a Hyper-V VM without a GPU; Chromium renders WebGL with SwiftShader on its

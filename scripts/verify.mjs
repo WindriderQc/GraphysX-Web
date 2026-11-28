@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { startStaticServer } from "./static-server.mjs";
 import { createKidxTeamRoute } from "./kidx-team-server.mjs";
 import { VERIFY_SMOKES, VERIFY_STATIC_CHECKS, resolveVerifyOptions } from "./verify-manifest.mjs";
+import { openVerifyReceipt, verifyIdentity } from "./verify-receipt.mjs";
 import {
   DEADLINE_WARN_FRACTION,
   acquireVerifyLock,
@@ -68,6 +69,7 @@ if (options.help) {
   --checks=<names> Run named smokes, or none for unit/typecheck/lint/build/Node probes
   --no-build       Reuse dist/; skip typecheck, lint and build
   --base <url>     Check an external HTTP(S) page; skip build and local-only checks
+  --resume         Reuse passed checks from the same local revision, build and selection
   --wait          Wait for another local gate to release the machine lock
   --force-lock    Recover a lock only after verifying its owner is dead
   --gpu-receptions Also run the GPU receptions (hardware WebGL only; see docs/CI_PERFORMANCE.md)
@@ -82,6 +84,15 @@ const SMOKES = options.smokes.map((smoke) => smoke.longDeadline ? { ...smoke, de
 const scope = options.shard
   ? `release shard ${options.shard.index}/${options.shard.count} (all shards required)`
   : options.fullRelease ? "full release gate" : "partial verification";
+const canResume = !externalBase && !noBuild && !process.env.CI;
+const staticNames = ["unit", ...(!externalBase && !noBuild ? ["typecheck", "lint", "build"] : []),
+  ...(!externalBase ? ["rapier-heightfield", "rapier-materials"] : [])];
+const plan = [
+  ...staticNames.map((name) => ({ name })),
+  ...SMOKES.map(({ name, gpuReception, localOnly }) => ({ name, skip:
+    gpuReception && !options.gpuReceptions ? "skipped-gpu" : externalBase && localOnly ? "skipped-external" : undefined })),
+];
+const totalChecks = plan.filter(({ skip }) => !skip).length;
 
 function runStatic(name) {
   const check = VERIFY_STATIC_CHECKS[name];
@@ -182,6 +193,23 @@ const MAX_RETRIES = resolveVerifyRetryBudget(process.env.VERIFY_MAX_RETRIES, {
 const results = [];
 const notRun = [];
 let server = null;
+let receipt = null;
+
+async function runCheck(name, execute) {
+  const progress = `[${results.length + 1}/${totalChecks}]`;
+  const passed = receipt?.passed(name);
+  if (passed) {
+    console.log(`${progress} REUSED ${name} (passed in the previous run)`);
+    results.push({ ...passed, reused: true });
+    return;
+  }
+  await receipt?.start(name);
+  console.log(`${progress} START ${name}`);
+  const result = await execute();
+  await receipt?.finish(result);
+  results.push(result);
+  console.log(`${progress} ${result.code === 0 ? "PASS" : "FAIL"} ${name}`);
+}
 
 // Refuse to run alongside another verify. Held for the whole run and released in `finally`,
 // including on a signal.
@@ -200,8 +228,17 @@ try {
 installSignalCleanup(() => [...children], releaseLock);
 
 try {
-  await rm(ARTIFACTS, { recursive: true, force: true });
+  const identity = canResume ? await verifyIdentity(ROOT, plan, scope).catch((error) => {
+    if (options.resume) throw error;
+    console.warn(`Resume unavailable for this run: ${error.message}`);
+    return null;
+  }) : null;
+  if (!options.resume) await rm(ARTIFACTS, { recursive: true, force: true });
   await mkdir(ARTIFACTS, { recursive: true });
+  if (identity) {
+    receipt = await openVerifyReceipt(path.join(ARTIFACTS, "receipt.json"), ROOT, identity, { resume: options.resume });
+    console.log(`Verification receipt for ${identity.sha}: ${path.join(ARTIFACTS, "receipt.json")}`);
+  }
   console.log(`\nScope: ${scope}; ${SMOKES.length}/${VERIFY_SMOKES.length} smokes selected; ${externalBase ? "external page (local-only checks excluded)" : noBuild ? "existing dist/" : "fresh local build"}.`);
 
   // First, and unconditionally: sub-second, node-only, no server, no browser, no lock
@@ -214,31 +251,31 @@ try {
   // `node`, not `process.execPath`: `run` uses a shell on Windows and the interpreter's own
   // path contains a space, which the shell then splits into a command that does not exist.
   // The neighbouring probes below already invoke it this way.
-  results.push(await runStatic("unit"));
+  await runCheck("unit", () => runStatic("unit"));
 
   if (!externalBase && !noBuild) {
     console.log("\n=== typecheck ===");
-    results.push(await runStatic("typecheck"));
+    await runCheck("typecheck", () => runStatic("typecheck"));
 
     // `--max-warnings 0` so an unused disable directive cannot quietly accumulate; that is
     // how the config found a directive for a rule nothing had ever enabled.
     console.log("\n=== lint ===");
-    results.push(await runStatic("lint"));
+    await runCheck("lint", () => runStatic("lint"));
 
     console.log("\n=== build ===");
-    results.push(await runStatic("build"));
+    await runCheck("build", () => runStatic("build"));
   }
 
   // Pin the migration's reason for existing into the release gate. This is node-only and
   // deterministic, so it does not need the static server or contend with browser smokes.
   if (!externalBase && !results.some((result) => result.code !== 0)) {
     console.log("\n=== rapier heightfield seam ===");
-    results.push(await runStatic("rapier-heightfield"));
+    await runCheck("rapier-heightfield", () => runStatic("rapier-heightfield"));
   }
 
   if (!externalBase && !results.some((result) => result.code !== 0)) {
     console.log("\n=== rapier material parity ===");
-    results.push(await runStatic("rapier-materials"));
+    await runCheck("rapier-materials", () => runStatic("rapier-materials"));
   }
 
   // Only smoke if we have something to smoke.
@@ -258,42 +295,43 @@ try {
         continue;
       }
       console.log(`\n--- ${smoke.name}: ${smoke.covers} ---`);
-      let result;
-      let retried = null;
-      for (let attempt = 1; attempt <= 2; attempt += 1) {
-        let base = externalBase;
-        if (!base) {
-          // A fresh ephemeral server per smoke prevents stale keep-alive sockets from one
-          // Chromium process being inherited as transport flakiness by the next process.
-          server = await startStaticServer({ root: path.join(ROOT, "dist"), port: PORT, routeRequest: createKidxTeamRoute() });
-          base = server.url;
-        }
-        try {
-          result = await runSmoke(smoke, base);
-        } finally {
-          if (server) {
-            await server.close();
-            server = null;
+      await runCheck(smoke.name, async () => {
+        let result;
+        let retried = null;
+        for (let attempt = 1; attempt <= 2; attempt += 1) {
+          let base = externalBase;
+          if (!base) {
+            // A fresh ephemeral server per smoke prevents stale keep-alive sockets from one
+            // Chromium process being inherited as transport flakiness by the next process.
+            server = await startStaticServer({ root: path.join(ROOT, "dist"), port: PORT, routeRequest: createKidxTeamRoute() });
+            base = server.url;
           }
+          try {
+            result = await runSmoke(smoke, base);
+          } finally {
+            if (server) {
+              await server.close();
+              server = null;
+            }
+          }
+          if (result.code === 0 || attempt === 2) break;
+          // A deadline kill is not a transport failure. It already spent the full deadline
+          // proving something is wedged, and spending it again teaches nothing.
+          if (result.timedOut) {
+            console.warn(`\n${smoke.name}: failed on its deadline — not retried.`);
+            break;
+          }
+          if (result.signatures.length === 0) {
+            // The harness has no positive evidence of a transport failure. Diagnose the
+            // failure without allowing another attempt to mask it.
+            console.warn(`\n${smoke.name}: failed with no known transport signature — not retried. Diagnose it.`);
+            break;
+          }
+          retried = result.signatures.join(", ");
+          console.warn(`\n${smoke.name}: transport failure (${retried}); retrying once on a fresh server.`);
         }
-        if (result.code === 0 || attempt === 2) break;
-        // A deadline kill is not a transport failure. It already spent the full deadline
-        // proving something is wedged, and spending it again teaches nothing.
-        if (result.timedOut) {
-          console.warn(`\n${smoke.name}: failed on its deadline — not retried.`);
-          break;
-        }
-        if (result.signatures.length === 0) {
-          // Not "failed an assertion" — the gate cannot know that. All it knows is that no
-          // transport signature matched, and saying more than that sent me looking for a
-          // product bug in a smoke whose harness had simply never reached an assertion.
-          console.warn(`\n${smoke.name}: failed with no known transport signature — not retried. Diagnose it.`);
-          break;
-        }
-        retried = result.signatures.join(", ");
-        console.warn(`\n${smoke.name}: transport failure (${retried}); retrying once on a fresh server.`);
-      }
-      results.push({ ...result, retried: result.code === 0 ? retried : null });
+        return { ...result, retried: result.code === 0 ? retried : null };
+      });
     }
   }
 } finally {
@@ -312,7 +350,7 @@ console.log(`Scope: ${scope}.`);
 for (const r of results) {
   // A retried pass is not the same result as a first-attempt pass, and the summary is the
   // thing people actually read. Say so on the line itself — and say what it cost.
-  const suffix = r.retried ? ` (retried: ${r.retried})` : "";
+  const suffix = `${r.reused ? " (reused)" : ""}${r.retried ? ` (retried: ${r.retried})` : ""}`;
   const spent = usage.get(r);
   const timing = spent ? `  ${spent.warn ? "!" : " "}${spent.text}` : "";
   console.log(`${r.code === 0 ? "PASS" : "FAIL"}  ${r.label.padEnd(widest)}${timing}${suffix}`);
